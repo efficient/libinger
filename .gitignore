@@ -1,4 +1,6 @@
 /target/
 
+*.a
 *.lock
 *.rs.bk
+*.so
