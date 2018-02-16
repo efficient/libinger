@@ -1,28 +1,42 @@
+//! Interposition on the runtime's dynamic memory allocator.
+
+#[cfg(not(test))]
 use libc::c_int;
 use libc::c_void;
 use libc::size_t;
 use self::funs::shallow_call;
+#[cfg(test)]
+pub use self::tests::*;
 
+/// Wrapper allowing us to interpose on `malloc(3)`.
+#[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn malloc(size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.malloc)(size))
 }
 
+/// Wrapper allowing us to interpose on `calloc(3)`.
+#[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn calloc(nobj: size_t, size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.calloc)(nobj, size))
 }
 
+/// Wrapper allowing us to interpose on `realloc(3)`.
 #[no_mangle]
 pub unsafe extern "C" fn realloc(addr: *mut c_void, size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.realloc)(addr, size))
 }
 
+/// Wrapper allowing us to interpose on `posix_memalign(3)`.
+#[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn posix_memalign(addr: *mut *mut c_void, align: size_t, size: size_t) -> c_int {
 	shallow_call(|funs| (funs.posix_memalign)(addr, align, size))
 }
 
+/// Wrapper allowing us to interpose on `free(3)`.
+#[cfg(not(test))]
 #[no_mangle]
 pub unsafe extern "C" fn free(addr: *mut c_void) {
 	shallow_call(|funs| (funs.free)(addr));
@@ -154,5 +168,129 @@ mod funs {
 		unsafe {
 			&FUNS
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use libc::c_int;
+	use libc::c_void;
+	use libc::size_t;
+	use std::cell::Cell;
+	use stdlib::funs::shallow_call;
+
+	thread_local! {
+		static ALLOCATIONS: Cell<isize> = Cell::new(0);
+	}
+
+	fn interpose(fun: fn() -> *mut c_void) {
+		use std::io::Error;
+
+		let before = ALLOCATIONS.with(|allocations| allocations.get());
+		let addr = fun();
+		assert_eq!(0, Error::last_os_error().raw_os_error().unwrap());
+		assert_eq!(before + 1, ALLOCATIONS.with(|allocations| allocations.get()));
+		unsafe {
+			free(addr);
+		}
+		assert_eq!(0, Error::last_os_error().raw_os_error().unwrap());
+		assert_eq!(before, ALLOCATIONS.with(|allocations| allocations.get()));
+	}
+
+	#[test]
+	fn malloc_interpose() {
+		interpose(|| {
+			use libc::malloc;
+			unsafe {
+				malloc(1)
+			}
+		});
+	}
+
+	#[test]
+	fn calloc_interpose() {
+		interpose(|| {
+			use libc::calloc;
+			unsafe {
+				calloc(1, 1)
+			}
+		});
+	}
+
+	#[test]
+	fn posix_memalign_interpose() {
+		interpose(|| {
+			use libc::posix_memalign;
+			use std::ptr::null_mut;
+			let mut addr = null_mut();
+			unsafe {
+				posix_memalign(&mut addr, 0, 1);
+			}
+			addr
+		});
+	}
+
+	#[test]
+	fn realloc_interpose() {
+		interpose(|| {
+			use libc::malloc;
+			use libc::realloc;
+			unsafe {
+				realloc(malloc(1), 2)
+			}
+		});
+	}
+
+	#[test]
+	fn box_interpose() {
+		interpose(|| {
+			use std::mem::forget;
+			let mut boxed = Box::new(false);
+			let addr = &mut *boxed as *mut bool;
+			forget(boxed);
+			addr as *mut c_void
+		})
+	}
+
+	#[test]
+	fn print_interpose() {
+		use std::env::args;
+		if args().skip(1).any(|arg| arg == "--nocapture") {
+			interpose(|| {
+				use std::ptr::null_mut;
+				print!("");
+				null_mut()
+			});
+		} else {
+			assert!(false, "This test only succeeds with the '--nocapture' switch");
+		}
+	}
+
+	#[no_mangle]
+	pub unsafe extern "C" fn malloc(size: size_t) -> *mut c_void {
+		shallow_call(|funs| {
+			ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
+			(funs.malloc)(size)
+		})
+	}
+
+	#[no_mangle]
+	pub unsafe extern "C" fn calloc(nobj: size_t, size: size_t) -> *mut c_void {
+		shallow_call(|funs| {
+			ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
+			(funs.calloc)(nobj, size)
+		})
+	}
+
+	#[no_mangle]
+	pub unsafe extern "C" fn posix_memalign(addr: *mut *mut c_void, align: size_t, size: size_t) -> c_int {
+		ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
+		shallow_call(|funs| (funs.posix_memalign)(addr, align, size))
+	}
+
+	#[no_mangle]
+	pub unsafe extern "C" fn free(addr: *mut c_void) {
+		ALLOCATIONS.with(|allocations| allocations.set(allocations.get() - 1));
+		shallow_call(|funs| (funs.free)(addr));
 	}
 }
