@@ -1,9 +1,17 @@
+//! "Safe" interface to a subset of `dlfcn.h`.
+//!
+//! Of course, actually invoking a function or dereferencing a symbol looked up using this module
+//! requires `unsafe` code because it might represent native code or data that isn't really of the
+//! type as which client code annotated it.
+
 use libc::c_void;
 use std::borrow::Cow;
 
+/// A dynamic library that is currently loaded.
 pub enum Handle {}
 
 impl Handle {
+	/// Equivalent to `RTLD_NEXT`, as described in `dlsym(3)`.
 	pub fn next() -> *mut Self {
 		use libc::RTLD_NEXT;
 
@@ -11,10 +19,14 @@ impl Handle {
 	}
 }
 
+/// A reference that might be returned by `dlsym()`.
+///
+/// If a particular desired type is unsupported, client code must provide a custom implementation.
 pub trait Symbol {
 	fn from_void(*mut c_void) -> Self;
 }
 
+/// See `dlsym(3)`.
 pub fn dlsym<T: Symbol>(handle: *mut Handle, symbol: &[u8]) -> Result<Option<T>, Cow<str>> {
 	use libc::dlsym;
 
@@ -41,6 +53,7 @@ pub fn dlsym<T: Symbol>(handle: *mut Handle, symbol: &[u8]) -> Result<Option<T>,
 	}
 }
 
+/// See `dlerror(3)`.
 fn dlerror() -> Option<String> {
 	use libc::dlerror;
 	use std::ffi::CString;
