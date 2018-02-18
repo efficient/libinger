@@ -64,7 +64,7 @@ libinger.a:
 
 .PHONY: libinger.so
 libinger.so:
-	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type cdylib
+	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type cdylib -Clink-arg=-Wl,-h,$@
 	mv $(OUTDIR)/deps/libinger*.so $@
 
 .PHONY: clean
