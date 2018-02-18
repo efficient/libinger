@@ -1,4 +1,4 @@
-//! Interposition on the runtime's dynamic memory allocator.
+//! Interposition on the runtime's dynamic memory allocator for C client code.
 
 #[cfg(not(test))]
 use libc::c_int;
