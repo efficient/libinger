@@ -55,17 +55,17 @@ rlib:
 .PHONY: dylib
 dylib:
 	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic
-	mv $(OUTDIR)/deps/libinger*.so $(OUTDIR)/libinger.so
+	mv $(OUTDIR)/deps/libinger*.so $(OUTDIR) || true
 
 .PHONY: libinger.a
 libinger.a:
 	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type staticlib
-	mv $(OUTDIR)/deps/libinger*.a $@
+	mv $(OUTDIR)/deps/libinger*.a $@ || true
 
 .PHONY: libinger.so
 libinger.so:
 	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type cdylib -Clink-arg=-Wl,-h,$@
-	mv $(OUTDIR)/deps/libinger*.so $@
+	mv $(OUTDIR)/deps/libinger*.so $@ || true
 
 .PHONY: clean
 clean:
