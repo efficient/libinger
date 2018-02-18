@@ -54,7 +54,7 @@ rlib:
 
 .PHONY: dylib
 dylib:
-	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type dylib
+	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic
 	mv $(OUTDIR)/deps/libinger*.so $(OUTDIR)/libinger.so
 
 .PHONY: libinger.a
