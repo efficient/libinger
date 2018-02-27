@@ -1,2 +1,2 @@
 [build]
-rustflags = ["-Dwarnings"]
+rustflags = ["-Cprefer-dynamic", "-Dwarnings"]

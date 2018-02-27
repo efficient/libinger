@@ -2,5 +2,8 @@
 name = "inger"
 version = "0.0.0"
 
+[lib]
+crate-type = ["dylib"]
+
 [dependencies]
 libc = "0.2.36"

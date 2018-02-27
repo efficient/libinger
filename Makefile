@@ -25,6 +25,7 @@ help:
 	@echo "    doc [PRIVATE=y]"
 	@echo
 	@echo "  Crate:"
+	@echo "    build (default: dylib)"
 	@echo "    rlib  [DEBUG=y]"
 	@echo "    dylib [DEBUG=y]"
 	@echo
@@ -48,24 +49,27 @@ doc:
 	$(CARGO) doc $(CARGOFLAGS)
 	$(CARGO) rustdoc $(CARGOFLAGS) -- $(DOCFLAGS)
 
+.PHONY: build
+build: dylib
+
 .PHONY: rlib
 rlib:
-	$(CARGO) build $(CARGOFLAGS)
+	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type rlib
+	mv $(OUTDIR)/deps/libinger.rlib $(OUTDIR)/libinger.rlib || true
 
 .PHONY: dylib
 dylib:
-	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic
-	mv $(OUTDIR)/deps/libinger*.so $(OUTDIR) || true
+	$(CARGO) build $(CARGOFLAGS)
 
 .PHONY: libinger.a
 libinger.a:
 	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type staticlib
-	mv $(OUTDIR)/deps/libinger*.a $@ || true
+	mv $(OUTDIR)/deps/libinger.a $@ || true
 
 .PHONY: libinger.so
 libinger.so:
 	$(CARGO) rustc $(CARGOFLAGS) -- $(RUSTFLAGS) --crate-type cdylib -Clink-arg=-Wl,-h,$@
-	mv $(OUTDIR)/deps/libinger*.so $@ || true
+	mv $(OUTDIR)/deps/libinger-*.so $@ || true
 
 .PHONY: clean
 clean:
