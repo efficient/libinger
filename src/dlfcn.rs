@@ -119,6 +119,17 @@ impl<R, S, T, U> Symbol for unsafe extern "C" fn(R, S, T) -> U {
 	}
 }
 
+impl<Q, R, S, T, U> Symbol for unsafe extern "C" fn(Q, R, S, T) -> U {
+	fn from_void(ptr: *mut c_void) -> Self {
+		use std::mem::transmute;
+
+		debug_assert!(!ptr.is_null());
+		unsafe {
+			transmute(ptr)
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use dlfcn::*;
