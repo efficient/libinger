@@ -2,6 +2,7 @@ extern crate libc;
 
 mod dlfcn;
 mod rdl;
+mod signal;
 mod stdlib;
 mod time;
 
