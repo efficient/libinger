@@ -28,3 +28,43 @@ pub fn setitimer(which: Timer, new: &itimerval, old: Option<&mut itimerval>) -> 
 		Err(Error::last_os_error())
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use time::*;
+
+	#[test]
+	fn setitimer_oneshot() {
+		use libc::siginfo_t;
+		use libc::sigsuspend;
+		use libc::timeval;
+		use signal::Action;
+		use signal::Context;
+		use signal::Set;
+		use signal::Sigaction;
+		use signal::Signal;
+		use signal::Sigset;
+		use signal::sigaction;
+
+		extern "C" fn handler(_: Signal, _: *const siginfo_t, _: *mut Context) {}
+
+		sigaction(Signal::Alarm, &Sigaction::new(handler, Sigset::empty(), 0), None).unwrap();
+
+		setitimer(Timer::Real, &itimerval {
+			it_interval: timeval {
+				tv_sec: 0,
+				tv_usec: 0,
+			},
+			it_value: timeval {
+				tv_sec: 0,
+				tv_usec: 10,
+			},
+		}, None).unwrap();
+
+		let mut mask = Sigset::full();
+		mask.del(Signal::Alarm);
+		unsafe {
+			sigsuspend(&mask);
+		}
+	}
+}
