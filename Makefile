@@ -18,7 +18,7 @@ endif
 help:
 	@echo "Supported targets:"
 	@echo "  Development:"
-	@echo "    test"
+	@echo "    test [DEBUG=y]"
 	@echo "    check"
 	@echo
 	@echo "  Documentation:"
