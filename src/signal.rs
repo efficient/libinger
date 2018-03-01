@@ -28,6 +28,7 @@ pub enum Operation {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub enum Signal {
 	Alarm = SIGALRM as isize,
 	Hangup = SIGHUP as isize,
@@ -38,6 +39,13 @@ pub enum Signal {
 	User1 = SIGUSR1 as isize,
 	User2 = SIGUSR2 as isize,
 }
+
+impl PartialEq for Signal {
+	fn eq(&self, other: &Self) -> bool {
+		self.clone() as isize == other.clone() as isize
+	}
+}
+impl Eq for Signal {}
 
 pub trait Set {
 	fn empty() -> Self;
@@ -170,7 +178,7 @@ mod tests {
 		}
 
 		extern "C" fn handler(signum: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {
-			RAN.with(|ran| ran.store(signum as c_int == Signal::User1 as c_int, Ordering::Relaxed));
+			RAN.with(|ran| ran.store(signum == Signal::User1, Ordering::Relaxed));
 		}
 
 		let conf = Sigaction::new(handler, Sigset::empty(), 0);
@@ -197,7 +205,7 @@ mod tests {
 		}
 
 		extern "C" fn handler(signum: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {
-			RAN.with(|ran| ran.store(signum as c_int == Signal::User2 as c_int, Ordering::Relaxed));
+			RAN.with(|ran| ran.store(signum == Signal::User2, Ordering::Relaxed));
 		}
 
 		let mut mask = Sigset::empty();
