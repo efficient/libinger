@@ -10,6 +10,7 @@ use libc::SIGTERM;
 use libc::SIGUSR1;
 use libc::SIGUSR2;
 use libc::c_int;
+use libc::ucontext_t;
 use std::io::Error;
 use std::ptr::null_mut;
 pub use libc::sigaction as Sigaction;
@@ -17,9 +18,7 @@ use libc::siginfo_t;
 pub use libc::sigset_t as Sigset;
 use std::io::Result;
 
-pub enum Context {}
-
-pub type Handler = extern "C" fn(Signal, *const siginfo_t, *mut Context);
+pub type Handler = extern "C" fn(Signal, *const siginfo_t, *mut ucontext_t);
 
 #[allow(dead_code)]
 pub enum Operation {
@@ -170,7 +169,7 @@ mod tests {
 			static RAN: AtomicBool = AtomicBool::new(false);
 		}
 
-		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut Context) {
+		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut ucontext_t) {
 			RAN.with(|ran| ran.store(signum as c_int == Signal::User1 as c_int, Ordering::Relaxed));
 		}
 
@@ -197,7 +196,7 @@ mod tests {
 			static RAN: AtomicBool = AtomicBool::new(false);
 		}
 
-		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut Context) {
+		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut ucontext_t) {
 			RAN.with(|ran| ran.store(signum as c_int == Signal::User2 as c_int, Ordering::Relaxed));
 		}
 

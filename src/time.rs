@@ -38,15 +38,15 @@ mod tests {
 		use libc::siginfo_t;
 		use libc::sigsuspend;
 		use libc::timeval;
+		use libc::ucontext_t;
 		use signal::Action;
-		use signal::Context;
 		use signal::Set;
 		use signal::Sigaction;
 		use signal::Signal;
 		use signal::Sigset;
 		use signal::sigaction;
 
-		extern "C" fn handler(_: Signal, _: *const siginfo_t, _: *mut Context) {}
+		extern "C" fn handler(_: Signal, _: *const siginfo_t, _: *mut ucontext_t) {}
 
 		sigaction(Signal::Alarm, &Sigaction::new(handler, Sigset::empty(), 0), None).unwrap();
 
