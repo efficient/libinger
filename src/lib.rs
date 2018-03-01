@@ -6,6 +6,7 @@ mod rdl;
 mod signal;
 mod stdlib;
 mod time;
+mod ucontext;
 
 #[doc(hidden)]
 pub use pthread::*;
