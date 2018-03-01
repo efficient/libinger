@@ -46,7 +46,7 @@ mod tests {
 		use signal::Sigset;
 		use signal::sigaction;
 
-		extern "C" fn handler(_: Signal, _: *const siginfo_t, _: *mut ucontext_t) {}
+		extern "C" fn handler(_: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {}
 
 		sigaction(Signal::Alarm, &Sigaction::new(handler, Sigset::empty(), 0), None).unwrap();
 

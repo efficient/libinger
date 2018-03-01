@@ -18,7 +18,7 @@ use libc::siginfo_t;
 pub use libc::sigset_t as Sigset;
 use std::io::Result;
 
-pub type Handler = extern "C" fn(Signal, *const siginfo_t, *mut ucontext_t);
+pub type Handler = extern "C" fn(Signal, Option<&siginfo_t>, Option<&mut ucontext_t>);
 
 #[allow(dead_code)]
 pub enum Operation {
@@ -169,7 +169,7 @@ mod tests {
 			static RAN: AtomicBool = AtomicBool::new(false);
 		}
 
-		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut ucontext_t) {
+		extern "C" fn handler(signum: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {
 			RAN.with(|ran| ran.store(signum as c_int == Signal::User1 as c_int, Ordering::Relaxed));
 		}
 
@@ -196,7 +196,7 @@ mod tests {
 			static RAN: AtomicBool = AtomicBool::new(false);
 		}
 
-		extern "C" fn handler(signum: Signal, _: *const siginfo_t, _: *mut ucontext_t) {
+		extern "C" fn handler(signum: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {
 			RAN.with(|ran| ran.store(signum as c_int == Signal::User2 as c_int, Ordering::Relaxed));
 		}
 
