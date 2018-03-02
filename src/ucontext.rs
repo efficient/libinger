@@ -8,6 +8,7 @@ unsafe impl Zeroable for ucontext_t {}
 
 pub const REG_CSGSFS: usize = 18;
 
+#[inline(always)]
 pub fn getcontext(context: &mut ucontext_t) -> Result<()> {
 	use libc::getcontext;
 
@@ -20,6 +21,7 @@ pub fn getcontext(context: &mut ucontext_t) -> Result<()> {
 	}
 }
 
+#[inline(always)]
 pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8]) {
 	use libc::makecontext;
 
@@ -30,6 +32,7 @@ pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut
 	}
 }
 
+#[inline(always)]
 pub fn swapcontext(link: &mut ucontext_t, context: &mut ucontext_t) -> Result<()> {
 	use libc::swapcontext;
 
