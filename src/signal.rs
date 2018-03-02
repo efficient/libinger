@@ -165,6 +165,7 @@ pub fn pthread_sigmask(how: Operation, new: &Sigset, old: Option<&mut Sigset>) -
 #[cfg(test)]
 mod tests {
 	use signal::*;
+	use std::sync::MutexGuard;
 
 	#[test]
 	fn sigaction_usr1() {
@@ -230,4 +231,24 @@ mod tests {
 
 		assert!( RAN.with(|ran| ran.load(Ordering::Relaxed)));
 	}
+
+	pub fn sigalrm_lock() -> MutexGuard<'static, ()> {
+		use std::sync::ONCE_INIT;
+		use std::sync::Once;
+		use std::sync::Mutex;
+
+		static INIT: Once = ONCE_INIT;
+		static mut LOCK: Option<Mutex<()>> = None;
+
+		INIT.call_once(|| unsafe {
+			LOCK = Some(Mutex::new(()))
+		});
+
+		unsafe {
+			LOCK.as_ref().unwrap()
+		}.lock().unwrap()
+	}
 }
+
+#[cfg(test)]
+pub use self::tests::sigalrm_lock as tests_sigalrm_lock;
