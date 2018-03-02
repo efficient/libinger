@@ -14,10 +14,9 @@ use signal::Signal;
 use signal::Sigset;
 use signal::sigaction;
 use signal::sigprocmask;
-use std::cell::RefCell;
+use std::cell::Cell;
 pub use std::io::Error;
 use std::marker::PhantomData;
-use std::mem::swap;
 use time::Timer;
 use time::setitimer;
 use ucontext::REG_CSGSFS;
@@ -61,7 +60,7 @@ impl<T> Linger<T> {
 }
 
 thread_local! {
-	static ENTRY_POINT: RefCell<ucontext_t> = RefCell::new(ucontext_t::new());
+	static ENTRY_POINT: Cell<ucontext_t> = Cell::new(ucontext_t::new());
 }
 
 #[allow(unused_assignments)]
@@ -88,13 +87,16 @@ pub fn launch<T, F: FnOnce() -> T>(fun: F, us: u64) -> Linger<T> {
 		return Linger::Failure(or);
 	}
 
-	if let Err(or) = ENTRY_POINT.with(|entry_point| getcontext(&mut entry_point.borrow_mut())) {
+	let mut checkpoint = ucontext_t::new();
+	if let Err(or) = getcontext(&mut checkpoint) {
 		return Linger::Failure(or);
 	}
 
 	let mut timeout = false;
 	if ! timeout {
 		timeout = true;
+
+		ENTRY_POINT.with(|entry_point| entry_point.set(checkpoint));
 
 		let duration = itimerval {
 			it_interval: timeval {
@@ -117,7 +119,7 @@ pub fn launch<T, F: FnOnce() -> T>(fun: F, us: u64) -> Linger<T> {
 
 		Linger::Completion(res)
 	} else {
-		Linger::Continuation(Continuation(ENTRY_POINT.with(|entry_point| *entry_point.borrow()), PhantomData::default()))
+		Linger::Continuation(Continuation(ENTRY_POINT.with(|entry_point| entry_point.get()), PhantomData::default()))
 	}
 }
 
@@ -133,11 +135,10 @@ extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mu
 	debug_assert!(signum == Signal::Alarm);
 
 	let sigctxt = sigctxt.unwrap();
-	ENTRY_POINT.with(|entry_point| {
-		let mut entry_point = entry_point.borrow_mut();
-		swap(sigctxt, &mut entry_point);
-		sigctxt.uc_mcontext.gregs[REG_CSGSFS] = entry_point.uc_mcontext.gregs[REG_CSGSFS];
-	});
+
+	let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
+	*sigctxt = ENTRY_POINT.with(|entry_point| entry_point.replace(*sigctxt));
+	sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
 }
 
 #[cfg(test)]
