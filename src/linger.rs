@@ -34,6 +34,32 @@ pub enum Linger<T> {
 	Failure(Error),
 }
 
+impl<T> Linger<T> {
+	pub fn is_completion(&self) -> bool {
+		if let &Linger::Completion(_) = self {
+			true
+		} else {
+			false
+		}
+	}
+
+	pub fn is_continuation(&self) -> bool {
+		if let &Linger::Continuation(_) = self {
+			true
+		} else {
+			false
+		}
+	}
+
+	pub fn is_failure(&self) -> bool {
+		if let &Linger::Failure(_) = self {
+			true
+		} else {
+			false
+		}
+	}
+}
+
 thread_local! {
 	static ENTRY_POINT: RefCell<ucontext_t> = RefCell::new(ucontext_t::new());
 }
