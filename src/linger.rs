@@ -35,7 +35,7 @@ use zeroable::Zeroable;
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
 #[must_use = "Lingerless contexts leak if neither destroy()'d nor allowed to resume() running to completion"]
-pub struct Continuation<T> (Box<UntypedContinuation>, PhantomData<T>);
+pub struct Continuation<T> (Vec<Box<UntypedContinuation>>, PhantomData<T>);
 
 struct UntypedContinuation {
 	thunk: Cell<Option<Box<FnMut()>>>,
@@ -118,11 +118,12 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	};
 	let frame = Box::new(UntypedContinuation::new(frame, us));
 
-	let (pause, complete, stack) = CALL_STACK.with(|call_stack| {
-		call_stack.borrow_mut().push(frame);
-		let frame = call_stack.borrow();
-		let frame = frame.last().unwrap();
-		(frame.pause.clone(), frame.complete.clone(), frame.stack.clone())
+	let (pause, complete, stack, index) = CALL_STACK.with(|call_stack| {
+		let mut call_stack = call_stack.borrow_mut();
+		let index = call_stack.len();
+		call_stack.push(frame);
+		let frame = call_stack.last().unwrap();
+		(frame.pause.clone(), frame.complete.clone(), frame.stack.clone(), index)
 	});
 
 	let mut call_gate = ucontext_t::new();
@@ -154,7 +155,12 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			return Linger::Failure(or);
 		}
 
-		if CALL_STACK.with(|call_stack| call_stack.borrow_mut().is_empty()) {
+		let (substack, empty) = CALL_STACK.with(|call_stack| {
+			let mut call_stack = call_stack.borrow_mut();
+			(call_stack.split_off(index), call_stack.is_empty())
+		});
+
+		if empty {
 			const NEVER: itimerval = itimerval {
 				it_interval: timeval {
 					tv_sec: 0,
@@ -175,7 +181,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 		// ourselves with dangling pointers!
 		drop((stack, pause, complete));
 
-		Linger::Continuation(Continuation (CALL_STACK.with(|call_stack| call_stack.borrow_mut().pop()).unwrap(), PhantomData::default()))
+		Linger::Continuation(Continuation (substack, PhantomData::default()))
 	}
 }
 
