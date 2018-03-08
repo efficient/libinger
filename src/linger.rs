@@ -237,7 +237,8 @@ mod tests {
 	fn launch_completion() {
 		use signal::tests_sigalrm_lock;
 
-		let lock = tests_sigalrm_lock();
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
 		assert!(launch(|| (), 1_000).is_completion());
 		drop(lock);
 	}
@@ -246,7 +247,8 @@ mod tests {
 	fn launch_continuation() {
 		use signal::tests_sigalrm_lock;
 
-		let lock = tests_sigalrm_lock();
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
 		assert!(launch(|| timeout(1_000_000), 10).is_continuation());
 		drop(lock);
 	}
