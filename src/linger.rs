@@ -128,13 +128,11 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	if let Err(or) = makecontext(&mut call_gate, preemptor, &mut stack.borrow_mut(), Some(&mut complete.borrow_mut())) {
 		return Linger::Failure(or);
 	}
-	drop(stack);
 
 	let mut timeout = false;
 	if let Err(or) = getcontext(&mut pause.borrow_mut()) {
 		return Linger::Failure(or);
 	}
-	drop(pause);
 
 	if ! timeout {
 		timeout = true;
@@ -144,10 +142,13 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 		}
 		CALL_STACK.with(|call_stack| call_stack.borrow_mut().pop());
 
+		// We must keep these live until we're done working with contexts; otherwise, we
+		// might double-decrement the reference counter and free them prematurely, leaving
+		// ourselves with dangling pointers!
+		drop((stack, pause, complete));
+
 		Linger::Completion(Rc::try_unwrap(res).ok().unwrap().into_inner())
 	} else {
-		drop(complete);
-
 		if let Err(or) = sigprocmask(Operation::Block, &mask, None) {
 			return Linger::Failure(or);
 		}
@@ -167,6 +168,11 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 				return Linger::Failure(or);
 			}
 		}
+
+		// We must keep these live until we're done working with contexts; otherwise, we
+		// might double-decrement the reference counter and free them prematurely, leaving
+		// ourselves with dangling pointers!
+		drop((stack, pause, complete));
 
 		Linger::Continuation(Continuation (CALL_STACK.with(|call_stack| call_stack.borrow_mut().pop()).unwrap(), PhantomData::default()))
 	}
