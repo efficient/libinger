@@ -125,7 +125,9 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	});
 
 	let mut call_gate = ucontext_t::new();
-	makecontext(&mut call_gate, preemptor, &mut stack.borrow_mut());
+	if let Err(or) = makecontext(&mut call_gate, preemptor, &mut stack.borrow_mut()) {
+		return Linger::Failure(or);
+	}
 	drop(stack);
 
 	let mut timeout = false;

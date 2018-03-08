@@ -22,14 +22,17 @@ pub fn getcontext(context: &mut ucontext_t) -> Result<()> {
 }
 
 #[inline(always)]
-pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8]) {
+pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8]) -> Result<()> {
 	use libc::makecontext;
 
+	getcontext(context)?;
 	context.uc_stack.ss_sp = stack.as_mut_ptr() as *mut c_void;
 	context.uc_stack.ss_size = stack.len();
 	unsafe {
 		makecontext(context, thunk, 0);
 	}
+
+	Ok(())
 }
 
 #[inline(always)]
