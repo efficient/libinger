@@ -133,11 +133,31 @@ impl Action for Sigaction {
 	}
 }
 
-pub fn sigaction(signal: Signal, new: &Sigaction, old: Option<&mut Sigaction>) -> Result<()> {
+pub trait Actionable {
+	fn maybe(&self) -> Option<&Sigaction>;
+}
+
+impl Actionable for Sigaction {
+	fn maybe(&self) -> Option<&Self> {
+		Some(self)
+	}
+}
+
+impl Actionable for () {
+	fn maybe(&self) -> Option<&Sigaction> {
+		None
+	}
+}
+
+pub fn sigaction(signal: Signal, new: &Actionable, old: Option<&mut Sigaction>) -> Result<()> {
 	use libc::sigaction;
 
 	if unsafe {
-		sigaction(signal as c_int, new, if let Some(old) = old { old } else { null_mut() })
+		sigaction(
+			signal as c_int,
+			if let Some(new) = new.maybe() { new } else { null_mut() },
+			if let Some(old) = old { old } else { null_mut() },
+		)
 	} == 0 {
 		Ok(())
 	} else {
