@@ -232,15 +232,13 @@ extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mu
 #[cfg(test)]
 mod tests {
 	use linger::*;
-	use std::thread::sleep;
-	use std::time::Duration;
 
 	#[test]
 	fn launch_completion() {
 		use signal::tests_sigalrm_lock;
 
 		let lock = tests_sigalrm_lock();
-		assert!(launch(|| sleep(Duration::new(0, 6_000)), 1_000).is_completion());
+		assert!(launch(|| (), 1_000).is_completion());
 		drop(lock);
 	}
 }
