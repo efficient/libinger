@@ -241,4 +241,20 @@ mod tests {
 		assert!(launch(|| (), 1_000).is_completion());
 		drop(lock);
 	}
+
+	#[test]
+	fn launch_continuation() {
+		use signal::tests_sigalrm_lock;
+
+		let lock = tests_sigalrm_lock();
+		assert!(launch(|| timeout(1_000_000), 10).is_continuation());
+		drop(lock);
+	}
+
+	fn timeout(useconds: u64) {
+		use std::thread::sleep;
+		use std::time::Duration;
+
+		sleep(Duration::new(useconds / 1_000_000, (useconds % 1_000_000) as u32 * 1_000));
+	}
 }
