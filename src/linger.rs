@@ -29,6 +29,7 @@ use ucontext::REG_CSGSFS;
 use ucontext::getcontext;
 use ucontext::makecontext;
 use ucontext::swapcontext;
+use volatile::VolBool;
 use zeroable::Zeroable;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
@@ -129,13 +130,13 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 		return Linger::Failure(or);
 	}
 
-	let mut timeout = false;
+	let mut timeout = VolBool::new(false);
 	if let Err(or) = getcontext(&mut pause.borrow_mut()) {
 		return Linger::Failure(or);
 	}
 
-	if ! timeout {
-		timeout = true;
+	if ! timeout.get() {
+		timeout.set(true);
 
 		if let Err(or) = swapcontext(&mut complete.borrow_mut(), &mut call_gate) {
 			return Linger::Failure(or);
