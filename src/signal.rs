@@ -244,9 +244,12 @@ mod tests {
 			LOCK = Some(Mutex::new(()))
 		});
 
+		// The lock might be poisened because a previous test failed. This is safe to ignore
+		// because we should no longer have a race (since the other test's thread is now
+		// dead) and we don't need to fail the current test as well.
 		unsafe {
 			LOCK.as_ref().unwrap()
-		}.lock().unwrap()
+		}.lock().unwrap_or_else(|poison| poison.into_inner())
 	}
 }
 
