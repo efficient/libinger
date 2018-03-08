@@ -8,6 +8,7 @@ mod signal;
 mod stdlib;
 mod time;
 mod ucontext;
+mod volatile;
 mod zeroable;
 
 pub use linger::*;
