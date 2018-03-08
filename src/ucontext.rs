@@ -22,12 +22,15 @@ pub fn getcontext(context: &mut ucontext_t) -> Result<()> {
 }
 
 #[inline(always)]
-pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8]) -> Result<()> {
+pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut ucontext_t>) -> Result<()> {
 	use libc::makecontext;
 
 	getcontext(context)?;
 	context.uc_stack.ss_sp = stack.as_mut_ptr() as *mut c_void;
 	context.uc_stack.ss_size = stack.len();
+	if let Some(link) = link {
+		context.uc_link = link;
+	}
 	unsafe {
 		makecontext(context, thunk, 0);
 	}
@@ -36,13 +39,11 @@ pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut
 }
 
 #[inline(always)]
-pub fn swapcontext(link: &mut ucontext_t, context: &mut ucontext_t) -> Result<()> {
+pub fn swapcontext(caller: &mut ucontext_t, callee: &mut ucontext_t) -> Result<()> {
 	use libc::swapcontext;
 
-	context.uc_link = link;
-
 	if unsafe {
-		swapcontext(link, context)
+		swapcontext(caller, callee)
 	} == 0 {
 		Ok(())
 	} else {
