@@ -261,12 +261,33 @@ mod tests {
 		drop(lock);
 	}
 
-	#[should_panic]
+	#[should_panic(expected = "PASS")]
 	#[test]
 	fn launch_panic() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		drop(launch(|| panic!(), 1_000));
+		drop(launch(|| panic!("PASS"), 1_000));
+		// Lock becomes poisoned.
+	}
+
+	#[should_panic(expected = "PASS")]
+	#[test]
+	fn launch_panic_outer() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		drop(launch(|| {
+			drop(launch(|| (), 1_000));
+			panic!("PASS");
+		}, 1_000));
+		// Lock becomes poisoned.
+	}
+
+	#[should_panic(expected = "PASS")]
+	#[test]
+	fn launch_panic_inner() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		drop(launch(|| launch(|| panic!("PASS"), 1_000), 1_000));
 		// Lock becomes poisoned.
 	}
 
