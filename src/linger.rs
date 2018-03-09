@@ -19,10 +19,13 @@ use std::cell::RefCell;
 pub use std::io::Error;
 use std::marker::PhantomData;
 use std::mem::swap;
-use std::mem::uninitialized;
+use std::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
+use std::panic::resume_unwind;
 use std::rc::Rc;
 use std::sync::ONCE_INIT;
 use std::sync::Once;
+use std::thread::Result;
 use time::Timer;
 use time::setitimer;
 use ucontext::REG_CSGSFS;
@@ -108,12 +111,14 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 		sigaction(Signal::Alarm, &handler, None).unwrap();
 	});
 
-	let res: Rc<Cell<T>> = Rc::new(Cell::new(unsafe {
-		uninitialized()
-	}));
+	let res: Rc<Cell<Result<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
 	let frame = {
 		let res = res.clone();
-		move || res.set(fun())
+
+		// It's safe to "promise" unwind-safety because client code is wholly responsible
+		// for the (in)consistency of any shared memory data structures writeable by a
+		// preempted thunk.
+		move || res.set(catch_unwind(AssertUnwindSafe (&mut fun)))
 	};
 	let frame = Box::new(UntypedContinuation::new(frame, us));
 
@@ -148,7 +153,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 		// ourselves with dangling pointers!
 		drop((stack, pause, complete));
 
-		Linger::Completion(Rc::try_unwrap(res).ok().unwrap().into_inner())
+		Linger::Completion(Rc::try_unwrap(res).ok().unwrap().into_inner().unwrap_or_else(|panic| resume_unwind(panic)))
 	} else {
 		if let Err(or) = sigprocmask(Operation::Block, &mask, None) {
 			return Linger::Failure(or);
@@ -238,11 +243,10 @@ extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mu
 #[cfg(test)]
 mod tests {
 	use linger::*;
+	use signal::tests_sigalrm_lock;
 
 	#[test]
 	fn launch_completion() {
-		use signal::tests_sigalrm_lock;
-
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
 		assert!(launch(|| (), 1_000).is_completion());
@@ -251,12 +255,19 @@ mod tests {
 
 	#[test]
 	fn launch_continuation() {
-		use signal::tests_sigalrm_lock;
-
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
 		assert!(launch(|| timeout(1_000_000), 10).is_continuation());
 		drop(lock);
+	}
+
+	#[should_panic]
+	#[test]
+	fn launch_panic() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		drop(launch(|| panic!(), 1_000));
+		// Lock becomes poisoned.
 	}
 
 	fn timeout(useconds: u64) {
