@@ -185,13 +185,13 @@ pub fn pthread_sigmask(how: Operation, new: &Sigset, old: Option<&mut Sigset>) -
 #[cfg(test)]
 mod tests {
 	use signal::*;
+	use pthread::pthread_kill;
+	use pthread::pthread_self;
 	use std::ops::Deref;
 	use std::sync::MutexGuard;
 
 	#[test]
 	fn sigaction_usr1() {
-		use libc::pthread_kill;
-		use libc::pthread_self;
 		use std::sync::atomic::AtomicBool;
 		use std::sync::atomic::Ordering;
 
@@ -206,18 +206,13 @@ mod tests {
 		let conf = Sigaction::new(handler, Sigset::empty(), 0);
 		sigaction(Signal::User1, &conf, None).unwrap();
 
-		assert_eq!(0, unsafe {
-			use libc::SIGUSR1;
-			pthread_kill(pthread_self(), SIGUSR1)
-		});
+		pthread_kill(pthread_self(), Signal::User1).unwrap();
 
 		assert!(RAN.with(|ran| ran.load(Ordering::Relaxed)));
 	}
 
 	#[test]
 	fn sigprocmask_usr2() {
-		use libc::pthread_kill;
-		use libc::pthread_self;
 		use libc::sigsuspend;
 		use std::sync::atomic::AtomicBool;
 		use std::sync::atomic::Ordering;
@@ -237,10 +232,7 @@ mod tests {
 		let conf = Sigaction::new(handler, Sigset::empty(), 0);
 		sigaction(Signal::User2, &conf, None).unwrap();
 
-		assert_eq!(0, unsafe {
-			use libc::SIGUSR2;
-			pthread_kill(pthread_self(), SIGUSR2)
-		});
+		pthread_kill(pthread_self(), Signal::User2).unwrap();
 
 		assert!(!RAN.with(|ran| ran.load(Ordering::Relaxed)));
 
