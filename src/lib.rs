@@ -1,5 +1,6 @@
 extern crate libc;
 
+mod continuation;
 mod dlfcn;
 mod linger;
 mod pthread;
