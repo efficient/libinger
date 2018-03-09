@@ -94,7 +94,6 @@ thread_local! {
 	static CALL_STACK: RefCell<Vec<Box<UntypedContinuation>>> = RefCell::new(vec![]);
 }
 
-#[allow(unused_assignments)]
 pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Linger<T> {
 	let mut mask = Sigset::empty();
 	mask.add(Signal::Alarm);
