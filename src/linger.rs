@@ -28,7 +28,6 @@ use std::sync::Once;
 use std::thread::Result;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
-use time::NEVER;
 use time::Timer;
 use time::itimerval;
 use time::setitimer;
@@ -135,6 +134,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			.map(|call_stack| {
 				let mut call_stack = call_stack.lock();
 				call_stack.pop();
+				teardown(&call_stack);
 
 				let res = Rc::try_unwrap(res).ok().unwrap().into_inner();
 				let res = res.unwrap_or_else(|panic| resume_unwind(panic));
@@ -146,15 +146,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			.and_then(|call_stack| {
 				let mut call_stack = call_stack.lock();
 				let frames = call_stack.split_off(index);
-
-				if call_stack.is_empty() {
-					setitimer(Timer::Real, &NEVER, None)?;
-				} else {
-					let (index, _) = call_stack.iter().enumerate().min_by_key(|&(_, frame)|
-						min_nonzero(frame.time_out)
-					).unwrap();
-					EARLIEST.with(|earliest| earliest.set(index));
-				}
+				teardown(&call_stack);
 
 				Ok(Linger::Continuation( Continuation {
 					call_stack: frames,
@@ -172,6 +164,37 @@ pub fn resume<T>(_: Continuation<T>, _: u64) -> Linger<T> {
 
 pub fn destroy<T>(_: Continuation<T>) {
 	unimplemented!();
+}
+
+fn teardown(call_stack: &Vec<UntypedContinuation>) {
+	let earliest_time_out = call_stack.iter()
+		.map(|frame| frame.time_out).enumerate()
+		.min_by_key(|&(_, time_out)| time_out)
+		.map(|(index, _)| index).unwrap_or(0);
+	EARLIEST.with(|earliest| earliest.set(earliest_time_out));
+
+	let shortest = call_stack.iter().map(|frame| frame.time_limit).min();
+	let quantum_time_limit = shortest.unwrap_or(0);
+
+	while {
+		let quantum = QUANTUM.load(Ordering::Relaxed);
+
+		if quantum_time_limit < min_nonzero(quantum as u64) {
+			let interval = timeval {
+				tv_sec: (quantum_time_limit / 1_000_000) as time_t,
+				tv_usec: (quantum_time_limit % 1_000_000) as suseconds_t,
+			};
+			let duration = itimerval {
+				it_interval: interval,
+				it_value: interval,
+			};
+			setitimer(Timer::Real, &duration, None).unwrap();
+
+			QUANTUM.compare_and_swap(quantum, quantum_time_limit as usize, Ordering::Relaxed) != quantum
+		} else {
+			false
+		}
+	} {}
 }
 
 extern "C" fn preemptor() {

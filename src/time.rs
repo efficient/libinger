@@ -5,17 +5,6 @@ pub use libc::itimerval;
 pub use libc::timeval;
 use std::io::Result;
 
-pub const NEVER: itimerval = itimerval {
-	it_interval: timeval {
-		tv_sec: 0,
-		tv_usec: 0,
-	},
-	it_value: timeval {
-		tv_sec: 0,
-		tv_usec: 0,
-	},
-};
-
 #[allow(dead_code)]
 pub enum Timer {
 	Real = ITIMER_REAL as isize,
