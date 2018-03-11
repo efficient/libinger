@@ -40,11 +40,12 @@ impl UntypedContinuation {
 #[must_use]
 pub struct CallStack<'a> {
 	stack: &'a RefCell<Vec<UntypedContinuation>>,
+	blocking: bool,
 	deferred: &'a Cell<bool>,
 }
 
 impl CallStack<'static> {
-	pub fn handle() -> Result<Self, Error> {
+	pub fn handle() -> Self {
 		use std::mem::transmute;
 
 		thread_local! {
@@ -52,22 +53,23 @@ impl CallStack<'static> {
 			static DEFERRED: Cell<bool> = Cell::new(false);
 		}
 
-		block()?;
-
-		Ok(Self {
+		Self {
 			stack: CALL_STACK.with(|call_stack| unsafe {
 				transmute(call_stack)
 			}),
+			blocking: false,
 			deferred: DEFERRED.with(|deferred| unsafe {
 				transmute(deferred)
 			}),
-		})
+		}
 	}
 }
 
 impl<'a> CallStack<'a> {
-	pub fn lock(&self) -> RefMut<'a, Vec<UntypedContinuation>> {
-		self.stack.borrow_mut()
+	pub fn lock(&mut self) -> Result<RefMut<'a, Vec<UntypedContinuation>>, Error> {
+		block()?;
+		self.blocking = true;
+		Ok(self.stack.borrow_mut())
 	}
 
 	pub fn preempt(&self) -> Result<RefMut<'a, Vec<UntypedContinuation>>, BorrowMutError> {
@@ -79,7 +81,7 @@ impl<'a> CallStack<'a> {
 
 impl<'a> Drop for CallStack<'a> {
 	fn drop(&mut self) {
-		if ! panicking() {
+		if self.blocking && ! panicking() {
 			if self.deferred.get() {
 				pthread_kill(pthread_self(), Signal::Alarm).unwrap();
 			}

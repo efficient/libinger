@@ -99,11 +99,9 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	let mut call_gate = ucontext_t::new();
 	let mut complete = Box::new(ucontext_t::new());
 	let pause;
-	match CallStack::handle() {
+	match CallStack::handle().lock() {
 		Err(or) => return Linger::Failure(or),
-		Ok(call_stack) => {
-			let mut call_stack = call_stack.lock();
-
+		Ok(mut call_stack) => {
 			let res = res.clone();
 			let thunk = move || res.set(catch_unwind(AssertUnwindSafe (&mut fun)));
 			let mut frame = UntypedContinuation::new(thunk, us);
@@ -130,9 +128,8 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			return Linger::Failure(or);
 		}
 
-		CallStack::handle()
-			.map(|call_stack| {
-				let mut call_stack = call_stack.lock();
+		CallStack::handle().lock()
+			.map(|mut call_stack| {
 				call_stack.pop();
 				teardown(&call_stack);
 
@@ -142,9 +139,8 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			})
 			.unwrap_or_else(|err| Linger::Failure(err))
 	} else {
-		CallStack::handle()
-			.and_then(|call_stack| {
-				let mut call_stack = call_stack.lock();
+		CallStack::handle().lock()
+			.and_then(|mut call_stack| {
 				let frames = call_stack.split_off(index);
 				teardown(&call_stack);
 
@@ -198,10 +194,8 @@ fn teardown(call_stack: &Vec<UntypedContinuation>) {
 }
 
 extern "C" fn preemptor() {
-	let mut thunk = CallStack::handle().map(|call_stack| {
-		// Take a thread-wide preemption lock.
-		let mut call_stack = call_stack.lock();
-
+	// Take a thread-wide preemption lock.
+	let mut thunk = CallStack::handle().lock().map(|mut call_stack| {
 		let earliest = call_stack.get(EARLIEST.with(|earliest| earliest.get()))
 			.map(|frame| frame.time_out)
 			.unwrap_or(0);
@@ -249,7 +243,7 @@ extern "C" fn preemptor() {
 extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
 	debug_assert!(signum == Signal::Alarm);
 
-	if let Ok(mut call_stack) = CallStack::handle().unwrap().preempt() {
+	if let Ok(mut call_stack) = CallStack::handle().preempt() {
 		let index = EARLIEST.with(|earliest| earliest.get());
 		if let Some(frame) = call_stack.get_mut(index) {
 			if nsnow() < min_nonzero(frame.time_out) {
