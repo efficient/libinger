@@ -13,6 +13,7 @@ use signal::Signal;
 use signal::Sigset;
 use signal::sigaction;
 use std::cell::Cell;
+use std::cmp::min;
 pub use std::io::Error;
 use std::marker::PhantomData;
 use std::mem::swap;
@@ -141,10 +142,15 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	} else {
 		CallStack::handle().unwrap().lock()
 			.and_then(|mut call_stack| {
-				let frames = call_stack.split_off(index);
-				teardown(&call_stack);
+				let ts = nsnow();
 
-				Ok(Linger::Continuation( Continuation {
+				let mut frames = call_stack.split_off(index);
+				teardown(&call_stack);
+				for frame in &mut frames {
+					frame.time_out -= min(ts, frame.time_out);
+				}
+
+				Ok(Linger::Continuation(Continuation {
 					call_stack: frames,
 					complete: complete,
 					res_type: PhantomData::default(),
