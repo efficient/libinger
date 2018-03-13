@@ -114,7 +114,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 
 			index = call_stack.len();
 			call_stack.push(frame);
-		}
+		},
 	}
 
 	let mut timeout = VolBool::new(false);
