@@ -15,7 +15,6 @@ use signal::sigaction;
 use std::cell::Cell;
 use std::cmp::min;
 pub use std::io::Error;
-use std::marker::PhantomData;
 use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -52,7 +51,7 @@ thread_local! {
 pub struct Continuation<T> {
 	call_stack: Vec<UntypedContinuation>,
 	complete: Box<ucontext_t>,
-	res_type: PhantomData<T>,
+	result: Rc<Cell<Result<T>>>,
 }
 
 pub enum Linger<T> {
@@ -153,15 +152,40 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 				Ok(Linger::Continuation(Continuation {
 					call_stack: frames,
 					complete: complete,
-					res_type: PhantomData::default(),
+					result: res,
 				}))
 			})
 			.unwrap_or_else(|err| Linger::Failure(err))
 	}
 }
 
-pub fn resume<T>(_: Continuation<T>, _: u64) -> Linger<T> {
-	unimplemented!()
+pub fn resume<T: 'static>(funs: Continuation<T>, us: u64) -> Linger<T> {
+	let mut stack_excerpt = funs.call_stack;
+	let fun = stack_excerpt.remove(0);
+	let mut complete = funs.complete;
+	let thunk = move || {
+		CallStack::handle().unwrap().lock().map(|mut call_stack| {
+			let ts = nsnow();
+			for frame in &mut stack_excerpt {
+				frame.time_out += ts;
+			}
+			call_stack.append(&mut stack_excerpt);
+			teardown(&mut call_stack);
+		}).unwrap();
+
+		swapcontext(&mut complete, &mut fun.pause_resume.borrow_mut()).unwrap();
+	};
+
+	let ret = launch(thunk, us);
+	match ret {
+		Linger::Completion(_) => Linger::Completion(Rc::try_unwrap(funs.result).ok().unwrap().into_inner().unwrap()),
+		Linger::Continuation(cont) => Linger::Continuation(Continuation {
+			call_stack: cont.call_stack,
+			complete: cont.complete,
+			result: funs.result,
+		}),
+		Linger::Failure(fail) => Linger::Failure(fail),
+	}
 }
 
 pub fn destroy<T>(_: Continuation<T>) {
@@ -348,6 +372,18 @@ mod tests {
 			assert!(launch(|| timeout(1_000_000), 10).is_continuation());
 			timeout(1_000_000);
 		}, 1_000).is_continuation());
+		drop(lock);
+	}
+
+	#[test]
+	fn resume_completion() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10) {
+			assert!(resume(cont, 10_000_000).is_completion());
+		} else {
+			unreachable!();
+		}
 		drop(lock);
 	}
 
