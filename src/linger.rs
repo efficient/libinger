@@ -232,7 +232,7 @@ extern "C" fn preemptor() {
 			}
 		} {}
 
-		let time_out = nsnow() + time_limit;
+		let time_out = nsnow() + time_limit * 1_000;
 		if time_out < min_nonzero(earliest) {
 			EARLIEST.with(|earliest| earliest.set(index));
 		}
