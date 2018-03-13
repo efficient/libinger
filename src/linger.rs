@@ -99,7 +99,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	let mut call_gate = ucontext_t::new();
 	let mut complete = Box::new(ucontext_t::new());
 	let pause;
-	match CallStack::handle().lock() {
+	match CallStack::handle().unwrap().lock() {
 		Err(or) => return Linger::Failure(or),
 		Ok(mut call_stack) => {
 			let res = res.clone();
@@ -128,7 +128,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			return Linger::Failure(or);
 		}
 
-		CallStack::handle().lock()
+		CallStack::handle().unwrap().lock()
 			.map(|mut call_stack| {
 				call_stack.pop();
 				teardown(&call_stack);
@@ -139,7 +139,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			})
 			.unwrap_or_else(|err| Linger::Failure(err))
 	} else {
-		CallStack::handle().lock()
+		CallStack::handle().unwrap().lock()
 			.and_then(|mut call_stack| {
 				let frames = call_stack.split_off(index);
 				teardown(&call_stack);
@@ -195,7 +195,7 @@ fn teardown(call_stack: &Vec<UntypedContinuation>) {
 
 extern "C" fn preemptor() {
 	// Take a thread-wide preemption lock.
-	let mut thunk = CallStack::handle().lock().map(|mut call_stack| {
+	let mut thunk = CallStack::handle().unwrap().lock().map(|mut call_stack| {
 		let earliest = call_stack.get(EARLIEST.with(|earliest| earliest.get()))
 			.map(|frame| frame.time_out)
 			.unwrap_or(0);
@@ -243,19 +243,21 @@ extern "C" fn preemptor() {
 extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
 	debug_assert!(signum == Signal::Alarm);
 
-	if let Ok(mut call_stack) = CallStack::handle().preempt() {
-		let index = EARLIEST.with(|earliest| earliest.get());
-		if let Some(frame) = call_stack.get_mut(index) {
-			if nsnow() < min_nonzero(frame.time_out) {
-				return;
+	if let Ok(handle) = CallStack::handle() {
+		if let Ok(mut call_stack) = handle.preempt() {
+			let index = EARLIEST.with(|earliest| earliest.get());
+			if let Some(frame) = call_stack.get_mut(index) {
+				if nsnow() < min_nonzero(frame.time_out) {
+					return;
+				}
+
+				let sigctxt = sigctxt.unwrap();
+				let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
+				swap(&mut *frame.pause_resume.borrow_mut(), sigctxt);
+				sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
+
+				frame.time_out = 0;
 			}
-
-			let sigctxt = sigctxt.unwrap();
-			let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
-			swap(&mut *frame.pause_resume.borrow_mut(), sigctxt);
-			sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
-
-			frame.time_out = 0;
 		}
 	}
 }

@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::io::Error;
 use std::rc::Rc;
+use std::thread::AccessError;
 use std::thread::panicking;
 use zeroable::Zeroable;
 
@@ -45,7 +46,7 @@ pub struct CallStack<'a> {
 }
 
 impl CallStack<'static> {
-	pub fn handle() -> Self {
+	pub fn handle() -> Result<Self, AccessError> {
 		use std::mem::transmute;
 
 		thread_local! {
@@ -53,15 +54,15 @@ impl CallStack<'static> {
 			static DEFERRED: Cell<bool> = Cell::new(false);
 		}
 
-		Self {
-			stack: CALL_STACK.with(|call_stack| unsafe {
+		Ok(Self {
+			stack: CALL_STACK.try_with(|call_stack| unsafe {
 				transmute(call_stack)
-			}),
+			})?,
 			blocking: false,
-			deferred: DEFERRED.with(|deferred| unsafe {
+			deferred: DEFERRED.try_with(|deferred| unsafe {
 				transmute(deferred)
-			}),
-		}
+			})?,
+		})
 	}
 }
 

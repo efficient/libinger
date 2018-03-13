@@ -1,3 +1,5 @@
+#![feature(thread_local_state)]
+
 extern crate libc;
 
 mod continuation;
