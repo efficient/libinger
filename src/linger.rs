@@ -430,10 +430,19 @@ mod tests {
 		drop(lock);
 	}
 
-	fn timeout(useconds: u64) {
-		use std::thread::sleep;
-		use std::time::Duration;
+	fn timeout(mut useconds: u64) {
+		useconds *= 1_000;
 
-		sleep(Duration::new(useconds / 1_000_000, (useconds % 1_000_000) as u32 * 1_000));
+		let mut elapsed = 0;
+		let mut last = nsnow();
+		while elapsed < useconds {
+			let mut this = nsnow();
+			while this - last > 1_000 {
+				last = this;
+				this = nsnow();
+			}
+			elapsed += this - last;
+			last = this;
+		}
 	}
 }
