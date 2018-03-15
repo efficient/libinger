@@ -15,6 +15,7 @@ use signal::sigaction;
 use std::cell::Cell;
 use std::cmp::min;
 pub use std::io::Error;
+use std::iter::once;
 use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -47,20 +48,44 @@ thread_local! {
 	static EARLIEST: Cell<usize> = Cell::new(0);
 }
 
-#[allow(dead_code)]
-pub struct Continuation<T> {
-	call_stack: Vec<UntypedContinuation>,
+enum LaunchResume<T, F: FnMut() -> T> {
+	Launch(F),
+	Resume((Option<UntypedContinuation>, Vec<UntypedContinuation>)),
+}
+
+impl<'a, T: 'a, F: 'a + FnMut() -> T> LaunchResume<T, F> {
+	fn into_fn_mut(self, res: Rc<Cell<Result<T>>>) -> Box<'a + FnMut()> {
+		match self {
+			LaunchResume::Launch(mut fun) => Box::new(move ||
+				res.set(catch_unwind(AssertUnwindSafe(&mut fun)))
+			),
+			LaunchResume::Resume((_, mut tail)) => Box::new(move ||
+				CallStack::handle().unwrap().lock().map(|mut call_stack| {
+					let ts = nsnow();
+					for frame in &mut tail {
+						frame.time_out += ts;
+					}
+					call_stack.append(&mut tail);
+					teardown(&mut call_stack);
+				}).unwrap()
+			),
+		}
+	}
+}
+
+pub struct Continuation<T, F: FnMut() -> T> {
+	function: LaunchResume<T, F>,
 	complete: Box<ucontext_t>,
 	result: Rc<Cell<Result<T>>>,
 }
 
-pub enum Linger<T> {
+pub enum Linger<T, F: FnMut() -> T> {
 	Completion(T),
-	Continuation(Continuation<T>),
+	Continuation(Continuation<T, F>),
 	Failure(Error),
 }
 
-impl<T> Linger<T> {
+impl<T, F: FnMut() -> T> Linger<T, F> {
 	pub fn is_completion(&self) -> bool {
 		if let &Linger::Completion(_) = self {
 			true
@@ -86,31 +111,50 @@ impl<T> Linger<T> {
 	}
 }
 
-pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Linger<T> {
+pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Linger<T, F> {
+	resume(Continuation {
+		function: LaunchResume::Launch(fun),
+		complete: Box::new(ucontext_t::new()),
+		result: Rc::new(Cell::new(Err(Box::new(())))),
+	}, us)
+}
+
+pub fn resume<T: 'static, F: 'static + FnMut() -> T>(mut funs: Continuation<T, F>, us: u64) -> Linger<T, F> {
 	static INIT_HANDLER: Once = ONCE_INIT;
 	INIT_HANDLER.call_once(|| {
 		let handler = Sigaction::new(preempt, Sigset::empty(), SA_SIGINFO | SA_RESTART);
 		sigaction(Signal::Alarm, &handler, None).unwrap();
 	});
 
-	let res: Rc<Cell<Result<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
-
-	let index;
+	let resuming;
 	let mut call_gate = ucontext_t::new();
-	let mut complete = Box::new(ucontext_t::new());
-	let pause;
+	let mut frame;
+	if let &mut LaunchResume::Resume((ref mut head, _)) = &mut funs.function {
+		let mut head = head.take().unwrap();
+
+		resuming = true;
+		head.time_limit = us;
+		swap(&mut call_gate, &mut head.pause_resume.borrow_mut());
+		frame = head;
+	} else {
+		resuming = false;
+		frame = UntypedContinuation::new(us);
+	}
+	frame.thunk = Some(funs.function.into_fn_mut(funs.result.clone()));
+
+	let mut complete = funs.complete;
+	let result = funs.result;
+	if ! resuming {
+		if let Err(or) = makecontext(&mut call_gate, preemptor, &mut frame.stack, Some(&mut complete)) {
+			return Linger::Failure(or);
+		}
+	}
+
+	let pause = frame.pause_resume.clone();
+	let index;
 	match CallStack::handle().unwrap().lock() {
 		Err(or) => return Linger::Failure(or),
 		Ok(mut call_stack) => {
-			let res = res.clone();
-			let thunk = move || res.set(catch_unwind(AssertUnwindSafe (&mut fun)));
-			let mut frame = UntypedContinuation::new(thunk, us);
-			pause = frame.pause_resume.clone();
-
-			if let Err(or) = makecontext(&mut call_gate, preemptor, &mut frame.stack, Some(&mut complete)) {
-				return Linger::Failure(or);
-			}
-
 			index = call_stack.len();
 			call_stack.push(frame);
 		},
@@ -124,6 +168,9 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 	if ! timeout.get() {
 		timeout.set(true);
 
+		if resuming {
+			preemptor();
+		}
 		if let Err(or) = swapcontext(&mut complete, &mut call_gate) {
 			return Linger::Failure(or);
 		}
@@ -133,7 +180,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 				call_stack.pop();
 				teardown(&call_stack);
 
-				let res = Rc::try_unwrap(res).ok().unwrap().into_inner();
+				let res = Rc::try_unwrap(result).ok().unwrap().into_inner();
 				let res = res.unwrap_or_else(|panic| resume_unwind(panic));
 				Linger::Completion(res)
 			})
@@ -143,53 +190,21 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(mut fun: F, us: u64) -> Lin
 			.and_then(|mut call_stack| {
 				let ts = nsnow();
 
-				let mut frames = call_stack.split_off(index);
+				let mut tail = call_stack.split_off(index + 1);
+				let mut head = call_stack.pop().unwrap();
 				teardown(&call_stack);
-				for frame in &mut frames {
+				for frame in once(&mut head).chain(&mut tail) {
 					frame.time_out -= min(ts, frame.time_out);
 				}
 
 				Ok(Linger::Continuation(Continuation {
-					call_stack: frames,
+					function: LaunchResume::Resume((Some(head), tail)),
 					complete: complete,
-					result: res,
+					result: result,
 				}))
 			})
 			.unwrap_or_else(|err| Linger::Failure(err))
 	}
-}
-
-pub fn resume<T: 'static>(funs: Continuation<T>, us: u64) -> Linger<T> {
-	let mut stack_excerpt = funs.call_stack;
-	let fun = stack_excerpt.remove(0);
-	let mut complete = funs.complete;
-	let thunk = move || {
-		CallStack::handle().unwrap().lock().map(|mut call_stack| {
-			let ts = nsnow();
-			for frame in &mut stack_excerpt {
-				frame.time_out += ts;
-			}
-			call_stack.append(&mut stack_excerpt);
-			teardown(&mut call_stack);
-		}).unwrap();
-
-		swapcontext(&mut complete, &mut fun.pause_resume.borrow_mut()).unwrap();
-	};
-
-	let ret = launch(thunk, us);
-	match ret {
-		Linger::Completion(_) => Linger::Completion(Rc::try_unwrap(funs.result).ok().unwrap().into_inner().unwrap()),
-		Linger::Continuation(cont) => Linger::Continuation(Continuation {
-			call_stack: cont.call_stack,
-			complete: cont.complete,
-			result: funs.result,
-		}),
-		Linger::Failure(fail) => Linger::Failure(fail),
-	}
-}
-
-pub fn destroy<T>(_: Continuation<T>) {
-	unimplemented!();
 }
 
 fn teardown(call_stack: &Vec<UntypedContinuation>) {

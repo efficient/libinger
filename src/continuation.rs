@@ -27,9 +27,9 @@ pub struct UntypedContinuation {
 }
 
 impl UntypedContinuation {
-	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64) -> Self {
+	pub fn new(timeout: u64) -> Self {
 		Self {
-			thunk: Some(Box::new(thunk)),
+			thunk: None,
 			time_limit: timeout,
 			time_out: 0,
 			pause_resume: Rc::new(RefCell::new(ucontext_t::new())),
