@@ -397,7 +397,35 @@ mod tests {
 		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10) {
 			assert!(resume(cont, 10_000_000).is_completion());
 		} else {
-			unreachable!();
+			unreachable!("completion instead of continuation!");
+		}
+		drop(lock);
+	}
+
+	#[test]
+	fn resume_completion_drop() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 100) {
+			assert!(resume(cont, 10_000).is_continuation());
+		} else {
+			unreachable!("completion instead of continuation!");
+		}
+		drop(lock);
+	}
+
+	#[test]
+	fn resume_completion_repeat() {
+		let mut lock = tests_sigalrm_lock();
+		lock.preserve();
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10) {
+			if let Linger::Continuation(cont) = resume(cont, 10) {
+				assert!(resume(cont, 10_000_000).is_completion());
+			} else {
+				unreachable!("inner: completion instead of continuation!");
+			}
+		} else {
+			unreachable!("outer: completion instead of continuation!");
 		}
 		drop(lock);
 	}
