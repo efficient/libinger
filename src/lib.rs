@@ -1,6 +1,9 @@
+#![cfg_attr(test, feature(test))]
 #![feature(thread_local_state)]
 
 extern crate libc;
+#[cfg(test)]
+extern crate test;
 
 mod continuation;
 mod dlfcn;

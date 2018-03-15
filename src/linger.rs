@@ -324,6 +324,7 @@ fn nsnow() -> u64 {
 mod tests {
 	use linger::*;
 	use signal::tests_sigalrm_lock;
+	use test::Bencher;
 
 	#[test]
 	fn launch_completion() {
@@ -444,5 +445,20 @@ mod tests {
 			elapsed += this - last;
 			last = this;
 		}
+	}
+
+	#[bench]
+	fn timeout_10(lo: &mut Bencher) {
+		lo.iter(|| timeout(10));
+	}
+
+	#[bench]
+	fn timeout_100(lo: &mut Bencher) {
+		lo.iter(|| timeout(100));
+	}
+
+	#[bench]
+	fn timeout_1000(lo: &mut Bencher) {
+		lo.iter(|| timeout(1_000));
 	}
 }
