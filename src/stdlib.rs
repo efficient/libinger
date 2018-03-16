@@ -75,17 +75,21 @@ mod funs {
 	/// against just this scenario, so long as we're careful not to allow it to deadlock via multiple
 	/// invocations on the same thread.
 	pub fn shallow_call<T: Optional, F: Fn(&'static Funs) -> T>(thunk: F) -> T {
+		use guard::PreemptGuard;
 		use std::cell::Cell;
 
 		thread_local! {
 			static RECURSING: Cell<bool> = Cell::new(false);
 		}
 
+		let lock = PreemptGuard::block();
 		if RECURSING.with(|recursing| recursing.replace(true)) {
+			drop(lock);
 			T::none()
 		} else {
 			let res = thunk(funs());
 			RECURSING.with(|recursing| recursing.set(false));
+			drop(lock);
 			res
 		}
 	}
