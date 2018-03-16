@@ -434,6 +434,11 @@ mod tests {
 		drop(lock);
 	}
 
+	#[bench]
+	fn abuse_preemption(lo: &mut Bencher) {
+		lo.iter(launch_continuation);
+	}
+
 	fn timeout(mut useconds: u64) {
 		useconds *= 1_000;
 
