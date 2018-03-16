@@ -34,7 +34,7 @@ pub fn setitimer(which: Timer, new: &itimerval, old: Option<&mut itimerval>) -> 
 mod tests {
 	use time::*;
 
-	#[test]
+	#[test(skip)]
 	fn setitimer_oneshot() {
 		use libc::siginfo_t;
 		use libc::sigsuspend;
