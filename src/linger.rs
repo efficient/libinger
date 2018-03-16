@@ -15,7 +15,6 @@ use signal::sigaction;
 use std::cell::Cell;
 use std::cmp::min;
 pub use std::io::Error;
-use std::iter::once;
 use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -191,9 +190,9 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(mut funs: Continuation<T, F
 				let ts = nsnow();
 
 				let mut tail = call_stack.split_off(index + 1);
-				let mut head = call_stack.pop().unwrap();
+				let head = call_stack.pop().unwrap();
 				teardown(&call_stack);
-				for frame in once(&mut head).chain(&mut tail) {
+				for frame in &mut tail {
 					frame.time_out -= min(ts, frame.time_out);
 				}
 
