@@ -438,7 +438,7 @@ mod tests {
 		let mut last = nsnow();
 		while elapsed < useconds {
 			let mut this = nsnow();
-			while this - last > 1_000 {
+			while this < last || this - last > 1_000 {
 				last = this;
 				this = nsnow();
 			}
