@@ -1,6 +1,5 @@
 use continuation::CallStack;
 use continuation::UntypedContinuation;
-use guard::PreemptGuard;
 use libc::SA_RESTART;
 use libc::SA_SIGINFO;
 use libc::siginfo_t;
@@ -17,7 +16,6 @@ use std::cell::Cell;
 use std::cmp::min;
 pub use std::io::Error;
 use std::iter::once;
-use std::mem::forget;
 use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
@@ -306,7 +304,7 @@ extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mu
 				// No more preemptions until resume() has finished bundling up the
 				// continuation, at which point they will be automatically reenabled
 				// as that function drops its call stack handle.
-				forget(PreemptGuard::block());
+				sigctxt.uc_sigmask.add(Signal::Alarm);
 				frame.time_out = 0;
 			}
 		}
