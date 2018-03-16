@@ -288,13 +288,17 @@ mod tests {
 
 	#[no_mangle]
 	pub unsafe extern "C" fn posix_memalign(addr: *mut *mut c_void, align: size_t, size: size_t) -> c_int {
-		ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
-		shallow_call(|funs| (funs.posix_memalign)(addr, align, size))
+		shallow_call(|funs| {
+			ALLOCATIONS.with(|allocations| allocations.set(allocations.get() + 1));
+			(funs.posix_memalign)(addr, align, size)
+		})
 	}
 
 	#[no_mangle]
 	pub unsafe extern "C" fn free(addr: *mut c_void) {
-		ALLOCATIONS.with(|allocations| allocations.set(allocations.get() - 1));
-		shallow_call(|funs| (funs.free)(addr));
+		shallow_call(|funs| {
+			ALLOCATIONS.with(|allocations| allocations.set(allocations.get() - 1));
+			(funs.free)(addr)
+		});
 	}
 }
