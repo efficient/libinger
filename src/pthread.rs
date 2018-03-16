@@ -6,7 +6,7 @@ use libc::pthread_attr_t;
 use libc::pthread_t;
 use signal::Operation;
 use signal::Set;
-use signal::Signal;
+pub use signal::Signal;
 use signal::Sigset;
 use signal::sigprocmask;
 use std::io::Error;

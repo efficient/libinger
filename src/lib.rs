@@ -7,6 +7,7 @@ extern crate test;
 
 mod continuation;
 mod dlfcn;
+mod guard;
 mod linger;
 mod pthread;
 mod rdl;

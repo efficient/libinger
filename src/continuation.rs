@@ -1,16 +1,14 @@
+use guard::PreemptGuard;
 use libc::ucontext_t;
+use pthread::Signal;
 use pthread::pthread_kill;
 use pthread::pthread_self;
-use signal::Operation;
-use signal::Set;
-use signal::Signal;
-use signal::Sigset;
-use signal::sigprocmask;
 use std::cell::Cell;
 use std::cell::BorrowMutError;
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::io::Error;
+use std::mem::forget;
 use std::rc::Rc;
 use std::thread::AccessError;
 use std::thread::panicking;
@@ -68,7 +66,7 @@ impl CallStack<'static> {
 
 impl<'a> CallStack<'a> {
 	pub fn lock(&mut self) -> Result<RefMut<'a, Vec<UntypedContinuation>>, Error> {
-		block()?;
+		forget(PreemptGuard::block()?);
 		self.blocking = true;
 		Ok(self.stack.borrow_mut())
 	}
@@ -86,19 +84,11 @@ impl<'a> Drop for CallStack<'a> {
 			if self.deferred.get() {
 				pthread_kill(pthread_self(), Signal::Alarm).unwrap();
 			}
-			unblock().unwrap();
+
+			// If we're in the midst of panicking, we skip this line so that preemptions
+			// remain disabled until we've unwound into resume(), which will
+			// automatically reenable them as it drops its call stack handle.
+			PreemptGuard::unblock().unwrap();
 		}
 	}
-}
-
-fn block() -> Result<(), Error> {
-	let mut mask = Sigset::empty();
-	mask.add(Signal::Alarm);
-	sigprocmask(Operation::Block, &mask, None)
-}
-
-fn unblock() -> Result<(), Error> {
-	let mut mask = Sigset::empty();
-	mask.add(Signal::Alarm);
-	sigprocmask(Operation::Unblock, &mask, None)
 }
