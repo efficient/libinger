@@ -50,3 +50,39 @@ pub fn swapcontext(caller: &mut ucontext_t, callee: &mut ucontext_t) -> Result<(
 		Err(Error::last_os_error())
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use ucontext::*;
+
+	#[test]
+	fn double_free() {
+		use libc::setcontext;
+		use std::cell::RefCell;
+		use std::mem::forget;
+		use std::rc::Rc;
+		use volatile::VolBool;
+
+		let context = Rc::new(RefCell::new(ucontext_t::new()));
+		let checker = Rc::downgrade(&context);
+
+		let mut jump = VolBool::new(true);
+		{
+			let context = context.clone();
+			getcontext(&mut context.borrow_mut()).unwrap();
+		}
+
+		if jump.get() {
+			jump.set(false);
+			unsafe {
+				setcontext(&mut *context.borrow_mut());
+			}
+			unreachable!();
+		}
+
+		if let None = checker.upgrade() {
+			forget(context);
+			panic!();
+		}
+	}
+}
