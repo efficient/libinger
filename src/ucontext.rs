@@ -66,7 +66,12 @@ pub fn swapcontext(caller: &mut ucontext_t, callee: &mut ucontext_t) -> Result<(
 
 #[cfg(test)]
 mod tests {
+	use std::cell::Cell;
 	use ucontext::*;
+
+	thread_local! {
+		static DROP_COUNT: Cell<Option<i32>> = Cell::new(None);
+	}
 
 	#[test]
 	fn getcontext_invoke() {
@@ -82,5 +87,38 @@ mod tests {
 			unreachable!();
 		}
 		assert!(reached.get());
+	}
+
+	#[test]
+	fn double_free_uninvoked() {
+		DROP_COUNT.with(|drop_count| drop_count.set(Some(1)));
+		getcontext().unwrap();
+		assert!(DROP_COUNT.with(|drop_count| drop_count.get()).unwrap() == 0);
+	}
+
+	#[test]
+	fn double_free_invoked() {
+		use libc::setcontext;
+
+		DROP_COUNT.with(|drop_count| drop_count.set(Some(1)));
+		if let Some(mut context) = getcontext().unwrap() {
+			unsafe {
+				setcontext(&mut context);
+			}
+		}
+		assert!(DROP_COUNT.with(|drop_count| drop_count.get()).unwrap() == 0);
+	}
+
+	impl Drop for VolBool {
+		fn drop(&mut self) {
+			DROP_COUNT.with(|drop_count| if let Some(enforcing) = drop_count.get() {
+				if enforcing == 0 {
+					drop_count.set(None);
+					panic!();
+				} else {
+					drop_count.set(Some(enforcing - 1));
+				}
+			});
+		}
 	}
 }
