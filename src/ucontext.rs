@@ -1,4 +1,3 @@
-use libc::c_void;
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
@@ -34,21 +33,22 @@ pub fn getcontext() -> Result<Option<ucontext_t>> {
 	}
 }
 
-#[inline(always)]
-pub fn makecontext(context: &mut ucontext_t, thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut ucontext_t>) -> Result<()> {
+pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut ucontext_t>) -> Result<ucontext_t> {
+	use libc::c_void;
 	use libc::makecontext;
 
-	getcontext(context)?;
+	let mut context = getcontext()?.unwrap();
 	context.uc_stack.ss_sp = stack.as_mut_ptr() as *mut c_void;
 	context.uc_stack.ss_size = stack.len();
 	if let Some(link) = link {
 		context.uc_link = link;
 	}
+
 	unsafe {
-		makecontext(context, thunk, 0);
+		makecontext(&mut context, thunk, 0);
 	}
 
-	Ok(())
+	Ok(context)
 }
 
 #[inline(always)]
@@ -87,6 +87,29 @@ mod tests {
 			unreachable!();
 		}
 		assert!(reached.get());
+	}
+
+	#[test]
+	fn makecontext_invoke() {
+		use libc::setcontext;
+
+		thread_local! {
+			static REACHED: Cell<bool> = Cell::new(false);
+		}
+
+		extern "C" fn callback() {
+			REACHED.with(|reached| reached.set(true));
+		}
+
+		let mut stack = vec![0; 1_024];
+		if let Some(mut here) = getcontext().unwrap() {
+			let mut there = makecontext(callback, &mut stack, Some(&mut here)).unwrap();
+			unsafe {
+				setcontext(&mut there);
+			}
+			unreachable!();
+		}
+		assert!(REACHED.with(|reached| reached.get()));
 	}
 
 	#[test]
