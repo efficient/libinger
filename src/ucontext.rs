@@ -1,9 +1,7 @@
-use convert::AsBorrowedMut;
 use libc::c_void;
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
-use std::ops::Deref;
 use volatile::VolBool;
 use zeroable::Zeroable;
 
@@ -11,35 +9,29 @@ unsafe impl Zeroable for ucontext_t {}
 
 pub const REG_CSGSFS: usize = 18;
 
+// This must be inlined because it stack-allocates a volatile bool that it expects to be present
+// even after `getcontext()` returns for the second (or subsequent) time!
 #[inline(always)]
-pub fn getcontext<S: for<'a> AsBorrowedMut<'a, Value = ucontext_t>, T: Deref<Target = S>>(con: T) -> Result<()> {
+pub fn getcontext() -> Result<Option<ucontext_t>> {
 	use libc::getcontext;
-	use std::mem::ManuallyDrop;
 	use std::mem::forget;
 
-	let con = ManuallyDrop::new(con);
-	let res = {
-		let mut text = con.borrow_mut();
-		let mut repeat = VolBool::new(false);
-		let res = if unsafe {
-			getcontext(&mut *text)
-		} == 0 {
-			Ok(())
+	let mut context = ucontext_t::new();
+	let mut creating = VolBool::new(true);
+	if unsafe {
+		getcontext(&mut context)
+	} == 0 {
+		Ok(if creating.get() {
+			creating.set(false);
+			Some(context)
 		} else {
-			Err(Error::last_os_error())
-		};
-
-		if repeat.get() {
-			forget(text);
-			return res;
-		}
-		repeat.set(true);
-
-		res
-	};
-
-	ManuallyDrop::into_inner(con);
-	res
+			forget(context);
+			forget(creating);
+			None
+		})
+	} else {
+		Err(Error::last_os_error())
+	}
 }
 
 #[inline(always)]
@@ -77,30 +69,18 @@ mod tests {
 	use ucontext::*;
 
 	#[test]
-	fn double_free() {
+	fn getcontext_invoke() {
 		use libc::setcontext;
-		use std::cell::RefCell;
-		use std::mem::forget;
-		use std::rc::Rc;
-		use volatile::VolBool;
 
-		let context = Rc::new(RefCell::new(ucontext_t::new()));
-		let checker = Rc::downgrade(&context);
-
-		let mut jump = VolBool::new(true);
-		getcontext(context.clone()).unwrap();
-
-		if jump.get() {
-			jump.set(false);
+		let mut reached = VolBool::new(false);
+		if let Some(mut context) = getcontext().unwrap() {
+			assert!(! reached.get());
+			reached.set(true);
 			unsafe {
-				setcontext(&mut *context.borrow_mut());
+				setcontext(&mut context);
 			}
 			unreachable!();
 		}
-
-		if let None = checker.upgrade() {
-			forget(context);
-			panic!();
-		}
+		assert!(reached.get());
 	}
 }
