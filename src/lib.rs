@@ -6,7 +6,6 @@ extern crate libc;
 extern crate test;
 
 mod continuation;
-mod convert;
 mod dlfcn;
 mod guard;
 mod linger;
