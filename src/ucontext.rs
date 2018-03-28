@@ -1,7 +1,10 @@
+use convert::AsBorrowedMut;
 use libc::c_void;
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
+use std::ops::Deref;
+use volatile::VolBool;
 use zeroable::Zeroable;
 
 unsafe impl Zeroable for ucontext_t {}
@@ -9,16 +12,34 @@ unsafe impl Zeroable for ucontext_t {}
 pub const REG_CSGSFS: usize = 18;
 
 #[inline(always)]
-pub fn getcontext(context: &mut ucontext_t) -> Result<()> {
+pub fn getcontext<S: for<'a> AsBorrowedMut<'a, Value = ucontext_t>, T: Deref<Target = S>>(con: T) -> Result<()> {
 	use libc::getcontext;
+	use std::mem::ManuallyDrop;
+	use std::mem::forget;
 
-	if unsafe {
-		getcontext(context)
-	} == 0 {
-		Ok(())
-	} else {
-		Err(Error::last_os_error())
-	}
+	let con = ManuallyDrop::new(con);
+	let res = {
+		let mut text = con.borrow_mut();
+		let mut repeat = VolBool::new(false);
+		let res = if unsafe {
+			getcontext(&mut *text)
+		} == 0 {
+			Ok(())
+		} else {
+			Err(Error::last_os_error())
+		};
+
+		if repeat.get() {
+			forget(text);
+			return res;
+		}
+		repeat.set(true);
+
+		res
+	};
+
+	ManuallyDrop::into_inner(con);
+	res
 }
 
 #[inline(always)]
@@ -67,10 +88,7 @@ mod tests {
 		let checker = Rc::downgrade(&context);
 
 		let mut jump = VolBool::new(true);
-		{
-			let context = context.clone();
-			getcontext(&mut context.borrow_mut()).unwrap();
-		}
+		getcontext(context.clone()).unwrap();
 
 		if jump.get() {
 			jump.set(false);
