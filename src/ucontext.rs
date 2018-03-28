@@ -4,7 +4,7 @@ use std::io::Result;
 use volatile::VolBool;
 use zeroable::Zeroable;
 
-unsafe impl Zeroable for ucontext_t {}
+pub enum Void {}
 
 pub const REG_CSGSFS: usize = 18;
 
@@ -31,6 +31,15 @@ pub fn getcontext() -> Result<Option<ucontext_t>> {
 	} else {
 		Err(Error::last_os_error())
 	}
+}
+
+pub fn setcontext(context: &ucontext_t) -> Result<Void> {
+	use libc::setcontext;
+
+	unsafe {
+		setcontext(context);
+	}
+	Err(Error::last_os_error())
 }
 
 pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut ucontext_t>) -> Result<ucontext_t> {
@@ -64,6 +73,8 @@ pub fn swapcontext(caller: &mut ucontext_t, callee: &mut ucontext_t) -> Result<(
 	}
 }
 
+unsafe impl Zeroable for ucontext_t {}
+
 #[cfg(test)]
 mod tests {
 	use std::cell::Cell;
@@ -75,15 +86,11 @@ mod tests {
 
 	#[test]
 	fn getcontext_invoke() {
-		use libc::setcontext;
-
 		let mut reached = VolBool::new(false);
-		if let Some(mut context) = getcontext().unwrap() {
+		if let Some(context) = getcontext().unwrap() {
 			assert!(! reached.get());
 			reached.set(true);
-			unsafe {
-				setcontext(&mut context);
-			}
+			setcontext(&context).unwrap();
 			unreachable!();
 		}
 		assert!(reached.get());
@@ -91,8 +98,6 @@ mod tests {
 
 	#[test]
 	fn makecontext_invoke() {
-		use libc::setcontext;
-
 		thread_local! {
 			static REACHED: Cell<bool> = Cell::new(false);
 		}
@@ -104,9 +109,7 @@ mod tests {
 		let mut stack = vec![0; 1_024];
 		if let Some(mut here) = getcontext().unwrap() {
 			let mut there = makecontext(callback, &mut stack, Some(&mut here)).unwrap();
-			unsafe {
-				setcontext(&mut there);
-			}
+			setcontext(&there).unwrap();
 			unreachable!();
 		}
 		assert!(REACHED.with(|reached| reached.get()));
@@ -121,13 +124,10 @@ mod tests {
 
 	#[test]
 	fn double_free_invoked() {
-		use libc::setcontext;
-
 		DROP_COUNT.with(|drop_count| drop_count.set(Some(1)));
 		if let Some(mut context) = getcontext().unwrap() {
-			unsafe {
-				setcontext(&mut context);
-			}
+			setcontext(&context).unwrap();
+			unreachable!();
 		}
 		assert!(DROP_COUNT.with(|drop_count| drop_count.get()).unwrap() == 0);
 	}
