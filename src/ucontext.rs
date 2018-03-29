@@ -60,19 +60,6 @@ pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut u
 	Ok(context)
 }
 
-#[inline(always)]
-pub fn swapcontext(caller: &mut ucontext_t, callee: &mut ucontext_t) -> Result<()> {
-	use libc::swapcontext;
-
-	if unsafe {
-		swapcontext(caller, callee)
-	} == 0 {
-		Ok(())
-	} else {
-		Err(Error::last_os_error())
-	}
-}
-
 unsafe impl Zeroable for ucontext_t {}
 
 #[cfg(test)]
