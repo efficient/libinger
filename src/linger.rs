@@ -13,19 +13,22 @@ use signal::Signal;
 use signal::Sigset;
 use signal::sigaction;
 use std::cell::Cell;
+use std::cmp::max;
 use std::cmp::min;
 pub use std::io::Error;
+use std::io::Result;
 use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::panic::resume_unwind;
 use std::rc::Rc;
+use std::rc::Weak;
 use std::sync::atomic::ATOMIC_USIZE_INIT;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::ONCE_INIT;
 use std::sync::Once;
-use std::thread::Result;
+use std::thread::Result as PanicResult;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use time::Timer;
@@ -35,53 +38,30 @@ use time::timeval;
 use ucontext::REG_CSGSFS;
 use ucontext::getcontext;
 use ucontext::makecontext;
-use ucontext::swapcontext;
-use volatile::VolBool;
-use zeroable::Zeroable;
+use ucontext::setcontext;
 
 const TIME_QUANTUM_DIVISOR: u64 = 3;
 
 static QUANTUM: AtomicUsize = ATOMIC_USIZE_INIT;
 
 thread_local! {
-	static EARLIEST: Cell<usize> = Cell::new(0);
+	// None means the top of the call_stack.
+	static EARLIEST: Cell<Option<usize>> = Cell::new(None);
 }
 
 enum LaunchResume<T, F: FnMut() -> T> {
 	Launch(F),
-	Resume((Option<UntypedContinuation>, Vec<UntypedContinuation>)),
-}
-
-impl<'a, T: 'a, F: 'a + FnMut() -> T> LaunchResume<T, F> {
-	fn into_fn_mut(self, res: Rc<Cell<Result<T>>>) -> Box<'a + FnMut()> {
-		match self {
-			LaunchResume::Launch(mut fun) => Box::new(move ||
-				res.set(catch_unwind(AssertUnwindSafe(&mut fun)))
-			),
-			LaunchResume::Resume((_, mut tail)) => Box::new(move ||
-				CallStack::handle().unwrap().lock().map(|mut call_stack| {
-					let ts = nsnow();
-					for frame in &mut tail {
-						frame.time_out += ts;
-					}
-					call_stack.append(&mut tail);
-					teardown(&mut call_stack);
-				}).unwrap()
-			),
-		}
-	}
+	Resume((UntypedContinuation, Vec<UntypedContinuation>)),
 }
 
 pub struct Continuation<T, F: FnMut() -> T> {
 	function: LaunchResume<T, F>,
-	complete: Box<ucontext_t>,
-	result: Rc<Cell<Result<T>>>,
+	result: Weak<Cell<PanicResult<T>>>,
 }
 
 pub enum Linger<T, F: FnMut() -> T> {
 	Completion(T),
 	Continuation(Continuation<T, F>),
-	Failure(Error),
 }
 
 impl<T, F: FnMut() -> T> Linger<T, F> {
@@ -100,129 +80,182 @@ impl<T, F: FnMut() -> T> Linger<T, F> {
 			false
 		}
 	}
-
-	pub fn is_failure(&self) -> bool {
-		if let &Linger::Failure(_) = self {
-			true
-		} else {
-			false
-		}
-	}
 }
 
-pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Linger<T, F> {
-	resume(Continuation {
-		function: LaunchResume::Launch(fun),
-		complete: Box::new(ucontext_t::new()),
-		result: Rc::new(Cell::new(Err(Box::new(())))),
-	}, us)
-}
-
-pub fn resume<T: 'static, F: 'static + FnMut() -> T>(mut funs: Continuation<T, F>, us: u64) -> Linger<T, F> {
+pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Result<Linger<T, F>> {
 	static INIT_HANDLER: Once = ONCE_INIT;
 	INIT_HANDLER.call_once(|| {
 		let handler = Sigaction::new(preempt, Sigset::empty(), SA_SIGINFO | SA_RESTART);
 		sigaction(Signal::Alarm, &handler, None).unwrap();
 	});
 
-	let resuming;
-	let mut call_gate = ucontext_t::new();
-	let mut frame;
-	if let &mut LaunchResume::Resume((ref mut head, _)) = &mut funs.function {
-		let mut head = head.take().unwrap();
+	resume(Continuation {
+		function: LaunchResume::Launch(fun),
+		result: Weak::new(),
+	}, us)
+}
 
-		resuming = true;
-		head.time_limit = us;
-		swap(&mut call_gate, &mut head.pause_resume.borrow_mut());
-		frame = head;
+pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, us: u64) -> Result<Linger<T, F>> {
+	let mut res = funs.result;
+	if let Some(first_time_here) = getcontext()? {
+		let mut call_stack = CallStack::handle().unwrap().lock()?;
+		match funs.function {
+			LaunchResume::Launch(mut thunk) => {
+				let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
+				res = Rc::downgrade(&ult);
+				let thunk = move || {
+					let res = catch_unwind(AssertUnwindSafe(&mut thunk));
+					EARLIEST.with(|earliest| earliest.set(None));
+					ult.set(res);
+				};
+
+				let mut frame = UntypedContinuation::new(thunk, us, first_time_here);
+				let call_gate = makecontext(preemptor, &mut frame.stack,
+					Some(&mut frame.pause_resume))?;
+				call_stack.push(frame);
+
+				drop(call_stack);
+				setcontext(&call_gate)?;
+			},
+			LaunchResume::Resume((mut cont, mut inuations)) => {
+				let mut checkpoint = *cont.pause_resume;
+				*cont.pause_resume = first_time_here;
+				checkpoint.uc_link = &mut *cont.pause_resume;
+
+				let thunk = cont.thunk;
+				let thunk = Box::new(move || {
+					let _ = thunk;
+
+					if ! inuations.is_empty() {
+						let mut call_stack = CallStack::handle().unwrap().lock().unwrap();
+
+						let quantum = inuations.iter()
+							.map(|frame| frame.time_limit).min()
+							.unwrap_or(u64::max_value()) / TIME_QUANTUM_DIVISOR;
+						maybe_update_quantum(quantum);
+
+						let ts = nsnow();
+						for frame in inuations.iter_mut() {
+							frame.time_out += ts;
+						}
+
+						call_stack.append(&mut inuations);
+						search_update_earliest(&call_stack);
+					}
+
+					setcontext(&checkpoint).unwrap();
+				});
+				cont.thunk = thunk;
+				cont.time_limit = us;
+
+				call_stack.push(cont);
+
+				drop(call_stack);
+				preemptor();
+			},
+		}
+	}
+
+	let mut call_stack = CallStack::handle().unwrap().lock()?;
+	let index = EARLIEST.with(|earliest| earliest.take())
+		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
+	let mut tail = call_stack.split_off(index);
+	let head = call_stack.pop().unwrap();
+
+	let quantum = call_stack.iter()
+		.map(|frame| frame.time_limit).min()
+		.unwrap_or(0) / TIME_QUANTUM_DIVISOR;
+	maybe_update_quantum(quantum);
+	search_update_earliest(&call_stack);
+
+	Ok(if head.time_out != 0 {
+		debug_assert!(tail.is_empty());
+
+		let res = res.upgrade().unwrap();
+		drop(head);
+		let res = Rc::try_unwrap(res).ok().unwrap().into_inner()
+			.unwrap_or_else(|panic| resume_unwind(panic));
+
+		Linger::Completion(res)
 	} else {
-		resuming = false;
-		frame = UntypedContinuation::new(us);
-	}
-	frame.thunk = Some(funs.function.into_fn_mut(funs.result.clone()));
-
-	let mut complete = funs.complete;
-	let result = funs.result;
-	if ! resuming {
-		if let Err(or) = makecontext(&mut call_gate, preemptor, &mut frame.stack, Some(&mut complete)) {
-			return Linger::Failure(or);
-		}
-	}
-
-	let pause = frame.pause_resume.clone();
-	let index;
-	match CallStack::handle().unwrap().lock() {
-		Err(or) => return Linger::Failure(or),
-		Ok(mut call_stack) => {
-			index = call_stack.len();
-			call_stack.push(frame);
-		},
-	}
-
-	let mut timeout = VolBool::new(false);
-	if let Err(or) = getcontext(&mut pause.borrow_mut()) {
-		return Linger::Failure(or);
-	}
-
-	if ! timeout.get() {
-		timeout.set(true);
-
-		if resuming {
-			preemptor();
-		}
-		if let Err(or) = swapcontext(&mut complete, &mut call_gate) {
-			return Linger::Failure(or);
+		let ts = nsnow();
+		for frame in &mut tail {
+			frame.time_out -= min(ts, frame.time_out);
 		}
 
-		CallStack::handle().unwrap().lock()
-			.map(|mut call_stack| {
-				call_stack.pop();
-				teardown(&call_stack);
+		Linger::Continuation(Continuation {
+			function: LaunchResume::Resume((head, tail)),
+			result: res,
+		})
+	})
+}
 
-				let res = Rc::try_unwrap(result).ok().unwrap().into_inner();
-				let res = res.unwrap_or_else(|panic| resume_unwind(panic));
-				Linger::Completion(res)
-			})
-			.unwrap_or_else(|err| Linger::Failure(err))
-	} else {
-		CallStack::handle().unwrap().lock()
-			.and_then(|mut call_stack| {
-				let ts = nsnow();
+extern "C" fn preemptor() {
+	let mut call_stack = CallStack::handle().unwrap().lock().unwrap();
+	let index = call_stack.len() - 1;
 
-				let mut tail = call_stack.split_off(index + 1);
-				let head = call_stack.pop().unwrap();
-				teardown(&call_stack);
-				for frame in &mut tail {
-					frame.time_out -= min(ts, frame.time_out);
+	let thunk;
+	let time_out;
+	{
+		let frame = call_stack.last_mut().unwrap();
+		let ptr: *mut _ = &mut frame.thunk;
+		thunk = unsafe {
+			ptr.as_mut()
+		}.unwrap();
+
+		let time_limit = frame.time_limit;
+		maybe_update_quantum(max(time_limit / TIME_QUANTUM_DIVISOR, 1));
+
+		time_out = nsnow() + time_limit * 1_000;
+		frame.time_out = time_out;
+	}
+
+	EARLIEST.with(|earliest| {
+		let earliest_out = earliest.get()
+			.map(|index| call_stack[index].time_out)
+			.unwrap_or(u64::max_value());
+		if time_out < earliest_out {
+			earliest.set(Some(index));
+		}
+	});
+
+	drop(call_stack);
+	thunk();
+}
+
+extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
+	if let Ok(call_stack) = CallStack::handle() {
+		if let Ok(mut call_stack) = call_stack.preempt() {
+			if let Some(index) = EARLIEST.with(|earliest| earliest.get()) {
+				let frame = &mut call_stack[index];
+				if nsnow() < frame.time_out {
+					return;
 				}
+				frame.time_out = 0;
+				EARLIEST.with(|earliest| earliest.set(Some(index)));
 
-				Ok(Linger::Continuation(Continuation {
-					function: LaunchResume::Resume((Some(head), tail)),
-					complete: complete,
-					result: result,
-				}))
-			})
-			.unwrap_or_else(|err| Linger::Failure(err))
+				let sigctxt = sigctxt.unwrap();
+				let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
+				swap(sigctxt, &mut *frame.pause_resume);
+				sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
+
+				// No more preemptions until resume() has finished bundling up the
+				// continuation, at which point they will be automatically reenabled
+				sigctxt.uc_sigmask.add(Signal::Alarm);
+			}
+		}
 	}
 }
 
-fn teardown(call_stack: &Vec<UntypedContinuation>) {
-	let earliest_time_out = call_stack.iter()
-		.map(|frame| frame.time_out).enumerate()
-		.min_by_key(|&(_, time_out)| time_out)
-		.map(|(index, _)| index).unwrap_or(0);
-	EARLIEST.with(|earliest| earliest.set(earliest_time_out));
-
-	let shortest = call_stack.iter().map(|frame| frame.time_limit).min();
-	let quantum_time_limit = shortest.unwrap_or(0);
+fn maybe_update_quantum(proposed: u64) -> bool {
+	let proposed = proposed as usize;
+	let mut current = QUANTUM.load(Ordering::Relaxed);
 
 	while {
-		let quantum = QUANTUM.load(Ordering::Relaxed);
-
-		if quantum_time_limit < min_nonzero(quantum as u64) {
+		if proposed < current || current == 0 {
 			let interval = timeval {
-				tv_sec: (quantum_time_limit / 1_000_000) as time_t,
-				tv_usec: (quantum_time_limit % 1_000_000) as suseconds_t,
+				tv_sec: (proposed / 1_000_000) as time_t,
+				tv_usec: (proposed % 1_000_000) as suseconds_t,
 			};
 			let duration = itimerval {
 				it_interval: interval,
@@ -230,92 +263,24 @@ fn teardown(call_stack: &Vec<UntypedContinuation>) {
 			};
 			setitimer(Timer::Real, &duration, None).unwrap();
 
-			QUANTUM.compare_and_swap(quantum, quantum_time_limit as usize, Ordering::Relaxed) != quantum
+			let mut last = QUANTUM.compare_and_swap(current, proposed, Ordering::Relaxed);
+			swap(&mut current, &mut last);
+			last != current
 		} else {
-			false
+			return false;
 		}
 	} {}
+
+	true
 }
 
-extern "C" fn preemptor() {
-	// Take a thread-wide preemption lock.
-	let mut thunk = CallStack::handle().unwrap().lock().map(|mut call_stack| {
-		let earliest = call_stack.get(EARLIEST.with(|earliest| earliest.get()))
-			.map(|frame| frame.time_out)
-			.unwrap_or(0);
+fn search_update_earliest(call_stack: &[UntypedContinuation]) {
+	let time_out = call_stack.iter()
+		.map(|frame| frame.time_out).enumerate()
+		.map(|(index, time_out)| (time_out, index)).min()
+		.map(|(_, index)| index);
 
-		let index = call_stack.len() - 1;
-		let frame = call_stack.last_mut().unwrap();
-		let thunk = frame.thunk.take().unwrap();
-		let time_limit = frame.time_limit;
-
-		let my_quantum = time_limit / TIME_QUANTUM_DIVISOR;
-		while {
-			let quantum = QUANTUM.load(Ordering::Relaxed);
-
-			if my_quantum < min_nonzero(quantum as u64) {
-				let interval = timeval {
-					tv_sec: (my_quantum / 1_000_000) as time_t,
-					tv_usec: (my_quantum % 1_000_000) as suseconds_t,
-				};
-				let duration = itimerval {
-					it_interval: interval,
-					it_value: interval,
-				};
-				setitimer(Timer::Real, &duration, None).unwrap();
-
-				QUANTUM.compare_and_swap(quantum, my_quantum as usize, Ordering::Relaxed) != quantum
-			} else {
-				false
-			}
-		} {}
-
-		let time_out = nsnow() + time_limit * 1_000;
-		if time_out < min_nonzero(earliest) {
-			EARLIEST.with(|earliest| earliest.set(index));
-		}
-		frame.time_out = time_out;
-
-		thunk
-
-		// Release our lock, enabling preemption!
-	}).unwrap();
-
-	thunk();
-}
-
-extern "C" fn preempt(signum: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
-	debug_assert!(signum == Signal::Alarm);
-
-	if let Ok(handle) = CallStack::handle() {
-		if let Ok(mut call_stack) = handle.preempt() {
-			let index = EARLIEST.with(|earliest| earliest.get());
-			if let Some(frame) = call_stack.get_mut(index) {
-				if nsnow() < min_nonzero(frame.time_out) {
-					return;
-				}
-
-				let sigctxt = sigctxt.unwrap();
-				let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
-				swap(&mut *frame.pause_resume.borrow_mut(), sigctxt);
-				sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
-
-				// No more preemptions until resume() has finished bundling up the
-				// continuation, at which point they will be automatically reenabled
-				// as that function drops its call stack handle.
-				sigctxt.uc_sigmask.add(Signal::Alarm);
-				frame.time_out = 0;
-			}
-		}
-	}
-}
-
-fn min_nonzero(num: u64) -> u64 {
-	if num != 0 {
-		num
-	} else {
-		u64::max_value()
-	}
+	EARLIEST.with(|earliest| earliest.set(time_out));
 }
 
 fn nsnow() -> u64 {
@@ -333,7 +298,7 @@ mod tests {
 	fn launch_completion() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		assert!(launch(|| (), 1_000).is_completion());
+		assert!(launch(|| (), 1_000).unwrap().is_completion());
 		drop(lock);
 	}
 
@@ -341,7 +306,7 @@ mod tests {
 	fn launch_continuation() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		assert!(launch(|| timeout(1_000_000), 10).is_continuation());
+		assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
 		drop(lock);
 	}
 
@@ -379,7 +344,7 @@ mod tests {
 	fn launch_completions() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		assert!(launch(|| assert!(launch(|| (), 1_000).is_completion()), 1_000).is_completion());
+		assert!(launch(|| assert!(launch(|| (), 1_000).unwrap().is_completion()), 1_000).unwrap().is_completion());
 		drop(lock);
 	}
 
@@ -388,9 +353,9 @@ mod tests {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
 		assert!(launch(|| {
-			assert!(launch(|| timeout(1_000_000), 10).is_continuation());
+			assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
 			timeout(1_000_000);
-		}, 1_000).is_continuation());
+		}, 1_000).unwrap().is_continuation());
 		drop(lock);
 	}
 
@@ -398,8 +363,8 @@ mod tests {
 	fn resume_completion() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10) {
-			assert!(resume(cont, 10_000_000).is_completion());
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10).unwrap() {
+			assert!(resume(cont, 10_000_000).unwrap().is_completion());
 		} else {
 			unreachable!("completion instead of continuation!");
 		}
@@ -410,8 +375,8 @@ mod tests {
 	fn resume_completion_drop() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 100) {
-			assert!(resume(cont, 10_000).is_continuation());
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 100).unwrap() {
+			assert!(resume(cont, 10_000).unwrap().is_continuation());
 		} else {
 			unreachable!("completion instead of continuation!");
 		}
@@ -422,9 +387,9 @@ mod tests {
 	fn resume_completion_repeat() {
 		let mut lock = tests_sigalrm_lock();
 		lock.preserve();
-		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10) {
-			if let Linger::Continuation(cont) = resume(cont, 10) {
-				assert!(resume(cont, 10_000_000).is_completion());
+		if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10).unwrap() {
+			if let Linger::Continuation(cont) = resume(cont, 10).unwrap() {
+				assert!(resume(cont, 10_000_000).unwrap().is_completion());
 			} else {
 				unreachable!("inner: completion instead of continuation!");
 			}

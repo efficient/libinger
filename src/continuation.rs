@@ -9,28 +9,28 @@ use std::cell::RefCell;
 use std::cell::RefMut;
 use std::io::Error;
 use std::mem::forget;
-use std::rc::Rc;
 use std::thread::AccessError;
 use std::thread::panicking;
-use zeroable::Zeroable;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
 pub struct UntypedContinuation {
-	pub thunk: Option<Box<FnMut()>>,
+	pub thunk: Box<FnMut()>,
 	pub time_limit: u64,
 	pub time_out: u64,
-	pub pause_resume: Rc<RefCell<ucontext_t>>,
+	pub pause_resume: Box<ucontext_t>,
 	pub stack: Box<[u8]>,
 }
 
 impl UntypedContinuation {
-	pub fn new(timeout: u64) -> Self {
+	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64, context: ucontext_t) -> Self {
 		Self {
-			thunk: None,
+			thunk: Box::new(thunk),
 			time_limit: timeout,
 			time_out: 0,
-			pause_resume: Rc::new(RefCell::new(ucontext_t::new())),
+			// We must box the context so its address won't change if a collection
+			// relocates the UntypedContinuation that contains it!
+			pause_resume: Box::new(context),
 			stack: vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
 		}
 	}
