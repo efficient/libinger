@@ -65,6 +65,7 @@ unsafe impl Zeroable for ucontext_t {}
 #[cfg(test)]
 mod tests {
 	use std::cell::Cell;
+	use std::os::raw::c_void;
 	use ucontext::*;
 
 	thread_local! {
@@ -100,6 +101,64 @@ mod tests {
 			unreachable!();
 		}
 		assert!(REACHED.with(|reached| reached.get()));
+	}
+
+	#[test]
+	fn address_change_groundtruth() {
+		use libc::getcontext;
+
+		let mut context = ucontext_t::new();
+		unsafe {
+			getcontext(&mut context);
+		}
+
+		let mcontext: *const _ = context.uc_mcontext.fpregs;
+		let mcontext = unsafe {
+			mcontext.offset(1)
+		} as *const c_void;
+
+		let context: *const _ = &context;
+		let context = unsafe {
+			context.offset(1)
+		} as *const c_void;
+
+		assert_eq!(mcontext, context);
+	}
+
+	#[test]
+	fn address_change_getcontext() {
+		let context = getcontext().unwrap().unwrap();
+
+		let mcontext: *const _ = context.uc_mcontext.fpregs;
+		let mcontext = unsafe {
+			mcontext.offset(1)
+		} as *const c_void;
+
+		let context: *const _ = &context;
+		let context = unsafe {
+			context.offset(1)
+		} as *const c_void;
+
+		assert_eq!(mcontext, context);
+	}
+
+	#[test]
+	fn address_change_makecontext() {
+		extern "C" fn callback() {}
+
+		let context = makecontext(callback, &mut [], None).unwrap();
+
+		let mcontext: *const _ = context.uc_mcontext.fpregs;
+		let mcontext = unsafe {
+			mcontext.offset(1)
+		} as *const c_void;
+
+		let context: *const _ = &context;
+		let context = unsafe {
+			context.offset(1)
+		} as *const c_void;
+
+		assert_eq!(mcontext, context);
 	}
 
 	#[test]
