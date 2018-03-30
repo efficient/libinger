@@ -61,6 +61,14 @@ pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut u
 	Ok(context)
 }
 
+pub fn swap(left: &mut ucontext_t, right: &mut ucontext_t) {
+	use std::mem::swap;
+
+	swap(left, right);
+	fixupcontext(left);
+	fixupcontext(right);
+}
+
 fn fixupcontext(context: &mut ucontext_t) {
 	let ptr: *mut _ = context;
 	let ptr = unsafe {

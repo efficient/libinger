@@ -17,7 +17,6 @@ use std::cmp::max;
 use std::cmp::min;
 pub use std::io::Error;
 use std::io::Result;
-use std::mem::swap;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::panic::resume_unwind;
@@ -39,6 +38,7 @@ use ucontext::REG_CSGSFS;
 use ucontext::getcontext;
 use ucontext::makecontext;
 use ucontext::setcontext;
+use ucontext::swap;
 
 const TIME_QUANTUM_DIVISOR: u64 = 3;
 
@@ -248,6 +248,8 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut uco
 }
 
 fn maybe_update_quantum(proposed: u64) -> bool {
+	use std::mem::swap;
+
 	let proposed = proposed as usize;
 	let mut current = QUANTUM.load(Ordering::Relaxed);
 
