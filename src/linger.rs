@@ -110,12 +110,12 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 				};
 
 				let mut frame = UntypedContinuation::new(thunk, us, first_time_here);
-				let call_gate = makecontext(preemptor, &mut frame.stack,
+				let mut call_gate = makecontext(preemptor, &mut frame.stack,
 					Some(&mut frame.pause_resume))?;
 				call_stack.push(frame);
 
 				drop(call_stack);
-				setcontext(&call_gate)?;
+				setcontext(&mut call_gate)?;
 			},
 			LaunchResume::Resume((mut cont, mut inuations)) => {
 				let mut checkpoint = *cont.pause_resume;
@@ -143,7 +143,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 						search_update_earliest(&call_stack);
 					}
 
-					setcontext(&checkpoint).unwrap();
+					setcontext(&mut checkpoint).unwrap();
 				});
 				cont.thunk = thunk;
 				cont.time_limit = us;

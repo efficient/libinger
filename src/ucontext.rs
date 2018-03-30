@@ -33,9 +33,10 @@ pub fn getcontext() -> Result<Option<ucontext_t>> {
 	}
 }
 
-pub fn setcontext(context: &ucontext_t) -> Result<Void> {
+pub fn setcontext(context: &mut ucontext_t) -> Result<Void> {
 	use libc::setcontext;
 
+	fixupcontext(context);
 	unsafe {
 		setcontext(context);
 	}
@@ -85,10 +86,10 @@ mod tests {
 	#[test]
 	fn getcontext_invoke() {
 		let mut reached = VolBool::new(false);
-		if let Some(context) = getcontext().unwrap() {
+		if let Some(mut context) = getcontext().unwrap() {
 			assert!(! reached.get());
 			reached.set(true);
-			setcontext(&context).unwrap();
+			setcontext(&mut context).unwrap();
 			unreachable!();
 		}
 		assert!(reached.get());
@@ -107,7 +108,7 @@ mod tests {
 		let mut stack = vec![0; 1_024];
 		if let Some(mut here) = getcontext().unwrap() {
 			let mut there = makecontext(callback, &mut stack, Some(&mut here)).unwrap();
-			setcontext(&there).unwrap();
+			setcontext(&mut there).unwrap();
 			unreachable!();
 		}
 		assert!(REACHED.with(|reached| reached.get()));
@@ -154,7 +155,7 @@ mod tests {
 	fn double_free_invoked() {
 		DROP_COUNT.with(|drop_count| drop_count.set(Some(1)));
 		if let Some(mut context) = getcontext().unwrap() {
-			setcontext(&context).unwrap();
+			setcontext(&mut context).unwrap();
 			unreachable!();
 		}
 		assert!(DROP_COUNT.with(|drop_count| drop_count.get()).unwrap() == 0);
