@@ -60,6 +60,16 @@ pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut u
 	Ok(context)
 }
 
+fn fixupcontext(context: &mut ucontext_t) {
+	let ptr: *mut _ = context;
+	let ptr = unsafe {
+		ptr.offset(1)
+	} as *mut _;
+	context.uc_mcontext.fpregs = unsafe {
+		ptr.offset(-1)
+	};
+}
+
 unsafe impl Zeroable for ucontext_t {}
 
 #[cfg(test)]
@@ -104,7 +114,7 @@ mod tests {
 	}
 
 	#[test]
-	fn address_change_groundtruth() {
+	fn fixup_invariant() {
 		use libc::getcontext;
 
 		let mut context = ucontext_t::new();
@@ -112,53 +122,25 @@ mod tests {
 			getcontext(&mut context);
 		}
 
-		let mcontext: *const _ = context.uc_mcontext.fpregs;
-		let mcontext = unsafe {
-			mcontext.offset(1)
-		} as *const c_void;
-
-		let context: *const _ = &context;
-		let context = unsafe {
-			context.offset(1)
-		} as *const c_void;
-
-		assert_eq!(mcontext, context);
+		assert_eq!(addr_of_end(&context), addr_of_end(context.uc_mcontext.fpregs));
+		fixupcontext(&mut context);
+		assert_eq!(addr_of_end(&context), addr_of_end(context.uc_mcontext.fpregs));
 	}
 
 	#[test]
-	fn address_change_getcontext() {
-		let context = getcontext().unwrap().unwrap();
-
-		let mcontext: *const _ = context.uc_mcontext.fpregs;
-		let mcontext = unsafe {
-			mcontext.offset(1)
-		} as *const c_void;
-
-		let context: *const _ = &context;
-		let context = unsafe {
-			context.offset(1)
-		} as *const c_void;
-
-		assert_eq!(mcontext, context);
+	fn fixup_getcontext() {
+		let mut context = getcontext().unwrap().unwrap();
+		fixupcontext(&mut context);
+		assert_eq!(addr_of_end(&context), addr_of_end(context.uc_mcontext.fpregs));
 	}
 
 	#[test]
-	fn address_change_makecontext() {
+	fn fixup_makecontext() {
 		extern "C" fn callback() {}
 
-		let context = makecontext(callback, &mut [], None).unwrap();
-
-		let mcontext: *const _ = context.uc_mcontext.fpregs;
-		let mcontext = unsafe {
-			mcontext.offset(1)
-		} as *const c_void;
-
-		let context: *const _ = &context;
-		let context = unsafe {
-			context.offset(1)
-		} as *const c_void;
-
-		assert_eq!(mcontext, context);
+		let mut context = makecontext(callback, &mut [], None).unwrap();
+		fixupcontext(&mut context);
+		assert_eq!(addr_of_end(&context), addr_of_end(context.uc_mcontext.fpregs));
 	}
 
 	#[test]
@@ -176,6 +158,13 @@ mod tests {
 			unreachable!();
 		}
 		assert!(DROP_COUNT.with(|drop_count| drop_count.get()).unwrap() == 0);
+	}
+
+	fn addr_of_end<T>(beginning: *const T) -> *const c_void {
+		let beginning: *const _ = beginning;
+		unsafe {
+			beginning.offset(1) as *const _
+		}
 	}
 
 	impl Drop for VolBool {
