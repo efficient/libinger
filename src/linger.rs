@@ -98,7 +98,7 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Result<
 pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, us: u64) -> Result<Linger<T, F>> {
 	let mut res = funs.result;
 	if let Some(first_time_here) = getcontext()? {
-		let mut call_stack = CallStack::handle().unwrap().lock()?;
+		let mut call_stack = CallStack::lock()?;
 		match funs.function {
 			LaunchResume::Launch(mut thunk) => {
 				let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
@@ -127,7 +127,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 					let _ = thunk;
 
 					if ! inuations.is_empty() {
-						let mut call_stack = CallStack::handle().unwrap().lock().unwrap();
+						let mut call_stack = CallStack::lock().unwrap();
 
 						let quantum = inuations.iter()
 							.map(|frame| frame.time_limit).min()
@@ -156,7 +156,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 		}
 	}
 
-	let mut call_stack = CallStack::handle().unwrap().lock()?;
+	let mut call_stack = CallStack::lock()?;
 	let index = EARLIEST.with(|earliest| earliest.take())
 		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
 	let mut tail = call_stack.split_off(index);
@@ -191,7 +191,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 }
 
 extern "C" fn preemptor() {
-	let mut call_stack = CallStack::handle().unwrap().lock().unwrap();
+	let mut call_stack = CallStack::lock().unwrap();
 	let index = call_stack.len() - 1;
 
 	let thunk;
@@ -224,25 +224,25 @@ extern "C" fn preemptor() {
 }
 
 extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
-	if let Ok(call_stack) = CallStack::handle() {
-		if let Ok(mut call_stack) = call_stack.preempt() {
-			if let Some(index) = EARLIEST.with(|earliest| earliest.get()) {
-				let frame = &mut call_stack[index];
-				if nsnow() < frame.time_out {
-					return;
-				}
-				frame.time_out = 0;
-				EARLIEST.with(|earliest| earliest.set(Some(index)));
-
-				let sigctxt = sigctxt.unwrap();
-				let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
-				swap(sigctxt, &mut *frame.pause_resume);
-				sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
-
-				// No more preemptions until resume() has finished bundling up the
-				// continuation, at which point they will be automatically reenabled
-				sigctxt.uc_sigmask.add(Signal::Alarm);
+	if let Ok(mut call_stack) = unsafe {
+		CallStack::preempt()
+	} {
+		if let Some(index) = EARLIEST.with(|earliest| earliest.get()) {
+			let frame = &mut call_stack[index];
+			if nsnow() < frame.time_out {
+				return;
 			}
+			frame.time_out = 0;
+			EARLIEST.with(|earliest| earliest.set(Some(index)));
+
+			let sigctxt = sigctxt.unwrap();
+			let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
+			swap(sigctxt, &mut *frame.pause_resume);
+			sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
+
+			// No more preemptions until resume() has finished bundling up the
+			// continuation, at which point they will be automatically reenabled
+			sigctxt.uc_sigmask.add(Signal::Alarm);
 		}
 	}
 }
