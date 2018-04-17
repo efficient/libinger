@@ -17,7 +17,13 @@ impl PreemptGuard {
 		sigprocmask(Operation::Block, &mask, Some(&mut masked))?;
 
 		Ok(Self {
-			blocking: ! masked.has(Signal::Alarm),
+			// In the case of all but the root thread, we mask the signal by interposing
+			// our own pthread_create().  However, if code uses a PreemptGuard from the
+			// main thread (e.g. by calling one of the handled A[CS]-unsafe library
+			// functions, asserting the signal would kill us if the client code has
+			// never launch()'d a timed task.  Detect this case and instead mask the
+			// signal indefinitely.
+			blocking: ! (masked.has(Signal::Alarm) || is_initial_thread()),
 		})
 	}
 
@@ -43,4 +49,16 @@ impl Drop for PreemptGuard {
 			Self::unblock().unwrap();
 		}
 	}
+}
+
+fn is_initial_thread() -> bool {
+	use std::sync::ONCE_INIT;
+	use std::sync::Once;
+
+	static INIT: Once = ONCE_INIT;
+	let mut res = false;
+
+	INIT.call_once(|| res = true);
+
+	res
 }
