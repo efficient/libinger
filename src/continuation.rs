@@ -5,6 +5,7 @@ use std::cell::RefMut;
 use std::io::Error;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ptr::null;
 use std::thread::AccessError;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
@@ -33,9 +34,10 @@ impl UntypedContinuation {
 
 pub struct CallStack<'a> {
 	handle: RefMut<'a, Vec<UntypedContinuation>>,
+	_anchor: *const (),
 	// This serves to protect the RefCell from concurrency violations. It's important that it be
 	// the structure's last field so it isn't released prematurely during destruction.
-	_guard: PreemptGuard,
+	_guard: Option<PreemptGuard>,
 }
 
 impl CallStack<'static> {
@@ -50,7 +52,8 @@ impl CallStack<'static> {
 		Ok(Self {
 			// Assert because we should never find ourselves lock()'ing during teardown.
 			handle: call_stack_handle().unwrap().borrow_mut(),
-			_guard: guard,
+			_anchor: null(),
+			_guard: Some(guard),
 		})
 	}
 
@@ -59,8 +62,12 @@ impl CallStack<'static> {
 	/// This function is only safe to call when preemption is impossible (e.g. while inside a
 	/// signal handler; misuse opens the underlying RefCell to concurrency violations.  Returns
 	/// an error if invoked during thread teardown.
-	pub unsafe fn preempt() -> Result<RefMut<'static, Vec<UntypedContinuation>>, AccessError> {
-		Ok(call_stack_handle()?.borrow_mut())
+	pub unsafe fn preempt() -> Result<Self, AccessError> {
+		Ok(Self {
+			handle: call_stack_handle()?.borrow_mut(),
+			_anchor: null(),
+			_guard: None,
+		})
 	}
 }
 
