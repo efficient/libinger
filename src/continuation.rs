@@ -31,13 +31,8 @@ impl UntypedContinuation {
 	}
 }
 
-pub struct CallStack<'a> {
-	// Automagically prevents Send'ing or Sync'hronizing between threads.
-	handle: RefMut<'a, Vec<UntypedContinuation>>,
-	// This serves to protect the RefCell from concurrency violations. It's important that it be
-	// the structure's last field so it isn't released prematurely during destruction.
-	_guard: PreemptGuard,
-}
+// The RefMut automagically prevents Send'ing or Sync'hronizing this thread-local instance.
+pub struct CallStack<'a> (Option<RefMut<'a, Vec<UntypedContinuation>>>);
 
 impl CallStack<'static> {
 	/// Returns a guard that holds preemption disabled throughout its lifetime.
@@ -45,14 +40,13 @@ impl CallStack<'static> {
 	/// Note that a preemption signal is asserted upon releasing the guard.  **As such, calling
 	/// this from the associated signal handler will cause the latter to be invoked endlessly!**
 	pub fn lock() -> Result<Self, Error> {
-		// Prevent preemption before we run any RefCell code!
-		let guard = PreemptGuard::block()?;
+		use std::mem::forget;
 
-		Ok(Self {
-			// Assert because we should never find ourselves lock()'ing during teardown.
-			handle: call_stack_handle().unwrap().borrow_mut(),
-			_guard: guard,
-		})
+		// Prevent preemption before we run any RefCell code!
+		forget(PreemptGuard::block()?);
+
+		// Assert because we should never find ourselves lock()'ing during teardown.
+		Ok(CallStack (Some(call_stack_handle().unwrap().borrow_mut())))
 	}
 
 	/// Similar to `lock()`, but merely assumes that preemption is already disabled.
@@ -69,13 +63,24 @@ impl<'a> Deref for CallStack<'a> {
 	type Target = Vec<UntypedContinuation>;
 
 	fn deref(&self) -> &Self::Target {
-		&*self.handle
+		self.0.as_ref().unwrap()
 	}
 }
 
 impl<'a> DerefMut for CallStack<'a> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut *self.handle
+		self.0.as_mut().unwrap()
+	}
+}
+
+impl<'a> Drop for CallStack<'a> {
+	fn drop(&mut self) {
+		let empty = self.0.as_ref().unwrap().is_empty();
+		self.0.take();
+
+		if ! empty {
+			PreemptGuard::unblock().unwrap();
+		}
 	}
 }
 
