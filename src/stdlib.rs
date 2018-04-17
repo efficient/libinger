@@ -173,6 +173,13 @@ mod funs {
 			&FUNS
 		}
 	}
+
+	#[allow(dead_code)]
+	fn check_funs() {
+		use compile_assert::assert_sync;
+
+		assert_sync(funs());
+	}
 }
 
 #[cfg(test)]

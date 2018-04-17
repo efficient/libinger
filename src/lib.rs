@@ -5,6 +5,7 @@ extern crate libc;
 #[cfg(test)]
 extern crate test;
 
+mod compile_assert;
 mod continuation;
 mod dlfcn;
 mod guard;
