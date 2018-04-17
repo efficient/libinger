@@ -292,8 +292,8 @@ fn nsnow() -> u64 {
 
 #[cfg(test)]
 mod tests {
-	use linger::*;
 	use signal::tests_sigalrm_lock;
+	use super::*;
 	use test::Bencher;
 
 	#[test]

@@ -184,11 +184,11 @@ pub fn pthread_sigmask(how: Operation, new: &Sigset, old: Option<&mut Sigset>) -
 
 #[cfg(test)]
 mod tests {
-	use signal::*;
 	use pthread::pthread_kill;
 	use pthread::pthread_self;
 	use std::ops::Deref;
 	use std::sync::MutexGuard;
+	use super::*;
 
 	#[test]
 	fn sigaction_usr1() {

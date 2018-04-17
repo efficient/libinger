@@ -32,7 +32,7 @@ pub fn setitimer(which: Timer, new: &itimerval, old: Option<&mut itimerval>) -> 
 
 #[cfg(test)]
 mod tests {
-	use time::*;
+	use super::*;
 
 	#[test(skip)]
 	fn setitimer_oneshot() {

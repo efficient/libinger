@@ -132,7 +132,7 @@ impl<Q, R, S, T, U> Symbol for unsafe extern "C" fn(Q, R, S, T) -> U {
 
 #[cfg(test)]
 mod tests {
-	use dlfcn::*;
+	use super::*;
 
 	#[test]
 	fn dlsym_ctype() {

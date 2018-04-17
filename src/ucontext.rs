@@ -85,7 +85,7 @@ unsafe impl Zeroable for ucontext_t {}
 mod tests {
 	use std::cell::Cell;
 	use std::os::raw::c_void;
-	use ucontext::*;
+	use super::*;
 
 	thread_local! {
 		static DROP_COUNT: Cell<Option<i32>> = Cell::new(None);

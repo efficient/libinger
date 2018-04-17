@@ -188,7 +188,7 @@ mod tests {
 	use libc::c_void;
 	use libc::size_t;
 	use std::cell::Cell;
-	use stdlib::funs::shallow_call;
+	use super::funs::shallow_call;
 
 	thread_local! {
 		static ALLOCATIONS: Cell<isize> = Cell::new(0);
