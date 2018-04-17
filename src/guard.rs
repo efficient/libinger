@@ -22,9 +22,18 @@ impl PreemptGuard {
 	}
 
 	pub fn unblock() -> Result<()> {
+		use pthread::pthread_kill;
+		use pthread::pthread_self;
+		use std::thread::panicking;
+
 		let mut mask = Sigset::empty();
 		mask.add(Signal::Alarm);
-		sigprocmask(Operation::Unblock, &mask, None)
+		sigprocmask(Operation::Unblock, &mask, None)?;
+		if ! panicking() {
+			pthread_kill(pthread_self(), Signal::Alarm)?;
+		}
+
+		Ok(())
 	}
 }
 
