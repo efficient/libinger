@@ -61,15 +61,30 @@ pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut u
 	Ok(context)
 }
 
+/// Note that this function assumes that both contexts' `fpregs` pointers are correct!
+///
+/// If this is not the case (e.g. because either or both have been memmove()'d since creation), be
+/// sure to first call `fixupcontext()` on the affected one(s)!
 pub fn swap(left: &mut ucontext_t, right: &mut ucontext_t) {
 	use std::mem::swap;
 
+	let l_fpregs = unsafe {
+		left.uc_mcontext.fpregs.as_mut()
+	};
+	let r_fpregs = unsafe {
+		right.uc_mcontext.fpregs.as_mut()
+	};
+
+	assert!(l_fpregs.is_none() == r_fpregs.is_none());
+	if let (Some(l_fpregs), Some(r_fpregs)) = (l_fpregs, r_fpregs) {
+		swap(l_fpregs, r_fpregs);
+		swap(&mut left.uc_mcontext.fpregs, &mut right.uc_mcontext.fpregs);
+	}
+
 	swap(left, right);
-	fixupcontext(left);
-	fixupcontext(right);
 }
 
-fn fixupcontext(context: &mut ucontext_t) {
+pub fn fixupcontext(context: &mut ucontext_t) {
 	let ptr: *mut _ = context;
 	let ptr = unsafe {
 		ptr.offset(1)

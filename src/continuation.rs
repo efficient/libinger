@@ -19,13 +19,18 @@ pub struct UntypedContinuation {
 
 impl UntypedContinuation {
 	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64, context: ucontext_t) -> Self {
+		use ucontext::fixupcontext;
+
+		let mut context = Box::new(context);
+		fixupcontext(&mut context);
+
 		Self {
 			thunk: Box::new(thunk),
 			time_limit: timeout,
 			time_out: 0,
 			// We must box the context so its address won't change if a collection
 			// relocates the UntypedContinuation that contains it!
-			pause_resume: Box::new(context),
+			pause_resume: context,
 			stack: vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
 		}
 	}
