@@ -118,8 +118,11 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 				setcontext(&mut call_gate)?;
 			},
 			LaunchResume::Resume((mut cont, mut inuations)) => {
+				use ucontext::fixupcontext;
+
 				let mut checkpoint = *cont.pause_resume;
 				*cont.pause_resume = first_time_here;
+				fixupcontext(&mut cont.pause_resume);
 				checkpoint.uc_link = &mut *cont.pause_resume;
 
 				let thunk = cont.thunk;
