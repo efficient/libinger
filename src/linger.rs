@@ -201,7 +201,7 @@ extern "C" fn preemptor() {
 	let time_out;
 	{
 		let frame = call_stack.last_mut().unwrap();
-		let ptr: *mut _ = &mut frame.thunk;
+		let ptr: *mut _ = &mut *frame.thunk;
 		thunk = unsafe {
 			ptr.as_mut()
 		}.unwrap();
