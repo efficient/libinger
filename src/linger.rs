@@ -45,7 +45,9 @@ const TIME_QUANTUM_DIVISOR: u64 = 3;
 static QUANTUM: AtomicUsize = ATOMIC_USIZE_INIT;
 
 thread_local! {
-	// None means the top of the call_stack.
+	// In the context of preemption enablement, None means it is disabled: any preemptions that
+	// occur will simply be ignored.  In the context of continuation packaging, None means to
+	// save only the frame on top of the call stack.
 	static EARLIEST: Cell<Option<usize>> = Cell::new(None);
 }
 
@@ -194,6 +196,17 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 }
 
 extern "C" fn preemptor() {
+	// If we got preempted before taking this lock, we would never be able to resume() this
+	// invocation's continuation because we wouldn't yet have captured the address of the
+	// original thunk closure.  However, one cannot actually construct such a scenario:
+	// In the case where we are currently launch()'ing the only in-flight preemptible function,
+	// this thread's EARLIEST is set to None, so it will ignore any SIGALRM that occurs here.
+	// In the case where we are launch()'ing or resume()'ing one preemptible function from
+	// within another, we *can* be preempted here; however, EARLIEST will not yet have been set
+	// to reflect this invocation, so our progress will be recorded within a parent call_stack
+	// frame's continuation.  If said continuation is later resumed, we'll continue from here;
+	// otherwise, we'll be cleaned up along with it, and resume()'ing will no longer be possible
+	// in any case.
 	let mut call_stack = CallStack::lock().unwrap();
 	let index = call_stack.len() - 1;
 
