@@ -81,7 +81,11 @@ pub fn swap(left: &mut ucontext_t, right: &mut ucontext_t) {
 		swap(&mut left.uc_mcontext.fpregs, &mut right.uc_mcontext.fpregs);
 	}
 
-	swap(left, right);
+	swap(&mut left.uc_flags, &mut right.uc_flags);
+	swap(&mut left.uc_link, &mut right.uc_link);
+	swap(&mut left.uc_stack, &mut right.uc_stack);
+	swap(&mut left.uc_mcontext, &mut right.uc_mcontext);
+	swap(&mut left.uc_sigmask, &mut right.uc_sigmask);
 }
 
 pub fn fixupcontext(context: &mut ucontext_t) {
