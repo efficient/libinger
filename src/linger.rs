@@ -106,7 +106,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 				let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
 				res = Rc::downgrade(&ult);
 				let thunk = move || {
-					let res = catch_unwind(AssertUnwindSafe(&mut thunk));
+					let res = catch_unwind(AssertUnwindSafe (&mut thunk));
 					EARLIEST.with(|earliest| earliest.set(None));
 					ult.set(res);
 				};
