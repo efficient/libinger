@@ -1,7 +1,7 @@
-#![cfg_attr(test, feature(test))]
+#![cfg_attr(bench, feature(test))]
 
 extern crate libc;
-#[cfg(test)]
+#[cfg(bench)]
 extern crate test;
 
 mod compile_assert;

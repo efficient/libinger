@@ -310,6 +310,7 @@ fn nsnow() -> u64 {
 mod tests {
 	use signal::tests_sigalrm_lock;
 	use super::*;
+	#[cfg(bench)]
 	use test::Bencher;
 
 	#[test]
@@ -441,16 +442,19 @@ mod tests {
 	}
 
 	#[bench]
+	#[cfg(bench)]
 	fn timeout_10(lo: &mut Bencher) {
 		lo.iter(|| timeout(10));
 	}
 
 	#[bench]
+	#[cfg(bench)]
 	fn timeout_100(lo: &mut Bencher) {
 		lo.iter(|| timeout(100));
 	}
 
 	#[bench]
+	#[cfg(bench)]
 	fn timeout_1000(lo: &mut Bencher) {
 		lo.iter(|| timeout(1_000));
 	}
