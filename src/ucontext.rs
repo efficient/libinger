@@ -89,10 +89,12 @@ pub fn swap(left: &mut ucontext_t, right: &mut ucontext_t) {
 }
 
 pub fn fixupcontext(context: &mut ucontext_t) {
+	use libc::_libc_fpstate;
+
 	let ptr: *mut _ = context;
 	let ptr = unsafe {
 		ptr.offset(1)
-	} as *mut _;
+	} as *mut _libc_fpstate;
 	context.uc_mcontext.fpregs = unsafe {
 		ptr.offset(-1)
 	};
