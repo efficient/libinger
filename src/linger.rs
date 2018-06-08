@@ -101,8 +101,12 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Result<
 
 pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, us: u64) -> Result<Linger<T, F>> {
 	let mut res = funs.result;
+	let mut call_stack = CallStack::lock()?;
+
+	// The call_stack must be locked before this line; otherwise, SIGALRM will be unblocked in
+	// the context's mask and preemption will be possible during the second trip to this line
+	// via setcontext()!
 	if let Some(first_time_here) = getcontext()? {
-		let mut call_stack = CallStack::lock()?;
 		match funs.function {
 			LaunchResume::Launch(mut thunk) => {
 				let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
@@ -163,7 +167,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 		}
 	}
 
-	let mut call_stack = CallStack::lock()?;
+	call_stack = CallStack::lock()?;
 	let index = EARLIEST.with(|earliest| earliest.take())
 		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
 	let mut tail = call_stack.split_off(index);
