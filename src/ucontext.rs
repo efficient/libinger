@@ -6,7 +6,8 @@ use zeroable::Zeroable;
 
 pub enum Void {}
 
-pub const REG_CSGSFS: usize = 18;
+pub const REG_RIP: usize = 16;
+pub const REG_RSP: usize = 15;
 
 // This must be inlined because it stack-allocates a volatile bool that it expects to be present
 // even after `getcontext()` returns for the second (or subsequent) time!
