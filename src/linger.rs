@@ -2,7 +2,6 @@ use continuation::CallStack;
 use continuation::UntypedContinuation;
 use libc::SA_RESTART;
 use libc::SA_SIGINFO;
-use libc::greg_t;
 use libc::siginfo_t;
 use libc::suseconds_t;
 use libc::time_t;
@@ -35,8 +34,7 @@ use time::Timer;
 use time::itimerval;
 use time::setitimer;
 use time::timeval;
-use ucontext::REG_RIP;
-use ucontext::REG_RSP;
+use ucontext::REG_CSGSFS;
 use ucontext::getcontext;
 use ucontext::makecontext;
 use ucontext::setcontext;
@@ -260,34 +258,14 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut uco
 			EARLIEST.with(|earliest| earliest.set(Some(index)));
 
 			let sigctxt = sigctxt.unwrap();
-			let gregs = &mut sigctxt.uc_mcontext.gregs;
-			gregs[REG_RSP] -= 8;
-
-			let stack = unsafe {
-				(gregs[REG_RSP] as *mut greg_t).as_mut()
-			}.unwrap();
-			*stack = gregs[REG_RIP];
-			gregs[REG_RIP] = trampoline as _;
+			let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
+			swap(sigctxt, &mut *frame.pause_resume);
+			sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
 
 			// No more preemptions until resume() has finished bundling up the
 			// continuation, at which point they will be automatically reenabled
 			sigctxt.uc_sigmask.add(Signal::Alarm);
 		}
-	}
-}
-
-extern "C" fn trampoline() {
-	use ucontext::fixupcontext;
-
-	if let Some(mut saving) = getcontext().unwrap() {
-		fixupcontext(&mut saving);
-		let pause = EARLIEST.with(|earliest| earliest.get()).unwrap();
-		let mut stack = unsafe {
-			CallStack::preempt()
-		}.unwrap();
-		swap(&mut saving, &mut stack[pause].pause_resume);
-		drop(stack);
-		setcontext(&mut saving).unwrap();
 	}
 }
 
