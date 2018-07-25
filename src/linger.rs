@@ -172,6 +172,8 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
 	let mut tail = call_stack.split_off(index);
 	let head = call_stack.pop().unwrap();
+	// Handle must be destroyed before call_stack because concurrency is enabled at that point!
+	drop(index);
 
 	let quantum = call_stack.iter()
 		.map(|frame| frame.time_limit).min()
