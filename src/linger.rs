@@ -2,6 +2,7 @@ use continuation::CallStack;
 use continuation::UntypedContinuation;
 use libc::SA_RESTART;
 use libc::SA_SIGINFO;
+use libc::__errno_location;
 use libc::siginfo_t;
 use libc::suseconds_t;
 use libc::time_t;
@@ -247,6 +248,11 @@ extern "C" fn preemptor() {
 }
 
 extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
+	let errno = unsafe {
+		__errno_location().as_mut()
+	}.unwrap();
+	let errnot = *errno;
+
 	if let Ok(mut call_stack) = unsafe {
 		CallStack::preempt()
 	} {
@@ -268,6 +274,8 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut uco
 			sigctxt.uc_sigmask.add(Signal::Alarm);
 		}
 	}
+
+	*errno = errnot;
 }
 
 fn maybe_update_quantum(proposed: u64) -> bool {
