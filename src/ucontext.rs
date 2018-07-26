@@ -226,7 +226,7 @@ mod tests {
 	fn fixup_makecontext() {
 		extern "C" fn callback() {}
 
-		let mut context = makecontext(callback, &mut [], None).unwrap();
+		let mut context = makecontext(callback, &mut [0; 1_024], None).unwrap();
 		fixupcontext(&mut context);
 		assert_eq!(addr_of_end(&context), addr_of_end(context.uc_mcontext.fpregs));
 	}
