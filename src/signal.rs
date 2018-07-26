@@ -9,6 +9,7 @@ use libc::SIGSYS;
 use libc::SIGTERM;
 use libc::SIGUSR1;
 use libc::SIGUSR2;
+use libc::SIGVTALRM;
 use libc::c_int;
 use libc::ucontext_t;
 use std::io::Error;
@@ -38,6 +39,7 @@ pub enum Signal {
 	Term = SIGTERM as isize,
 	User1 = SIGUSR1 as isize,
 	User2 = SIGUSR2 as isize,
+	VirtualAlarm = SIGVTALRM as isize,
 }
 
 impl PartialEq for Signal {

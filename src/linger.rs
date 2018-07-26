@@ -38,6 +38,7 @@ use ucontext::REG_CSGSFS;
 use ucontext::getcontext;
 use ucontext::makecontext;
 use ucontext::setcontext;
+use ucontext::sigsetcontext;
 use ucontext::swap;
 
 const TIME_QUANTUM_DIVISOR: u64 = 3;
@@ -152,7 +153,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 						search_update_earliest(&call_stack);
 					}
 
-					setcontext(&mut checkpoint).unwrap();
+					sigsetcontext(&mut checkpoint).unwrap();
 				});
 				cont.thunk = thunk;
 				cont.time_limit = us;

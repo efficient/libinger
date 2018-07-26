@@ -61,6 +61,63 @@ pub fn makecontext(thunk: extern "C" fn(), stack: &mut [u8], link: Option<&mut u
 	Ok(context)
 }
 
+pub fn sigsetcontext(context: &ucontext_t) -> Result<Void> {
+	use libc::siginfo_t;
+	use pthread::pthread_kill;
+	use pthread::pthread_self;
+	use signal::Action;
+	use signal::Set;
+	use signal::Sigaction;
+	use signal::Signal;
+	use signal::Sigset;
+	use signal::sigaction;
+	use std::cell::Cell;
+	use std::cell::RefCell;
+
+	extern "C" fn handler(_: Signal, _: Option<&siginfo_t>, context: Option<&mut ucontext_t>) {
+		HANDLER.with(|handler|
+			sigaction(Signal::VirtualAlarm, &*handler.borrow(), None)
+		).unwrap();
+
+		let context = context.unwrap();
+		let mut protext = CONTEXT.with(|context| context.take()).unwrap();
+		fixupcontext(&mut protext);
+
+		let segs = protext.uc_mcontext.gregs[REG_CSGSFS];
+		let fpregs = unsafe {
+			context.uc_mcontext.fpregs.as_mut()
+		}.unwrap();
+
+		context.uc_flags = protext.uc_flags;
+		context.uc_link = protext.uc_link;
+		context.uc_stack = protext.uc_stack;
+		context.uc_mcontext = protext.uc_mcontext;
+		context.uc_mcontext.gregs[REG_CSGSFS] = segs;
+		context.uc_mcontext.fpregs = fpregs;
+		*fpregs = *unsafe {
+			protext.uc_mcontext.fpregs.as_ref()
+		}.unwrap();
+		context.uc_sigmask = protext.uc_sigmask;
+	}
+
+	thread_local! {
+		static CONTEXT: Cell<Option<ucontext_t>> = Cell::new(None);
+		static HANDLER: RefCell<Sigaction> =
+			RefCell::new(Sigaction::new(handler, Sigset::empty(), 0));
+	}
+
+	CONTEXT.with(|protext| protext.set(Some(context.clone())));
+
+	let handle = Sigaction::new(handler, Sigset::empty(), 0);
+	HANDLER.with(|handlee|
+		sigaction(Signal::VirtualAlarm, &handle, Some(&mut handlee.borrow_mut()))
+	)?;
+
+	pthread_kill(pthread_self(), Signal::VirtualAlarm)?;
+
+	Err(Error::last_os_error())
+}
+
 /// Note that this function assumes that both contexts' `fpregs` pointers are correct!
 ///
 /// If this is not the case (e.g. because either or both have been memmove()'d since creation), be
@@ -81,9 +138,10 @@ pub fn swap(left: &mut ucontext_t, right: &mut ucontext_t) {
 		swap(&mut left.uc_mcontext.fpregs, &mut right.uc_mcontext.fpregs);
 	}
 
+	// We intentionally skip swapping the uc_stack s because signal handlers receive a special
+	// "default" stack that we don't want to save.
 	swap(&mut left.uc_flags, &mut right.uc_flags);
 	swap(&mut left.uc_link, &mut right.uc_link);
-	swap(&mut left.uc_stack, &mut right.uc_stack);
 	swap(&mut left.uc_mcontext, &mut right.uc_mcontext);
 	swap(&mut left.uc_sigmask, &mut right.uc_sigmask);
 }
