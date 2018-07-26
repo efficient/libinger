@@ -262,7 +262,6 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut uco
 				return;
 			}
 			frame.time_out = 0;
-			EARLIEST.with(|earliest| earliest.set(Some(index)));
 
 			let sigctxt = sigctxt.unwrap();
 			let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
