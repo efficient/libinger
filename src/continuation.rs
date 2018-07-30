@@ -1,6 +1,5 @@
 use guard::PreemptGuard;
 use libc::ucontext_t;
-use std::cell::RefCell;
 use std::cell::RefMut;
 use std::io::Error;
 use std::ops::Deref;
@@ -51,7 +50,7 @@ impl CallStack<'static> {
 		forget(PreemptGuard::block()?);
 
 		// Assert because we should never find ourselves lock()'ing during teardown.
-		Ok(CallStack (Some(call_stack_handle().unwrap().borrow_mut())))
+		Ok(CallStack (Some(call_stack_handle().unwrap())))
 	}
 
 	/// Similar to `lock()`, but merely assumes that preemption is already disabled.
@@ -60,7 +59,7 @@ impl CallStack<'static> {
 	/// signal handler; misuse opens the underlying RefCell to concurrency violations.  Returns
 	/// an error if invoked during thread teardown.
 	pub unsafe fn preempt() -> Result<RefMut<'static, Vec<UntypedContinuation>>, AccessError> {
-		Ok(call_stack_handle()?.borrow_mut())
+		Ok(call_stack_handle()?)
 	}
 }
 
@@ -89,14 +88,16 @@ impl<'a> Drop for CallStack<'a> {
 	}
 }
 
-fn call_stack_handle() -> Result<&'static RefCell<Vec<UntypedContinuation>>, AccessError> {
+fn call_stack_handle() -> Result<RefMut<'static, Vec<UntypedContinuation>>, AccessError> {
+	use std::cell::RefCell;
 	use std::mem::transmute;
 
 	thread_local! {
 		static CALL_STACK: RefCell<Vec<UntypedContinuation>> = RefCell::new(vec![]);
 	}
 
-	CALL_STACK.try_with(|call_stack| unsafe {
+	let call_stack: &RefCell<_> = CALL_STACK.try_with(|call_stack| unsafe {
 		transmute(call_stack)
-	})
+	})?;
+	Ok(call_stack.borrow_mut())
 }

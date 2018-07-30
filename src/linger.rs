@@ -167,7 +167,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 		}
 	}
 
-	call_stack = CallStack::lock()?;
+	let mut call_stack = CallStack::lock()?;
 	let index = EARLIEST.with(|earliest| earliest.take())
 		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
 	let mut tail = call_stack.split_off(index);
