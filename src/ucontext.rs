@@ -7,19 +7,22 @@ pub enum Void {}
 
 pub const REG_CSGSFS: usize = 18;
 
+// NB: This code assumes that further function call(s) will clobber the stack before the returned
+// checkpoint is returned.
 pub fn getcontext() -> Result<Option<ucontext_t>> {
 	use libc::getcontext;
 	use std::mem::forget;
 
 	let mut context = ucontext_t::new();
+	fixupcontext(&mut context);
+	let tombstone = context.uc_mcontext.fpregs;
 	if unsafe {
 		getcontext(&mut context)
 	} == 0 {
-		// We co-opt this field to indicate whether we're entering this function for the
-		// first or a subsequent time.  This still works for contexts with their own stacks,
-		// in which case ss_size is already initialized to something nonzero *after* the
-		// first call to getcontext().
-		Ok(if context.uc_stack.ss_size == 0 {
+		// On subsequent trips through this code, the stack will have been overwritten and
+		// the context will no longer be present.  We use fixupcontext() to record a
+		// tombstone *before* the checkpoint so that we can detect this situation.
+		Ok(if context.uc_mcontext.fpregs == tombstone {
 			context.uc_stack.ss_size = 1;
 			Some(context)
 		} else {
