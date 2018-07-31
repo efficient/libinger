@@ -11,22 +11,21 @@ pub const REG_CSGSFS: usize = 18;
 // checkpoint is returned.
 pub fn getcontext() -> Result<Option<ucontext_t>> {
 	use libc::getcontext;
-	use std::mem::forget;
+	use std::mem::ManuallyDrop;
 
-	let mut context = ucontext_t::new();
+	let mut context = ManuallyDrop::new(ucontext_t::new());
 	fixupcontext(&mut context);
 	let tombstone = context.uc_mcontext.fpregs;
 	if unsafe {
-		getcontext(&mut context)
+		getcontext(&mut *context)
 	} == 0 {
 		// On subsequent trips through this code, the stack will have been overwritten and
 		// the context will no longer be present.  We use fixupcontext() to record a
 		// tombstone *before* the checkpoint so that we can detect this situation.
 		Ok(if context.uc_mcontext.fpregs == tombstone {
 			context.uc_stack.ss_size = 1;
-			Some(context)
+			Some(ManuallyDrop::into_inner(context))
 		} else {
-			forget(context);
 			None
 		})
 	} else {
