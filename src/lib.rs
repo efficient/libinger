@@ -15,6 +15,7 @@ mod signal;
 mod stdlib;
 mod time;
 mod ucontext;
+#[cfg(test)]
 mod volatile;
 mod zeroable;
 

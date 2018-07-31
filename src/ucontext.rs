@@ -1,31 +1,29 @@
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
-use volatile::VolBool;
 use zeroable::Zeroable;
 
 pub enum Void {}
 
 pub const REG_CSGSFS: usize = 18;
 
-// This must be inlined because it stack-allocates a volatile bool that it expects to be present
-// even after `getcontext()` returns for the second (or subsequent) time!
-#[inline(always)]
 pub fn getcontext() -> Result<Option<ucontext_t>> {
 	use libc::getcontext;
 	use std::mem::forget;
 
 	let mut context = ucontext_t::new();
-	let mut creating = VolBool::new(true);
 	if unsafe {
 		getcontext(&mut context)
 	} == 0 {
-		Ok(if creating.get() {
-			creating.set(false);
+		// We co-opt this field to indicate whether we're entering this function for the
+		// first or a subsequent time.  This still works for contexts with their own stacks,
+		// in which case ss_size is already initialized to something nonzero *after* the
+		// first call to getcontext().
+		Ok(if context.uc_stack.ss_size == 0 {
+			context.uc_stack.ss_size = 1;
 			Some(context)
 		} else {
 			forget(context);
-			forget(creating);
 			None
 		})
 	} else {
@@ -165,6 +163,7 @@ mod tests {
 	use std::cell::Cell;
 	use std::os::raw::c_void;
 	use super::*;
+	use volatile::VolBool;
 
 	thread_local! {
 		static DROP_COUNT: Cell<Option<i32>> = Cell::new(None);
