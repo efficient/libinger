@@ -7,6 +7,10 @@ pub enum Void {}
 
 pub const REG_CSGSFS: usize = 18;
 
+// This function can return more than once, so its stack---including its return address---may be
+// clobbered by the intervening code.  As such, we cannot perform an actual function return here;
+// instead, we force its inlining into the calling stack frame.
+#[inline(always)]
 // NB: This code assumes that further function call(s) will clobber the stack before the returned
 // checkpoint is returned.
 pub fn getcontext() -> Result<Option<ucontext_t>> {
