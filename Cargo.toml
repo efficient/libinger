@@ -1,0 +1,6 @@
+[package]
+name = "ucontext"
+version = "0.0.0"
+
+[dependencies]
+libc = "*"
