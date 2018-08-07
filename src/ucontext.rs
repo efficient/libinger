@@ -5,6 +5,7 @@ use std::io::Result;
 use std::rc::Rc;
 use uninit::Uninit;
 
+/// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
 	context: ucontext_t,
 	guard: Rc<()>,
@@ -20,6 +21,9 @@ impl Context {
 	}
 }
 
+/// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
+/// `b()` is executed before this function returns.  However, `b()` may also perform such a
+/// `setcontext()`, in which case it is restarted from the beginning, preserving in-memory changes.
 pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> {
 	use libc::getcontext;
 	use volatile::VolBool;
@@ -27,7 +31,7 @@ pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> 
 	let mut context = Context::new();
 
 	// Storing this flag on the stack is not unsound because guard enforces the invariant that
-	// this stack frame outlives any resumable context.  Storing it on the stack is not a leaky
+	// this stack frame outlives any resumable context.  Storing it on the stack is not leaky
 	// because client code that never resumes the context was already responsible for cleaning
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
@@ -49,6 +53,8 @@ pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> 
 	Ok(())
 }
 
+/// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
+/// `context`'s stack frame has expired or `Some` to indicate a platform error.
 pub fn setcontext(mut context: Context) -> Option<Error> {
 	use libc::setcontext;
 
