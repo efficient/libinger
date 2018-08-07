@@ -8,6 +8,7 @@ fn main() {
 	getcontext_succeedatnothing();
 }
 
+#[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn getcontext_donothing() {
 	use ucontext::getcontext;
@@ -15,8 +16,10 @@ fn getcontext_donothing() {
 	let mut reached = false;
 	getcontext(|_| reached = true, || unreachable!()).unwrap();
 	assert!(reached);
+	panic!("done");
 }
 
+#[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn getcontext_setcontext() {
 	use ucontext::getcontext;
@@ -31,8 +34,10 @@ fn getcontext_setcontext() {
 		|| reached = true,
 	).unwrap();
 	assert!(reached);
+	panic!("done");
 }
 
+#[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn getcontext_succeedatnothing() {
 	use ucontext::getcontext;
@@ -41,4 +46,5 @@ fn getcontext_succeedatnothing() {
 	let mut invalid = None;
 	getcontext(|context| invalid = Some(context), || unreachable!()).unwrap();
 	assert!(setcontext(invalid.unwrap()).is_none());
+	panic!("done");
 }
