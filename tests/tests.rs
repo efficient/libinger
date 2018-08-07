@@ -1,6 +1,13 @@
+#![cfg_attr(not(test), allow(dead_code))]
+
 extern crate ucontext;
 
-#[test]
+fn main() {
+	getcontext_donothing();
+	getcontext_setcontext();
+}
+
+#[cfg_attr(test, test)]
 fn getcontext_donothing() {
 	use ucontext::getcontext;
 
@@ -9,7 +16,7 @@ fn getcontext_donothing() {
 	assert!(reached);
 }
 
-#[test]
+#[cfg_attr(test, test)]
 fn getcontext_setcontext() {
 	use ucontext::getcontext;
 	use ucontext::setcontext;

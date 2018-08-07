@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+
+trap "rm -f src/main.rs target/debug/ucontext" EXIT
+ln -s ../tests/tests.rs src/main.rs
+cargo rustc --bins -- -Zsanitizer="$1"
+target/debug/ucontext
