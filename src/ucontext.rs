@@ -23,7 +23,7 @@ impl Context {
 
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
 /// `b()` is executed before this function returns.
-pub fn getcontext<A: FnOnce(Context), B: FnOnce()>(a: A, b: B) -> Result<()> {
+pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> Result<T> {
 	use libc::getcontext;
 	use volatile::VolBool;
 
@@ -41,15 +41,16 @@ pub fn getcontext<A: FnOnce(Context), B: FnOnce()>(a: A, b: B) -> Result<()> {
 		Err(Error::last_os_error())?;
 	}
 
+	let res;
 	if unused.load() {
 		unused.store(false);
-		a(context);
+		res = a(context);
 	} else {
-		b();
+		res = b();
 	}
 
 	drop(guard);
-	Ok(())
+	Ok(res)
 }
 
 /// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
