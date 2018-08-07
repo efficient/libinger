@@ -6,6 +6,7 @@ fn main() {
 	getcontext_donothing();
 	getcontext_setcontext();
 	getcontext_succeedatnothing();
+	getcontext_nested();
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -45,5 +46,32 @@ fn getcontext_succeedatnothing() {
 
 	let invalid = getcontext(|context| context, || unreachable!()).unwrap();
 	assert!(setcontext(invalid).is_none());
+	panic!("done");
+}
+
+#[cfg_attr(test, should_panic(expected = "done"))]
+#[cfg_attr(test, test)]
+fn getcontext_nested() {
+	use std::cell::Cell;
+	use ucontext::getcontext;
+	use ucontext::setcontext;
+
+	let mut reached = true;
+	let context = Cell::new(None);
+	getcontext(
+		|outer| getcontext(
+			|inner| {
+				context.set(Some(inner));
+				setcontext(outer);
+				unreachable!();
+			},
+			|| reached = true,
+		).unwrap(),
+		|| {
+			setcontext(context.take().unwrap());
+			unreachable!();
+		},
+	).unwrap();
+	assert!(reached);
 	panic!("done");
 }
