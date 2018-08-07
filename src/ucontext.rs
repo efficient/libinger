@@ -21,7 +21,7 @@ impl Context {
 	}
 }
 
-pub fn getcontext<A: FnOnce(Context), B: FnOnce()>(a: A, b: B) -> Result<()> {
+pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> {
 	use libc::getcontext;
 
 	let mut context = Context::new();
