@@ -5,6 +5,7 @@ extern crate ucontext;
 fn main() {
 	getcontext_donothing();
 	getcontext_setcontext();
+	getcontext_succeedatnothing();
 }
 
 #[cfg_attr(test, test)]
@@ -30,4 +31,14 @@ fn getcontext_setcontext() {
 		|| reached = true,
 	).unwrap();
 	assert!(reached);
+}
+
+#[cfg_attr(test, test)]
+fn getcontext_succeedatnothing() {
+	use ucontext::getcontext;
+	use ucontext::setcontext;
+
+	let mut invalid = None;
+	getcontext(|context| invalid = Some(context), || unreachable!()).unwrap();
+	assert!(setcontext(invalid.unwrap()).is_none());
 }
