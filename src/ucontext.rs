@@ -55,7 +55,7 @@ pub fn setcontext(context: Context) -> Option<Error> {
 	if guarded == 0 {
 		None?;
 	}
-	debug_assert!(guarded == 1);
+	debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
 
 	drop(context.guard);
 	unsafe {
