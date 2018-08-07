@@ -22,9 +22,8 @@ impl Context {
 }
 
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
-/// `b()` is executed before this function returns.  However, `b()` may also perform such a
-/// `setcontext()`, in which case it is restarted from the beginning, preserving in-memory changes.
-pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> {
+/// `b()` is executed before this function returns.
+pub fn getcontext<A: FnOnce(Context), B: FnOnce()>(a: A, b: B) -> Result<()> {
 	use libc::getcontext;
 	use volatile::VolBool;
 
