@@ -1,3 +1,4 @@
+use invar::MoveInvariant;
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
@@ -48,7 +49,7 @@ pub fn getcontext<A: FnOnce(Context), B: FnMut()>(a: A, mut b: B) -> Result<()> 
 	Ok(())
 }
 
-pub fn setcontext(context: Context) -> Option<Error> {
+pub fn setcontext(mut context: Context) -> Option<Error> {
 	use libc::setcontext;
 
 	let guarded = Rc::weak_count(&context.guard);
@@ -56,8 +57,9 @@ pub fn setcontext(context: Context) -> Option<Error> {
 		None?;
 	}
 	debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
-
 	drop(context.guard);
+
+	context.context.after_move();
 	unsafe {
 		setcontext(&context.context);
 	}

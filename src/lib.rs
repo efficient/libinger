@@ -1,5 +1,7 @@
 extern crate libc;
 
+mod invar;
+mod platform;
 #[doc(hidden)]
 mod tests;
 mod ucontext;
