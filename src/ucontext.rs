@@ -57,6 +57,23 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	Ok(res)
 }
 
+pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
+	use libc::makecontext;
+
+	let mut context = getcontext(|context| context, || unreachable!())?;
+	context.guard.take();
+	context.context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
+	context.context.uc_stack.ss_size = stack.len();
+	if let Some(successor) = successor {
+		context.context.uc_link = &mut successor.context;
+	}
+
+	unsafe {
+		makecontext(&mut context.context, function, 0);
+	}
+	Ok(context)
+}
+
 /// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
 /// `context`'s stack frame has expired or `Some` to indicate a platform error.
 pub fn setcontext(mut context: Context) -> Option<Error> {
