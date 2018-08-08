@@ -8,16 +8,20 @@ use uninit::Uninit;
 /// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
 	context: ucontext_t,
-	guard: Rc<()>,
+	guard: Option<Rc<()>>,
 }
 
 impl Context {
 	fn new() -> Self {
 		Self {
 			context: ucontext_t::uninit(),
-			guard: Rc::new(()),
+			guard: None,
 		}
 
+	}
+
+	fn guard(&mut self) -> &Rc<()> {
+		self.guard.get_or_insert_with(|| Rc::new(()))
 	}
 }
 
@@ -34,7 +38,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// because client code that never resumes the context was already responsible for cleaning
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
-	let guard = Rc::downgrade(&context.guard);
+	let guard = Rc::downgrade(context.guard());
 	if unsafe {
 		getcontext(&mut context.context)
 	} != 0 {
@@ -58,12 +62,13 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 pub fn setcontext(mut context: Context) -> Option<Error> {
 	use libc::setcontext;
 
-	let guarded = Rc::weak_count(&context.guard);
-	if guarded == 0 {
-		None?;
+	if let Some(guard) = context.guard.take() {
+		let guarded = Rc::weak_count(&guard);
+		if guarded == 0 {
+			None?;
+		}
+		debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
 	}
-	debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
-	drop(context.guard);
 
 	context.context.after_move();
 	unsafe {
