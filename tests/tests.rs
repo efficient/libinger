@@ -43,8 +43,7 @@ fn getcontext_succeedatnothing() {
 	use ucontext::getcontext;
 	use ucontext::setcontext;
 
-	let mut invalid = None;
-	getcontext(|context| invalid = Some(context), || unreachable!()).unwrap();
-	assert!(setcontext(invalid.unwrap()).is_none());
+	let invalid = getcontext(|context| context, || unreachable!()).unwrap();
+	assert!(setcontext(invalid).is_none());
 	panic!("done");
 }
