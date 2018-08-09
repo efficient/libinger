@@ -58,10 +58,16 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 }
 
 pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
+	use libc::getcontext;
 	use libc::makecontext;
 
-	let mut context = getcontext(|context| context, || unreachable!())?;
-	context.guard.take();
+	let mut context = Context::new();
+	if unsafe {
+		getcontext(&mut context.context)
+	} != 0 {
+		Err(Error::last_os_error())?;
+	}
+
 	context.context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
 	context.context.uc_stack.ss_size = stack.len();
 	if let Some(successor) = successor {
