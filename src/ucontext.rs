@@ -57,6 +57,8 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	Ok(res)
 }
 
+/// Configures a context to invoke `function()` on a separate `stack`, optionally resuming the
+/// program at the `successor` context upon said function's return (or, by default, exiting).
 pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
 	use libc::getcontext;
 	use libc::makecontext;
