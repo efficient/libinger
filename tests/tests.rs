@@ -27,7 +27,9 @@ fn getcontext_donothing() {
 	let mut reached = false;
 	getcontext(|_| reached = true, || unreachable!()).unwrap();
 	assert!(reached);
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -42,7 +44,9 @@ fn getcontext_setcontext() {
 		|| reached = true,
 	).unwrap();
 	assert!(reached);
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -50,7 +54,9 @@ fn getcontext_setcontext() {
 fn getcontext_succeedatnothing() {
 	let invalid = getcontext(|context| context, || unreachable!()).unwrap();
 	assert!(setcontext(invalid).is_none());
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 #[cfg_attr(test, ignore)]
@@ -76,7 +82,9 @@ fn getcontext_nested() {
 		},
 	).unwrap();
 	assert!(reached);
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -105,7 +113,9 @@ fn makecontext_setcontext() {
 	).unwrap();
 	assert!(REACHED.with(|reached| reached.get()));
 	assert!(reached);
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 fn ucontext(context: &mut Context) -> &mut ucontext_t {
@@ -218,7 +228,9 @@ fn killswap_getcontext() {
 	let mut reached = false;
 	getcontext(killswap(), || reached = true).unwrap();
 	assert!(reached);
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
 
 fn stack_inbounds(within: &ucontext_t, stack: &[u8]) -> bool {
@@ -260,5 +272,7 @@ fn killswap_makecontext() {
 
 	let mut context = getcontext(|context| context, || unreachable!()).unwrap();
 	assert!(! stack_inbounds(ucontext(&mut context), &stack));
-	panic!("done");
+	if cfg!(test) {
+		panic!("done");
+	}
 }
