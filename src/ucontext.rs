@@ -5,6 +5,8 @@ use std::io::Result;
 use std::rc::Rc;
 use uninit::Uninit;
 
+const REG_CSGSFS: usize = 18;
+
 /// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
 	context: ucontext_t,
@@ -35,6 +37,8 @@ impl Context {
 
 		this.after_move();
 		swap(&mut this.uc_mcontext, &mut other.uc_mcontext);
+		swap(&mut this.uc_mcontext.gregs[REG_CSGSFS], &mut other.uc_mcontext.gregs[REG_CSGSFS]);
+
 		let this_fp = unsafe {
 			this.uc_mcontext.fpregs.as_mut().unwrap()
 		};
