@@ -221,6 +221,15 @@ fn killswap_getcontext() {
 	panic!("done");
 }
 
+fn stack_inbounds(within: &ucontext_t, stack: &[u8]) -> bool {
+	const REG_RSP: usize = 15;
+
+	let within: *const _ = within.uc_mcontext.gregs[REG_RSP] as _;
+	within > stack.as_ptr() && within < unsafe {
+		stack.as_ptr().add(stack.len())
+	}
+}
+
 #[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn killswap_makecontext() {
@@ -239,6 +248,7 @@ fn killswap_makecontext() {
 	let mut stack = [0u8; MINSIGSTKSZ];
 	getcontext(
 		|mut context| {
+			assert!(! stack_inbounds(ucontext(&mut context), &stack));
 			let context = makecontext(call, &mut stack, Some(&mut context)).unwrap();
 			killswap()(context);
 			unreachable!();
@@ -247,5 +257,8 @@ fn killswap_makecontext() {
 	).unwrap();
 	assert!(reached);
 	assert!(REACHED.with(|reached| reached.get()));
+
+	let mut context = getcontext(|context| context, || unreachable!()).unwrap();
+	assert!(! stack_inbounds(ucontext(&mut context), &stack));
 	panic!("done");
 }
