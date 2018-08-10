@@ -17,7 +17,8 @@ fn main() {
 	makecontext_setcontext();
 	context_moveinvariant();
 	context_swapinvariant();
-	getcontext_killswap();
+	killswap_getcontext();
+	killswap_makecontext();
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -157,9 +158,7 @@ fn context_swapinvariant() {
 	assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
 }
 
-#[cfg_attr(test, should_panic(expected = "done"))]
-#[cfg_attr(test, test)]
-fn getcontext_killswap() {
+fn killswap() -> fn(Context) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
 	use libc::pthread_kill;
@@ -202,19 +201,51 @@ fn getcontext_killswap() {
 		panic!(Error::last_os_error());
 	}
 
-	let mut reached = false;
-	getcontext(
-		|context| {
-			CONTEXT.with(|global| global.set(Some(context)));
-			unsafe {
-				pthread_kill(pthread_self(), SIGUSR1);
-			}
-			panic!(Error::last_os_error());
-		},
-		|| {
-			reached = true;
+	fn fun(context: Context) {
+		CONTEXT.with(|global| global.set(Some(context)));
+		unsafe {
+			pthread_kill(pthread_self(), SIGUSR1);
 		}
+		panic!(Error::last_os_error());
+	}
+
+	fun
+}
+
+#[cfg_attr(test, should_panic(expected = "done"))]
+#[cfg_attr(test, test)]
+fn killswap_getcontext() {
+	let mut reached = false;
+	getcontext(killswap(), || reached = true).unwrap();
+	assert!(reached);
+	panic!("done");
+}
+
+#[cfg_attr(test, should_panic(expected = "done"))]
+#[cfg_attr(test, test)]
+fn killswap_makecontext() {
+	use std::cell::Cell;
+	use libc::MINSIGSTKSZ;
+
+	thread_local! {
+		static REACHED: Cell<bool> = Cell::new(false);
+	}
+
+	extern "C" fn call() {
+		REACHED.with(|reached| reached.set(true));
+	}
+
+	let mut reached = false;
+	let mut stack = [0u8; MINSIGSTKSZ];
+	getcontext(
+		|mut context| {
+			let context = makecontext(call, &mut stack, Some(&mut context)).unwrap();
+			killswap()(context);
+			unreachable!();
+		},
+		|| reached = true,
 	).unwrap();
 	assert!(reached);
+	assert!(REACHED.with(|reached| reached.get()));
 	panic!("done");
 }
