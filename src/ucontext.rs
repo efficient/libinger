@@ -23,6 +23,34 @@ impl Context {
 	fn guard(&mut self) -> &Rc<()> {
 		self.guard.get_or_insert_with(|| Rc::new(()))
 	}
+
+	/// Exchange the functional portion of this context with another one.  When called on a
+	/// a particular context within a signal handler, this causes that context to be restored
+	/// upon return from the handler.  Note that the handler's original context is stored back
+	/// unguarded, but that a subsequent `setcontext()`s is UB according to SUSv2.
+	pub fn swap(&mut self, other: &mut ucontext_t) {
+		use std::mem::swap;
+
+		let this = &mut self.context;
+
+		this.after_move();
+		swap(&mut this.uc_mcontext, &mut other.uc_mcontext);
+		let this_fp = unsafe {
+			this.uc_mcontext.fpregs.as_mut().unwrap()
+		};
+		let other_fp = unsafe {
+			other.uc_mcontext.fpregs.as_mut().unwrap()
+		};
+		swap(this_fp, other_fp);
+		swap(&mut this.uc_mcontext.fpregs, &mut other.uc_mcontext.fpregs);
+
+		swap(&mut this.uc_flags, &mut other.uc_flags);
+		swap(&mut this.uc_link, &mut other.uc_link);
+		swap(&mut this.uc_stack, &mut other.uc_stack);
+		swap(&mut this.uc_sigmask, &mut other.uc_sigmask);
+
+		self.guard.take();
+	}
 }
 
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
