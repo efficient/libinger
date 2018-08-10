@@ -4,6 +4,7 @@ use std::io::Error;
 use std::io::Result;
 use std::rc::Rc;
 use uninit::Uninit;
+use zero::Zero;
 
 const REG_CSGSFS: usize = 18;
 
@@ -14,6 +15,8 @@ pub struct Context {
 }
 
 impl Context {
+	/// NB: The returned object contains uninitialized data, and cannot be safely dropped until
+	///     it has either been initialized or zeroed!
 	fn new() -> Self {
 		Self {
 			context: ucontext_t::uninit(),
@@ -57,10 +60,29 @@ impl Context {
 	}
 }
 
+#[inline(always)]
+fn checkpoint(context: &mut ucontext_t) -> Result<()> {
+	use libc::getcontext;
+	use std::mem::zeroed;
+	use std::ptr::write;
+
+	if unsafe {
+		context.uc_mcontext.gregs = zeroed();
+		getcontext(context)
+	} != 0 {
+		// Zero the uninitialized context before dropping it!
+		unsafe {
+			write(context, ucontext_t::zero());
+		}
+		Err(Error::last_os_error())?;
+	}
+
+	Ok(())
+}
+
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
 /// `b()` is executed before this function returns.
 pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> Result<T> {
-	use libc::getcontext;
 	use volatile::VolBool;
 
 	let mut context = Context::new();
@@ -71,11 +93,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
 	let guard = Rc::downgrade(context.guard());
-	if unsafe {
-		getcontext(&mut context.context)
-	} != 0 {
-		Err(Error::last_os_error())?;
-	}
+	checkpoint(&mut context.context)?;
 
 	let res;
 	if unused.load() {
@@ -92,15 +110,10 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 /// Configures a context to invoke `function()` on a separate `stack`, optionally resuming the
 /// program at the `successor` context upon said function's return (or, by default, exiting).
 pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
-	use libc::getcontext;
 	use libc::makecontext;
 
 	let mut context = Context::new();
-	if unsafe {
-		getcontext(&mut context.context)
-	} != 0 {
-		Err(Error::last_os_error())?;
-	}
+	checkpoint(&mut context.context)?;
 
 	context.context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
 	context.context.uc_stack.ss_size = stack.len();
@@ -135,3 +148,4 @@ pub fn setcontext(mut context: Context) -> Option<Error> {
 }
 
 unsafe impl Uninit for ucontext_t {}
+unsafe impl Zero for ucontext_t {}

@@ -7,6 +7,7 @@ mod tests;
 mod ucontext;
 mod uninit;
 mod volatile;
+mod zero;
 
 pub use invar::MoveInvariant;
 pub use libc::MINSIGSTKSZ;
