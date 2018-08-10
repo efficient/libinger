@@ -1,4 +1,5 @@
 use invar::MoveInvariant;
+use libc::sigset_t;
 use libc::ucontext_t;
 use std::io::Error;
 use std::io::Result;
@@ -147,5 +148,52 @@ pub fn setcontext(mut context: Context) -> Option<Error> {
 	Some(Error::last_os_error())
 }
 
+pub fn sigsetcontext(context: Context) -> Error {
+	use libc::SA_SIGINFO;
+	use libc::SIGVTALRM;
+	use libc::pthread_kill;
+	use libc::pthread_self;
+	use libc::sigaction;
+	use libc::siginfo_t;
+	use std::cell::Cell;
+	use std::os::raw::c_int;
+	use std::ptr::null_mut;
+	use std::sync::ONCE_INIT;
+	use std::sync::Once;
+
+	static INIT: Once = ONCE_INIT;
+
+	thread_local! {
+		static CONTEXT: Cell<Option<Context>> = Cell::new(None);
+	}
+
+	INIT.call_once(|| {
+		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut ucontext_t>) {
+			let context = context.unwrap();
+			let mut protext = CONTEXT.with(|protext| protext.take()).unwrap();
+			protext.swap(context);
+		}
+
+		let config = sigaction {
+			sa_flags: SA_SIGINFO,
+			sa_sigaction: handler as _,
+			sa_restorer: None,
+			sa_mask: sigset_t::zero(),
+		};
+		if unsafe {
+			sigaction(SIGVTALRM, &config, null_mut())
+		} != 0 {
+			panic!(Error::last_os_error());
+		}
+	});
+
+	CONTEXT.with(|protext| protext.set(Some(context)));
+	unsafe {
+		pthread_kill(pthread_self(), SIGVTALRM);
+	}
+	Error::last_os_error()
+}
+
 unsafe impl Uninit for ucontext_t {}
+unsafe impl Zero for sigset_t {}
 unsafe impl Zero for ucontext_t {}
