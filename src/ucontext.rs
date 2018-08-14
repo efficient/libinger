@@ -84,6 +84,7 @@ fn checkpoint(context: &mut ucontext_t) -> Result<()> {
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
 /// `b()` is executed before this function returns.
 pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> Result<T> {
+	use std::mem::forget;
 	use volatile::VolBool;
 
 	let mut context = Context::new();
@@ -101,6 +102,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 		unused.store(false);
 		res = a(context);
 	} else {
+		forget(context);
 		res = b();
 	}
 
