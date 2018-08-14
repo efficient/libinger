@@ -4,6 +4,7 @@ extern crate libc;
 extern crate ucontext;
 
 use libc::ucontext_t;
+use std::cell::RefCell;
 use ucontext::Context;
 use ucontext::getcontext;
 use ucontext::makecontext;
@@ -168,6 +169,10 @@ fn context_swapinvariant() {
 	assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
 }
 
+thread_local! {
+	static CONTEXT: RefCell<Option<Context>> = RefCell::new(None);
+}
+
 fn killswap() -> fn(Context) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
@@ -175,15 +180,10 @@ fn killswap() -> fn(Context) {
 	use libc::pthread_self;
 	use libc::sigaction;
 	use libc::siginfo_t;
-	use std::cell::Cell;
 	use std::io::Error;
 	use std::mem::zeroed;
 	use std::os::raw::c_int;
 	use std::ptr::null_mut;
-
-	thread_local! {
-		static CONTEXT: Cell<Option<Context>> = Cell::new(None);
-	}
 
 	extern "C" fn handler(
 		_: c_int,
@@ -191,10 +191,7 @@ fn killswap() -> fn(Context) {
 		context: Option<&mut ucontext_t>,
 	) {
 		let context = context.unwrap();
-		CONTEXT.with(|global| {
-			let mut global = global.take().unwrap();
-			global.swap(context);
-		});
+		CONTEXT.with(|global| global.borrow_mut().as_mut().unwrap().swap(context));
 	}
 
 	let config = sigaction {
@@ -212,11 +209,10 @@ fn killswap() -> fn(Context) {
 	}
 
 	fn fun(context: Context) {
-		CONTEXT.with(|global| global.set(Some(context)));
+		CONTEXT.with(|global| global.replace(Some(context)));
 		unsafe {
 			pthread_kill(pthread_self(), SIGUSR1);
 		}
-		panic!(Error::last_os_error());
 	}
 
 	fun
