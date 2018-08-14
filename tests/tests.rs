@@ -9,6 +9,7 @@ use ucontext::Context;
 use ucontext::getcontext;
 use ucontext::makecontext;
 use ucontext::setcontext;
+use ucontext::sigsetcontext;
 
 fn main() {
 	getcontext_donothing();
@@ -20,6 +21,7 @@ fn main() {
 	context_swapinvariant();
 	killswap_getcontext();
 	killswap_makecontext();
+	killswap_sigsetcontext();
 }
 
 #[cfg_attr(test, should_panic(expected = "done"))]
@@ -268,6 +270,47 @@ fn killswap_makecontext() {
 
 	let mut context = getcontext(|context| context, || unreachable!()).unwrap();
 	assert!(! stack_inbounds(ucontext(&mut context), &stack));
+	if cfg!(test) {
+		panic!("done");
+	}
+}
+
+#[cfg_attr(test, should_panic(expected = "done"))]
+#[cfg_attr(test, test)]
+fn killswap_sigsetcontext() {
+	use std::cell::Cell;
+	use libc::MINSIGSTKSZ;
+
+	thread_local! {
+		static CHECKPOINT: Cell<Option<Context>> = Cell::new(None);
+	}
+
+	extern "C" fn call() {
+		let context = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
+		killswap()(context);
+	}
+
+	let mut reached = false;
+	getcontext(
+		|mut call_complete| {
+			let mut stack = [0u8; MINSIGSTKSZ];
+			let call_gate = makecontext(call, &mut stack, Some(&mut call_complete)).unwrap();
+			getcontext(
+				|call_pause| {
+					CHECKPOINT.with(|checkpoint| checkpoint.set(Some(call_pause)));
+					setcontext(call_gate);
+					unreachable!();
+				},
+				|| {
+					let call_resume = CONTEXT.with(|context| context.borrow_mut().take()).unwrap();
+					sigsetcontext(call_resume);
+					unreachable!();
+				},
+			).unwrap();
+		},
+		|| reached = true,
+	).unwrap();
+	assert!(reached);
 	if cfg!(test) {
 		panic!("done");
 	}
