@@ -15,7 +15,7 @@ fn main() {
 	getcontext_donothing();
 	getcontext_setcontext();
 	getcontext_succeedatnothing();
-	//getcontext_nested();
+	getcontext_nested();
 	makecontext_setcontext();
 	context_moveinvariant();
 	context_swapinvariant();
@@ -62,7 +62,6 @@ fn getcontext_succeedatnothing() {
 	}
 }
 
-#[cfg_attr(test, ignore)]
 #[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn getcontext_nested() {
@@ -77,11 +76,11 @@ fn getcontext_nested() {
 				setcontext(&outer);
 				unreachable!();
 			},
-			|| reached = true,
+			|| unreachable!(),
 		).unwrap(),
 		|| {
-			setcontext(&context.take().unwrap());
-			unreachable!();
+			assert!(setcontext(&context.take().unwrap()).is_none());
+			reached = true;
 		},
 	).unwrap();
 	assert!(reached);

@@ -5,15 +5,20 @@ use std::cell::RefCell;
 use std::io::Error;
 use std::io::Result;
 use std::rc::Rc;
+use std::rc::Weak;
 use uninit::Uninit;
 use zero::Zero;
 
 const REG_CSGSFS: usize = 18;
 
+thread_local! {
+	static GUARDS: RefCell<Vec<Rc<usize>>> = RefCell::new(Vec::new());
+}
+
 /// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
 	context: RefCell<ucontext_t>,
-	guard: Option<Rc<()>>,
+	guard: Option<Weak<usize>>,
 }
 
 impl Context {
@@ -28,10 +33,6 @@ impl Context {
 			guard: None,
 		}
 
-	}
-
-	fn guard(&mut self) -> &Rc<()> {
-		self.guard.get_or_insert_with(|| Rc::new(()))
 	}
 
 	/// Exchange the functional portion of this context with another one.  When called on a
@@ -96,7 +97,14 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// because client code that never resumes the context was already responsible for cleaning
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
-	let guard = Rc::downgrade(context.guard());
+	let guard = GUARDS.with(|guards| {
+		let mut guards = guards.borrow_mut();
+		let guard = Rc::new(guards.len());
+		let res = Rc::downgrade(&guard);
+		guards.push(guard);
+		res
+	});
+	context.guard = Some(guard.clone());
 	checkpoint(&context)?;
 
 	let res;
@@ -108,7 +116,9 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 		res = b();
 	}
 
-	drop(guard);
+	GUARDS.with(move |guards| {
+		guards.borrow_mut().truncate(*guard.upgrade().unwrap())
+	});
 	Ok(res)
 }
 
@@ -140,11 +150,8 @@ pub fn setcontext(context: &Context) -> Option<Error> {
 	use libc::setcontext;
 
 	if let Some(guard) = context.guard.as_ref() {
-		let guarded = Rc::weak_count(&guard);
-		if guarded == 0 {
-			None?;
-		}
-		debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
+		let guard = guard.upgrade()?;
+		GUARDS.with(|guards| guards.borrow_mut().truncate(*guard + 1));
 	}
 
 	let mut ucontext = context.context.borrow_mut();
