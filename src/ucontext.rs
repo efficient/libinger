@@ -20,8 +20,11 @@ impl Context {
 	/// NB: The returned object contains uninitialized data, and cannot be safely dropped until
 	///     it has either been initialized or zeroed!
 	fn new() -> Self {
+		let mut context = ucontext_t::uninit();
+		context.uc_mcontext.gregs = Zero::zero();
+
 		Self {
-			context: RefCell::new(ucontext_t::uninit()),
+			context: RefCell::new(context),
 			guard: None,
 		}
 
@@ -65,11 +68,9 @@ impl Context {
 #[inline(always)]
 fn checkpoint(context: &Context) -> Result<()> {
 	use libc::getcontext;
-	use std::mem::zeroed;
 	use std::ptr::write;
 
 	if unsafe {
-		context.context.borrow_mut().uc_mcontext.gregs = zeroed();
 		getcontext(context.context.as_ptr())
 	} != 0 {
 		// Zero the uninitialized context before dropping it!

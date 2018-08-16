@@ -4,8 +4,10 @@ pub use self::imp::*;
 
 #[cfg(target_os = "linux")]
 mod imp {
+	use libc::greg_t;
 	use libc::_libc_fpstate;
 	use super::*;
+	use zero::Zero;
 
 	impl MoveInvariant for ucontext_t {
 		fn after_move(&mut self) {
@@ -18,6 +20,8 @@ mod imp {
 			};
 		}
 	}
+
+	unsafe impl Zero for [greg_t; 23] {}
 }
 
 #[cfg(not(target_os = "linux"))]
