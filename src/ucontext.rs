@@ -63,18 +63,18 @@ impl Context {
 }
 
 #[inline(always)]
-fn checkpoint(context: &mut ucontext_t) -> Result<()> {
+fn checkpoint(context: &Context) -> Result<()> {
 	use libc::getcontext;
 	use std::mem::zeroed;
 	use std::ptr::write;
 
 	if unsafe {
-		context.uc_mcontext.gregs = zeroed();
-		getcontext(context)
+		context.context.borrow_mut().uc_mcontext.gregs = zeroed();
+		getcontext(context.context.as_ptr())
 	} != 0 {
 		// Zero the uninitialized context before dropping it!
 		unsafe {
-			write(context, ucontext_t::zero());
+			write(context.context.as_ptr(), ucontext_t::zero());
 		}
 		Err(Error::last_os_error())?;
 	}
@@ -96,7 +96,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
 	let guard = Rc::downgrade(context.guard());
-	checkpoint(&mut context.context.borrow_mut())?;
+	checkpoint(&context)?;
 
 	let res;
 	if unused.load() {
@@ -117,10 +117,9 @@ pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Optio
 	use libc::makecontext;
 
 	let context = Context::new();
+	checkpoint(&context)?;
 	{
 		let mut ucontext = context.context.borrow_mut();
-
-		checkpoint(&mut ucontext)?;
 		ucontext.uc_stack.ss_sp = stack.as_mut_ptr() as _;
 		ucontext.uc_stack.ss_size = stack.len();
 		if let Some(successor) = successor {
