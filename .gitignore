@@ -1,3 +1,5 @@
 src/main.rs
 target/
+*.a
 *.lock
+*.o

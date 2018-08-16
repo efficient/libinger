@@ -1,6 +1,7 @@
 use invar::MoveInvariant;
 use libc::sigset_t;
 use libc::ucontext_t;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Error;
 use std::io::Result;
@@ -10,6 +11,7 @@ use uninit::Uninit;
 use zero::Zero;
 
 const REG_CSGSFS: usize = 18;
+const REG_RSP: usize = 15;
 
 thread_local! {
 	static GUARDS: RefCell<Vec<Rc<usize>>> = RefCell::new(Vec::new());
@@ -18,7 +20,7 @@ thread_local! {
 /// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
 	context: RefCell<ucontext_t>,
-	guard: Option<Weak<usize>>,
+	guard: Cell<Option<Weak<usize>>>,
 }
 
 impl Context {
@@ -30,7 +32,7 @@ impl Context {
 
 		Self {
 			context: RefCell::new(context),
-			guard: None,
+			guard: Cell::new(None),
 		}
 
 	}
@@ -90,7 +92,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	use std::mem::forget;
 	use volatile::VolBool;
 
-	let mut context = Context::new();
+	let context = Context::new();
 
 	// Storing this flag on the stack is not unsound because guard enforces the invariant that
 	// this stack frame outlives any resumable context.  Storing it on the stack is not leaky
@@ -104,7 +106,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 		guards.push(guard);
 		res
 	});
-	context.guard = Some(guard.clone());
+	context.guard.set(Some(guard.clone()));
 	checkpoint(&context)?;
 
 	let res;
@@ -148,10 +150,29 @@ pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Optio
 /// `context`'s stack frame has expired or `Some` to indicate a platform error.
 pub fn setcontext(context: &Context) -> Option<Error> {
 	use libc::setcontext;
+	use sp::sp;
 
-	if let Some(guard) = context.guard.as_ref() {
-		let guard = guard.upgrade()?;
-		GUARDS.with(|guards| guards.borrow_mut().truncate(*guard + 1));
+	fn between(left: usize, between: usize, right: usize) -> bool {
+		use std::cmp::max;
+		use std::cmp::min;
+		use std::mem::size_of;
+
+		let size = 4 * size_of::<Context>();
+		min(left, right) - size <= between && between <= max(left, right) + size
+	}
+
+	if let Some(guard) = context.guard.take().take() {
+		GUARDS.with(|guards| {
+			let guard = guard.upgrade()?;
+			guards.borrow_mut().truncate(*guard + 1);
+			Some(())
+		})?;
+
+		let ours = sp();
+		let theirs = context.context.borrow().uc_mcontext.gregs[REG_RSP];
+		if ! between(ours, &guard as *const _ as _, theirs as _) {
+			context.guard.set(Some(guard));
+		}
 	}
 
 	let mut ucontext = context.context.borrow_mut();
