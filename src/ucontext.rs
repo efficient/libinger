@@ -1,6 +1,7 @@
 use invar::MoveInvariant;
 use libc::sigset_t;
 use libc::ucontext_t;
+use std::cell::RefCell;
 use std::io::Error;
 use std::io::Result;
 use std::rc::Rc;
@@ -11,7 +12,7 @@ const REG_CSGSFS: usize = 18;
 
 /// A continuation that may be resumed using `setcontext()`.
 pub struct Context {
-	context: ucontext_t,
+	context: RefCell<ucontext_t>,
 	guard: Option<Rc<()>>,
 }
 
@@ -20,7 +21,7 @@ impl Context {
 	///     it has either been initialized or zeroed!
 	fn new() -> Self {
 		Self {
-			context: ucontext_t::uninit(),
+			context: RefCell::new(ucontext_t::uninit()),
 			guard: None,
 		}
 
@@ -37,7 +38,7 @@ impl Context {
 	pub fn swap(&mut self, other: &mut ucontext_t) {
 		use std::mem::swap;
 
-		let this = &mut self.context;
+		let mut this = self.context.borrow_mut();
 
 		this.after_move();
 		swap(&mut this.uc_mcontext, &mut other.uc_mcontext);
@@ -95,7 +96,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
 	let guard = Rc::downgrade(context.guard());
-	checkpoint(&mut context.context)?;
+	checkpoint(&mut context.context.borrow_mut())?;
 
 	let res;
 	if unused.load() {
@@ -115,27 +116,30 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
 	use libc::makecontext;
 
-	let mut context = Context::new();
-	checkpoint(&mut context.context)?;
+	let context = Context::new();
+	{
+		let mut ucontext = context.context.borrow_mut();
 
-	context.context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
-	context.context.uc_stack.ss_size = stack.len();
-	if let Some(successor) = successor {
-		context.context.uc_link = &mut successor.context;
-	}
+		checkpoint(&mut ucontext)?;
+		ucontext.uc_stack.ss_sp = stack.as_mut_ptr() as _;
+		ucontext.uc_stack.ss_size = stack.len();
+		if let Some(successor) = successor {
+			ucontext.uc_link = successor.context.as_ptr();
+		}
 
-	unsafe {
-		makecontext(&mut context.context, function, 0);
+		unsafe {
+			makecontext(&mut *ucontext, function, 0);
+		}
 	}
 	Ok(context)
 }
 
 /// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
 /// `context`'s stack frame has expired or `Some` to indicate a platform error.
-pub fn setcontext(mut context: Context) -> Option<Error> {
+pub fn setcontext(context: &Context) -> Option<Error> {
 	use libc::setcontext;
 
-	if let Some(guard) = context.guard.take() {
+	if let Some(guard) = context.guard.as_ref() {
 		let guarded = Rc::weak_count(&guard);
 		if guarded == 0 {
 			None?;
@@ -143,9 +147,10 @@ pub fn setcontext(mut context: Context) -> Option<Error> {
 		debug_assert!(guarded == 1, "setcontext() found multiple corresponding stack frames (?)");
 	}
 
-	context.context.after_move();
+	let mut ucontext = context.context.borrow_mut();
+	ucontext.after_move();
 	unsafe {
-		setcontext(&context.context);
+		setcontext(&*ucontext);
 	}
 	Some(Error::last_os_error())
 }

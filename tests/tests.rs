@@ -41,7 +41,7 @@ fn getcontext_setcontext() {
 	let mut reached = false;
 	getcontext(
 		|context| {
-			setcontext(context);
+			setcontext(&context);
 			unreachable!();
 		},
 		|| reached = true,
@@ -56,7 +56,7 @@ fn getcontext_setcontext() {
 #[cfg_attr(test, test)]
 fn getcontext_succeedatnothing() {
 	let invalid = getcontext(|context| context, || unreachable!()).unwrap();
-	assert!(setcontext(invalid).is_none());
+	assert!(setcontext(&invalid).is_none());
 	if cfg!(test) {
 		panic!("done");
 	}
@@ -74,13 +74,13 @@ fn getcontext_nested() {
 		|outer| getcontext(
 			|inner| {
 				context.set(Some(inner));
-				setcontext(outer);
+				setcontext(&outer);
 				unreachable!();
 			},
 			|| reached = true,
 		).unwrap(),
 		|| {
-			setcontext(context.take().unwrap());
+			setcontext(&context.take().unwrap());
 			unreachable!();
 		},
 	).unwrap();
@@ -109,7 +109,7 @@ fn makecontext_setcontext() {
 		|mut successor| {
 			let mut stack = [0u8; MINSIGSTKSZ];
 			let predecessor = makecontext(call, &mut stack, Some(&mut successor)).unwrap();
-			setcontext(predecessor);
+			setcontext(&predecessor);
 			unreachable!();
 		},
 		|| reached = true,
@@ -124,9 +124,10 @@ fn makecontext_setcontext() {
 fn ucontext(context: &mut Context) -> &mut ucontext_t {
 	use std::mem::transmute;
 
-	unsafe {
+	let context: &mut RefCell<_> = unsafe {
 		transmute(context)
-	}
+	};
+	context.get_mut()
 }
 
 fn uc_inbounds(within: *const ucontext_t, context: *const ucontext_t) -> bool {
@@ -298,7 +299,7 @@ fn killswap_sigsetcontext() {
 			getcontext(
 				|call_pause| {
 					CHECKPOINT.with(|checkpoint| checkpoint.set(Some(call_pause)));
-					setcontext(call_gate);
+					setcontext(&call_gate);
 					unreachable!();
 				},
 				|| {
