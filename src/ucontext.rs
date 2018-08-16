@@ -99,14 +99,15 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	// because client code that never resumes the context was already responsible for cleaning
 	// up this function's stack.
 	let mut unused = VolBool::new(true);
-	let guard = GUARDS.with(|guards| {
+	let idx = GUARDS.with(|guards| {
 		let mut guards = guards.borrow_mut();
-		let guard = Rc::new(guards.len());
-		let res = Rc::downgrade(&guard);
+		let idx = guards.len();
+		let guard = Rc::new(idx);
+		let guardian = Rc::downgrade(&guard);
+		context.guard.set(Some(guardian));
 		guards.push(guard);
-		res
+		idx
 	});
-	context.guard.set(Some(guard.clone()));
 	checkpoint(&context)?;
 
 	let res;
@@ -119,7 +120,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	}
 
 	GUARDS.with(move |guards| {
-		guards.borrow_mut().truncate(*guard.upgrade().unwrap())
+		guards.borrow_mut().truncate(idx)
 	});
 	Ok(res)
 }
