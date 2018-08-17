@@ -27,11 +27,8 @@ impl Context {
 	/// NB: The returned object contains uninitialized data, and cannot be safely dropped until
 	///     it has either been initialized or zeroed!
 	fn new() -> Self {
-		let mut context = ucontext_t::uninit();
-		context.uc_mcontext.gregs = Zero::zero();
-
 		Self {
-			context: RefCell::new(context),
+			context: RefCell::new(ucontext_t::uninit()),
 			guard: Cell::new(None),
 		}
 
@@ -69,16 +66,16 @@ impl Context {
 }
 
 #[inline(always)]
-fn checkpoint(context: &Context) -> Result<()> {
+fn checkpoint(context: *mut ucontext_t) -> Result<()> {
 	use libc::getcontext;
 	use std::ptr::write;
 
 	if unsafe {
-		getcontext(context.context.as_ptr())
+		getcontext(context)
 	} != 0 {
 		// Zero the uninitialized context before dropping it!
 		unsafe {
-			write(context.context.as_ptr(), ucontext_t::zero());
+			write(context, ucontext_t::zero());
 		}
 		Err(Error::last_os_error())?;
 	}
@@ -108,7 +105,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 		guards.push(guard);
 		idx
 	});
-	checkpoint(&context)?;
+	checkpoint(context.context.as_ptr())?;
 
 	let res;
 	if unused.load() {
@@ -131,7 +128,7 @@ pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Optio
 	use libc::makecontext;
 
 	let context = Context::new();
-	checkpoint(&context)?;
+	checkpoint(context.context.as_ptr())?;
 	{
 		let mut ucontext = context.context.borrow_mut();
 		ucontext.uc_stack.ss_sp = stack.as_mut_ptr() as _;
@@ -230,6 +227,17 @@ pub fn sigsetcontext(context: Context) -> Error {
 	Error::last_os_error()
 }
 
-unsafe impl Uninit for ucontext_t {}
+unsafe impl Uninit for ucontext_t {
+	fn uninit() -> Self {
+		use std::mem::uninitialized;
+
+		let mut this: Self = unsafe {
+			uninitialized()
+		};
+		this.uc_mcontext.gregs = Zero::zero();
+		this
+	}
+}
+
 unsafe impl Zero for sigset_t {}
 unsafe impl Zero for ucontext_t {}
