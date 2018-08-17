@@ -18,12 +18,19 @@ thread_local! {
 }
 
 /// A continuation that may be resumed using `setcontext()`.
-pub struct Context {
+pub struct Context<'a> {
 	context: RefCell<ucontext_t>,
-	guard: Cell<Option<Weak<usize>>>,
+	guard: Cell<Guard<'a>>,
 }
 
-impl Context {
+enum Guard<'a> {
+	OnStack(Weak<usize>),
+	StackGate(Option<&'a Context<'a>>),
+	Expired,
+	Interrupted,
+}
+
+impl<'a> Context<'a> {
 	/// NB: The returned object contains uninitialized data, and cannot be safely dropped until
 	///     it has either been initialized or zeroed!
 	fn new() -> Self {
@@ -32,7 +39,7 @@ impl Context {
 
 		Self {
 			context: RefCell::new(context),
-			guard: Cell::new(None),
+			guard: Cell::new(Guard::Expired),
 		}
 
 	}
@@ -64,7 +71,13 @@ impl Context {
 		swap(&mut this.uc_stack, &mut other.uc_stack);
 		swap(&mut this.uc_sigmask, &mut other.uc_sigmask);
 
-		self.guard.take();
+		self.guard.set(Guard::Interrupted);
+	}
+}
+
+impl<'a> Default for Guard<'a> {
+	fn default() -> Self {
+		Guard::Expired
 	}
 }
 
@@ -88,7 +101,7 @@ fn checkpoint(context: &Context) -> Result<()> {
 
 /// Calls `a()`, which may perform a `setcontext()` on its argument.  If and only if it does so,
 /// `b()` is executed before this function returns.
-pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> Result<T> {
+pub fn getcontext<'a, T: 'a, A: FnOnce(Context<'a>) -> T, B: FnOnce() -> T>(a: A, b: B) -> Result<T> {
 	use std::mem::forget;
 	use volatile::VolBool;
 
@@ -104,7 +117,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 		let idx = guards.len();
 		let guard = Rc::new(idx);
 		let guardian = Rc::downgrade(&guard);
-		context.guard.set(Some(guardian));
+		context.guard.set(Guard::OnStack(guardian));
 		guards.push(guard);
 		idx
 	});
@@ -122,23 +135,28 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	GUARDS.with(move |guards| {
 		guards.borrow_mut().truncate(idx)
 	});
+	// FIXME: MUST DROP first AND second!
+	//drop(a);
+	//drop(b);
 	Ok(res)
 }
 
 /// Configures a context to invoke `function()` on a separate `stack`, optionally resuming the
 /// program at the `successor` context upon said function's return (or, by default, exiting).
-pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
+pub fn makecontext<'a>(function: extern "C" fn(), stack: &'a mut [u8], successor: Option<&'a Context<'a>>) -> Result<Context<'a>> {
 	use libc::makecontext;
+	use std::ptr::null_mut;
 
 	let context = Context::new();
+	let link = successor.map(|link| link.context.as_ptr()).unwrap_or(null_mut());
+	context.guard.set(Guard::StackGate(successor));
+
 	checkpoint(&context)?;
 	{
 		let mut ucontext = context.context.borrow_mut();
 		ucontext.uc_stack.ss_sp = stack.as_mut_ptr() as _;
 		ucontext.uc_stack.ss_size = stack.len();
-		if let Some(successor) = successor {
-			ucontext.uc_link = successor.context.as_ptr();
-		}
+		ucontext.uc_link = link;
 
 		unsafe {
 			makecontext(&mut *ucontext, function, 0);
@@ -162,7 +180,7 @@ pub fn setcontext(context: &Context) -> Option<Error> {
 		min(left, right) - size <= between && between <= max(left, right) + size
 	}
 
-	if let Some(guard) = context.guard.take().take() {
+	if let Guard::OnStack(guard) = context.guard.take() {
 		GUARDS.with(|guards| {
 			let guard = guard.upgrade()?;
 			guards.borrow_mut().truncate(*guard + 1);
@@ -192,6 +210,7 @@ pub fn sigsetcontext(context: Context) -> Error {
 	use libc::sigaction;
 	use libc::siginfo_t;
 	use std::cell::Cell;
+	use std::mem::transmute;
 	use std::os::raw::c_int;
 	use std::ptr::null_mut;
 	use std::sync::ONCE_INIT;
@@ -200,7 +219,7 @@ pub fn sigsetcontext(context: Context) -> Error {
 	static INIT: Once = ONCE_INIT;
 
 	thread_local! {
-		static CONTEXT: Cell<Option<Context>> = Cell::new(None);
+		static CONTEXT: Cell<Option<Context<'static>>> = Cell::new(None);
 	}
 
 	INIT.call_once(|| {
@@ -223,7 +242,9 @@ pub fn sigsetcontext(context: Context) -> Error {
 		}
 	});
 
-	CONTEXT.with(|protext| protext.set(Some(context)));
+	CONTEXT.with(|protext| protext.set(Some(unsafe {
+		transmute(context)
+	})));
 	unsafe {
 		pthread_kill(pthread_self(), SIGVTALRM);
 	}

@@ -120,7 +120,7 @@ fn makecontext_setcontext() {
 	}
 }
 
-fn ucontext(context: &mut Context) -> &mut ucontext_t {
+fn ucontext<'a>(context: &'a mut Context<'a>) -> &'a mut ucontext_t {
 	use std::mem::transmute;
 
 	let context: &mut RefCell<_> = unsafe {
@@ -172,7 +172,7 @@ fn context_swapinvariant() {
 }
 
 thread_local! {
-	static CONTEXT: RefCell<Option<Context>> = RefCell::new(None);
+	static CONTEXT: RefCell<Option<Context<'static>>> = RefCell::new(None);
 }
 
 fn killswap() -> fn(Context) {
@@ -211,7 +211,11 @@ fn killswap() -> fn(Context) {
 	}
 
 	fn fun(context: Context) {
-		CONTEXT.with(|global| global.replace(Some(context)));
+		use std::mem::transmute;
+
+		CONTEXT.with(|global| global.replace(Some(unsafe {
+			transmute(context)
+		})));
 		unsafe {
 			pthread_kill(pthread_self(), SIGUSR1);
 		}
@@ -282,7 +286,7 @@ fn killswap_sigsetcontext() {
 	use libc::MINSIGSTKSZ;
 
 	thread_local! {
-		static CHECKPOINT: Cell<Option<Context>> = Cell::new(None);
+		static CHECKPOINT: Cell<Option<Context<'static>>> = Cell::new(None);
 	}
 
 	extern "C" fn call() {
