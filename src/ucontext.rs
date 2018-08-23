@@ -159,18 +159,17 @@ pub fn setcontext(context: &Context) -> Option<Error> {
 		min(left, right) - size <= between && between <= max(left, right) + size
 	}
 
-	if let Some(guard) = context.guard.take().take() {
-		GUARDS.with(|guards| {
-			let guard = guard.upgrade()?;
-			guards.borrow_mut().truncate(*guard + 1);
-			Some(())
-		})?;
+	let guard = context.guard.take().take()?;
+	GUARDS.with(|guards| {
+		let guard = guard.upgrade()?;
+		guards.borrow_mut().truncate(*guard + 1);
+		Some(())
+	})?;
 
-		let ours = sp();
-		let theirs = context.context.borrow().uc_mcontext.gregs[REG_RSP];
-		if ! between(ours, &guard as *const _ as _, theirs as _) {
-			context.guard.set(Some(guard));
-		}
+	let ours = sp();
+	let theirs = context.context.borrow().uc_mcontext.gregs[REG_RSP];
+	if ! between(ours, &guard as *const _ as _, theirs as _) {
+		context.guard.set(Some(guard));
 	}
 
 	let mut ucontext = context.context.borrow_mut();
