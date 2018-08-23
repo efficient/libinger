@@ -155,7 +155,7 @@ pub fn makecontext<T: FnMut()>(mut function: T, stack: &mut [u8], successor: Opt
 	use libc::setcontext;
 	use sp::sp;
 	use std::mem::transmute;
-	use std::os::raw::c_int;
+	use std::os::raw::c_uint;
 
 	enum Link<'a> {
 		WithoutSuccessor(&'a mut dyn FnMut()),
@@ -168,7 +168,7 @@ pub fn makecontext<T: FnMut()>(mut function: T, stack: &mut [u8], successor: Opt
 		stack: uintptr_t,
 	}
 
-	extern "C" fn link(lower: c_int, upper: c_int) {
+	extern "C" fn link(lower: c_uint, upper: c_uint) {
 		let link: *mut Link = (lower as usize | ((upper as usize) << 32)) as _;
 		let link = unsafe {
 			link.as_mut()
@@ -204,7 +204,7 @@ pub fn makecontext<T: FnMut()>(mut function: T, stack: &mut [u8], successor: Opt
 
 	let args: usize = &args as *const _ as _;
 	unsafe {
-		makecontext(&mut context, transmute(link as extern "C" fn(c_int, c_int)), 2, args, args >> 32);
+		makecontext(&mut context, transmute(link as extern "C" fn(c_uint, c_uint)), 2, args, args >> 32);
 		setcontext(&context);
 	}
 
