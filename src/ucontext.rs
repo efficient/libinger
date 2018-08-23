@@ -1,6 +1,7 @@
 use invar::MoveInvariant;
 use libc::sigset_t;
 use libc::ucontext_t;
+use libc::uintptr_t;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Error;
@@ -122,34 +123,7 @@ pub fn getcontext<T, A: FnOnce(Context) -> T, B: FnOnce() -> T>(a: A, b: B) -> R
 	Ok(res)
 }
 
-/// Configures a context to invoke `function()` on a separate `stack`, optionally resuming the
-/// program at the `successor` context upon said function's return (or, by default, exiting).
-pub fn makecontext(function: extern "C" fn(), stack: &mut [u8], successor: Option<&mut Context>) -> Result<Context> {
-	use libc::makecontext;
-
-	let context = Context::new();
-	checkpoint(context.context.as_ptr())?;
-	{
-		let mut ucontext = context.context.borrow_mut();
-		ucontext.uc_stack.ss_sp = stack.as_mut_ptr() as _;
-		ucontext.uc_stack.ss_size = stack.len();
-		if let Some(successor) = successor {
-			ucontext.uc_link = successor.context.as_ptr();
-		}
-
-		unsafe {
-			makecontext(&mut *ucontext, function, 0);
-		}
-	}
-	Ok(context)
-}
-
-/// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
-/// `context`'s stack frame has expired or `Some` to indicate a platform error.
-pub fn setcontext(context: &Context) -> Option<Error> {
-	use libc::setcontext;
-	use sp::sp;
-
+fn validate_guard(context: &Context, stack: uintptr_t) -> Option<()> {
 	fn between(left: usize, between: usize, right: usize) -> bool {
 		use std::cmp::max;
 		use std::cmp::min;
@@ -166,11 +140,84 @@ pub fn setcontext(context: &Context) -> Option<Error> {
 		Some(())
 	})?;
 
-	let ours = sp();
 	let theirs = context.context.borrow().uc_mcontext.gregs[REG_RSP];
-	if ! between(ours, &guard as *const _ as _, theirs as _) {
+	if ! between(stack, &guard as *const _ as _, theirs as _) {
 		context.guard.set(Some(guard));
 	}
+
+	Some(())
+}
+
+/// "Call gate" that invokes a `function()` on a separate `stack`, optionally resuming the program
+/// at the `successor` context upon said function's return (or, by default, exiting).
+pub fn makecontext<T: FnMut()>(mut function: T, stack: &mut [u8], successor: Option<&Context>) -> Error {
+	use libc::makecontext;
+	use libc::setcontext;
+	use sp::sp;
+	use std::mem::transmute;
+	use std::os::raw::c_int;
+
+	enum Link<'a> {
+		WithoutSuccessor(&'a mut dyn FnMut()),
+		WithSuccessor(LinkedSuccessor<'a>),
+	}
+
+	struct LinkedSuccessor<'a> {
+		function: &'a mut dyn FnMut(),
+		successor: &'a Context,
+		stack: uintptr_t,
+	}
+
+	extern "C" fn link(lower: c_int, upper: c_int) {
+		let link: *mut Link = (lower as usize | ((upper as usize) << 32)) as _;
+		let link = unsafe {
+			link.as_mut()
+		}.unwrap();
+
+		match link {
+			Link::WithoutSuccessor(link) => link(),
+			Link::WithSuccessor(link) => {
+				(link.function)();
+				validate_guard(&link.successor, link.stack);
+			},
+		}
+	}
+
+	let mut context = ucontext_t::uninit();
+	if let Err(or) = checkpoint(&mut context) {
+		return or;
+	}
+
+	let args;
+	context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
+	context.uc_stack.ss_size = stack.len();
+	if let Some(successor) = successor {
+		context.uc_link = successor.context.as_ptr();
+		args = Link::WithSuccessor(LinkedSuccessor {
+			function: &mut function,
+			successor: successor,
+			stack: sp(),
+		});
+	} else {
+		args = Link::WithoutSuccessor(&mut function);
+	}
+
+	let args: usize = &args as *const _ as _;
+	unsafe {
+		makecontext(&mut context, transmute(link as extern "C" fn(c_int, c_int)), 2, args, args >> 32);
+		setcontext(&context);
+	}
+
+	unreachable!()
+}
+
+/// Attempts to resume `context`, never returning on success.  Otherwise, returns `None` if
+/// `context`'s stack frame has expired or `Some` to indicate a platform error.
+pub fn setcontext(context: &Context) -> Option<Error> {
+	use libc::setcontext;
+	use sp::sp;
+
+	validate_guard(context, sp())?;
 
 	let mut ucontext = context.context.borrow_mut();
 	ucontext.after_move();

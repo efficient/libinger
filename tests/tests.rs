@@ -99,7 +99,7 @@ fn makecontext_setcontext() {
 		static REACHED: Cell<bool> = Cell::new(false);
 	}
 
-	extern "C" fn call() {
+	fn call() {
 		REACHED.with(|reached| reached.set(true));
 	}
 
@@ -107,8 +107,7 @@ fn makecontext_setcontext() {
 	getcontext(
 		|mut successor| {
 			let mut stack = [0u8; MINSIGSTKSZ];
-			let predecessor = makecontext(call, &mut stack, Some(&mut successor)).unwrap();
-			setcontext(&predecessor);
+			makecontext(call, &mut stack, Some(&mut successor));
 			unreachable!();
 		},
 		|| reached = true,
@@ -243,15 +242,16 @@ fn stack_inbounds(within: &ucontext_t, stack: &[u8]) -> bool {
 #[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn killswap_makecontext() {
-	use std::cell::Cell;
 	use libc::MINSIGSTKSZ;
+	use libc::uintptr_t;
+	use std::cell::Cell;
 
 	thread_local! {
-		static REACHED: Cell<bool> = Cell::new(false);
+		static SUCCESSOR: Cell<Option<Context>> = Cell::new(None);
 	}
 
-	extern "C" fn call() {
-		REACHED.with(|reached| reached.set(true));
+	fn call() {
+		killswap()(SUCCESSOR.with(|successor| successor.take()).unwrap());
 	}
 
 	let mut reached = false;
@@ -259,14 +259,13 @@ fn killswap_makecontext() {
 	getcontext(
 		|mut context| {
 			assert!(! stack_inbounds(ucontext(&mut context), &stack));
-			let context = makecontext(call, &mut stack, Some(&mut context)).unwrap();
-			killswap()(context);
+			SUCCESSOR.with(|successor| successor.set(Some(context)));
+			makecontext(call, &mut stack, None);
 			unreachable!();
 		},
 		|| reached = true,
 	).unwrap();
 	assert!(reached);
-	assert!(REACHED.with(|reached| reached.get()));
 
 	let mut context = getcontext(|context| context, || unreachable!()).unwrap();
 	assert!(! stack_inbounds(ucontext(&mut context), &stack));
@@ -278,14 +277,14 @@ fn killswap_makecontext() {
 #[cfg_attr(test, should_panic(expected = "done"))]
 #[cfg_attr(test, test)]
 fn killswap_sigsetcontext() {
-	use std::cell::Cell;
 	use libc::MINSIGSTKSZ;
+	use std::cell::Cell;
 
 	thread_local! {
 		static CHECKPOINT: Cell<Option<Context>> = Cell::new(None);
 	}
 
-	extern "C" fn call() {
+	fn call() {
 		let context = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
 		killswap()(context);
 	}
@@ -294,11 +293,10 @@ fn killswap_sigsetcontext() {
 	getcontext(
 		|mut call_complete| {
 			let mut stack = [0u8; MINSIGSTKSZ];
-			let call_gate = makecontext(call, &mut stack, Some(&mut call_complete)).unwrap();
 			getcontext(
 				|call_pause| {
 					CHECKPOINT.with(|checkpoint| checkpoint.set(Some(call_pause)));
-					setcontext(&call_gate);
+					makecontext(call, &mut stack, Some(&mut call_complete));
 					unreachable!();
 				},
 				|| {
