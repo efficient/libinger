@@ -1,7 +1,5 @@
-pub trait Swap: Sized {
-	fn swap(&mut self, other: &mut Self) {
-		use std::mem::swap;
+pub trait Swap {
+	type Other;
 
-		swap(self, other);
-	}
+	fn swap(&mut self, other: &mut Self::Other) -> bool;
 }

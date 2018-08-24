@@ -1,12 +1,16 @@
 use invar::MoveInvariant;
+use libc::sigset_t;
 use libc::ucontext_t;
 pub use self::imp::*;
 use swap::Swap;
 use uninit::Uninit;
+use zero::Zero;
 
 pub trait Link {
 	fn link(&self) -> &'static mut *mut Self;
 }
+
+unsafe impl Zero for sigset_t {}
 
 #[cfg(target_os = "linux")]
 mod imp {
@@ -29,7 +33,6 @@ mod imp {
 			use libc::greg_t;
 			use std::mem::uninitialized;
 			use std::ptr::write;
-			use zero::Zero;
 
 			unsafe impl Zero for [greg_t; NGREG] {}
 
@@ -59,7 +62,9 @@ mod imp {
 	}
 
 	impl Swap for ucontext_t {
-		fn swap(&mut self, other: &mut Self) {
+		type Other = Self;
+
+		fn swap(&mut self, other: &mut Self::Other) -> bool {
 			use std::mem::swap;
 
 			self.after_move();
@@ -79,6 +84,8 @@ mod imp {
 			swap(&mut self.uc_link, &mut other.uc_link);
 			swap(&mut self.uc_stack, &mut other.uc_stack);
 			swap(&mut self.uc_sigmask, &mut other.uc_sigmask);
+
+			true
 		}
 	}
 
@@ -101,7 +108,14 @@ mod imp {
 
 	unsafe impl Uninit for ucontext_t {}
 	impl MoveInvariant for ucontext_t {}
-	impl Swap for ucontext_t {}
+
+	impl Swap for ucontext_t {
+		type Other = Self;
+
+		fn swap(&mut self, other: &Self::Other) -> bool {
+			unimplemented!()
+		}
+	}
 
 	impl Link for ucontext_t {
 		fn link(&self) -> &'static mut *mut Self {
