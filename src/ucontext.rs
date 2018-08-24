@@ -52,7 +52,58 @@ pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, m
 }
 
 pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, gate: F, call: fn()) -> Result<()> {
-	unimplemented!()
+	use std::mem::transmute;
+	use std::os::raw::c_uint;
+
+	extern "C" fn trampoline(lower: c_uint, upper: c_uint) {
+		let gate = lower as usize | ((upper as usize) << 32);
+		let gate: fn() = unsafe {
+			transmute(gate)
+		};
+		gate();
+	}
+
+	let mut guard = None;
+	getcontext(
+		|successor| -> Result<()> {
+			use libc::getcontext;
+			use libc::makecontext;
+
+			let mut this = Context::new(stack, successor.id);
+			guard = Some(this.id);
+			if unsafe {
+				getcontext(this.context.as_ptr())
+			} != 0 {
+				Err(Error::last_os_error())?;
+			}
+
+			let call: usize = call as *const fn() as _;
+			{
+				let mut context = this.context.borrow_mut();
+				let stack = &mut this.persistent.as_mut().unwrap().stack;
+				context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
+				context.uc_stack.ss_size = stack.len();
+				context.uc_link = successor.context.as_ptr();
+				unsafe {
+					makecontext(
+						&mut *context,
+						transmute(trampoline as extern "C" fn(c_uint, c_uint)),
+						2,
+						call,
+						call >> 32
+					);
+				}
+			}
+			gate(this);
+
+			Ok(())
+		},
+		|| Ok(()),
+	)??;
+
+	guard.take().unwrap().invalidate();
+
+	Ok(())
 }
 
 pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(persistent: Context<S>, scope: F) -> Result<()> {
