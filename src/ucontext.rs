@@ -63,14 +63,12 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 		gate();
 	}
 
-	let mut guard = None;
 	getcontext(
 		|successor| -> Result<()> {
 			use libc::getcontext;
 			use libc::makecontext;
 
 			let mut this = Context::new(stack, successor.id);
-			guard = Some(this.id);
 			if unsafe {
 				getcontext(this.context.as_ptr())
 			} != 0 {
@@ -100,8 +98,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 		},
 		|| Ok(()),
 	)??;
-
-	guard.take().expect("makecontext(): guard was already invalidated! (fell through to successor multiple times?)").invalidate();
+	// The inner context's guard is invalidated as collateral damage upon return from this call.
 
 	Ok(())
 }
