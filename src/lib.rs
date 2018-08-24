@@ -8,6 +8,7 @@ mod id;
 mod invar;
 mod platform;
 pub mod stable;
+mod swap;
 #[cfg(debug_assertions)]
 #[cfg_attr(debug_assertions, doc(hidden))]
 pub mod tests;

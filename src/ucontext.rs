@@ -185,8 +185,32 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 		}
 	}
 
-	pub fn swap(&mut self, other: &mut HandlerContext) {
-		unimplemented!();
+	#[must_use]
+	pub fn swap(&mut self, other: &mut HandlerContext) -> bool {
+		use swap::Swap;
+
+		let persistent = self.persistent.as_mut().unwrap();
+		if ! persistent.successor.is_valid() {
+			return false;
+		}
+		// Blacklist any further use of setcontext() with the successor context.  We're
+		// about to restore it for the last time when the current signal handler returns.
+		persistent.successor.invalidate();
+		debug_assert!(
+			! self.id.is_valid(),
+			"Context::swap(): invalidating successor's guard did not invalidate my own!"
+		);
+
+		let mut this = self.context.borrow_mut();
+		let link = *persistent.link;
+		this.swap(&mut unsafe {
+			*link
+		});
+
+		let HandlerContext (other) = other;
+		other.swap(&mut this);
+
+		true
 	}
 }
 
@@ -228,7 +252,7 @@ mod tests {
 			assert!(uc_inbounds(first.uc_link, &*first));
 			assert!(uc_inbounds(second.uc_link, second));
 		}
-		first.swap(&mut second);
+		assert!(first.swap(&mut second));
 
 		let first = first.context.borrow();
 		let HandlerContext (second) = &mut second;

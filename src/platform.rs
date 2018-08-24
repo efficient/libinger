@@ -1,6 +1,7 @@
 use invar::MoveInvariant;
 use libc::ucontext_t;
 pub use self::imp::*;
+use swap::Swap;
 use uninit::Uninit;
 
 pub trait Link {
@@ -16,6 +17,7 @@ mod imp {
 	mod regs {
 		#[allow(dead_code)]
 		pub const NGREG: usize = 23;
+		pub const REG_CSGSFS: usize = 18;
 		pub const REG_RBX: usize = 11;
 	}
 	#[cfg(not(target_arch = "x86_64"))]
@@ -56,6 +58,30 @@ mod imp {
 		}
 	}
 
+	impl Swap for ucontext_t {
+		fn swap(&mut self, other: &mut Self) {
+			use std::mem::swap;
+
+			self.after_move();
+			swap(&mut self.uc_mcontext, &mut other.uc_mcontext);
+			swap(&mut self.uc_mcontext.gregs[REG_CSGSFS], &mut other.uc_mcontext.gregs[REG_CSGSFS]);
+
+			let self_fp = &mut unsafe {
+				*self.uc_mcontext.fpregs
+			};
+			let other_fp = &mut unsafe {
+				*other.uc_mcontext.fpregs
+			};
+			swap(self_fp, other_fp);
+			swap(&mut self.uc_mcontext.fpregs, &mut other.uc_mcontext.fpregs);
+
+			swap(&mut self.uc_flags, &mut other.uc_flags);
+			swap(&mut self.uc_link, &mut other.uc_link);
+			swap(&mut self.uc_stack, &mut other.uc_stack);
+			swap(&mut self.uc_sigmask, &mut other.uc_sigmask);
+		}
+	}
+
 	impl Link for ucontext_t {
 		#[inline]
 		fn link(&self) -> &'static mut *mut Self {
@@ -75,6 +101,7 @@ mod imp {
 
 	unsafe impl Uninit for ucontext_t {}
 	impl MoveInvariant for ucontext_t {}
+	impl Swap for ucontext_t {}
 
 	impl Link for ucontext_t {
 		fn link(&self) -> &'static mut *mut Self {
