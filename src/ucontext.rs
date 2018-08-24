@@ -237,36 +237,35 @@ mod tests {
 		use ucontext::makecontext;
 
 		let mut st = [0u8; 1_024];
-		let mut first = None;
-		let mut ack = [0u8; 1_024];
-		let mut second = None;
-		makecontext(&mut st[..], |thing| first = Some(thing), || unreachable!()).unwrap();
-		makecontext(&mut ack[..], |thing| second = Some(thing), || unreachable!()).unwrap();
+		makecontext(&mut st[..], |mut first| {
+			let mut ack = [0u8; 1_024];
+			let mut second = None;
+			makecontext(&mut ack[..], |thing| second = Some(thing), || unreachable!()).unwrap();
 
-		let mut first = first.unwrap();
-		let second = second.unwrap();
-		let mut second = HandlerContext (second.context.into_inner());
-		{
-			let mut first = first.context.borrow_mut();
+			let second = second.unwrap();
+			let mut second = HandlerContext (second.context.into_inner());
+			{
+				let mut first = first.context.borrow_mut();
+				let HandlerContext (second) = &mut second;
+				assert!(! uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
+				assert!(! uc_inbounds(second.uc_mcontext.fpregs as _, second));
+
+				first.after_move();
+				second.after_move();
+				first.uc_link = first.uc_mcontext.fpregs as _;
+				second.uc_link = second.uc_mcontext.fpregs as _;
+				assert!(uc_inbounds(first.uc_link, &*first));
+				assert!(uc_inbounds(second.uc_link, second));
+			}
+			assert!(first.swap(&mut second));
+
+			let first = first.context.borrow();
 			let HandlerContext (second) = &mut second;
-			assert!(! uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
-			assert!(! uc_inbounds(second.uc_mcontext.fpregs as _, second));
-
-			first.after_move();
-			second.after_move();
-			first.uc_link = first.uc_mcontext.fpregs as _;
-			second.uc_link = second.uc_mcontext.fpregs as _;
-			assert!(uc_inbounds(first.uc_link, &*first));
-			assert!(uc_inbounds(second.uc_link, second));
-		}
-		assert!(first.swap(&mut second));
-
-		let first = first.context.borrow();
-		let HandlerContext (second) = &mut second;
-		assert!(uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
-		assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
-		assert!(uc_inbounds(first.uc_link, second));
-		assert!(uc_inbounds(second.uc_link, &*first));
+			assert!(uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
+			assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
+			assert!(uc_inbounds(first.uc_link, second));
+			assert!(uc_inbounds(second.uc_link, &*first));
+		}, || unreachable!()).unwrap();
 	}
 
 	fn uc_inbounds(within: *const ucontext_t, context: *const ucontext_t) -> bool {
