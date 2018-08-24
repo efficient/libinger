@@ -13,6 +13,7 @@ mod imp {
 	compile_error!("NGREG not defined for this target architecture");
 
 	unsafe impl Uninit for ucontext_t {
+		#[inline]
 		fn uninit() -> Self {
 			use libc::greg_t;
 			use std::mem::uninitialized;
@@ -32,6 +33,7 @@ mod imp {
 	}
 
 	impl MoveInvariant for ucontext_t {
+		#[inline]
 		fn after_move(&mut self) {
 			use libc::_libc_fpstate;
 
