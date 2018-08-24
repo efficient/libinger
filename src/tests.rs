@@ -3,6 +3,22 @@
 //! Doc tests.
 //!
 //! ```compile_fail
+//! extern crate libc;
+//! extern crate timetravel;
+//!
+//! fn restore_expired() {
+//!	use libc::MINSIGSTKSZ;
+//!	use timetravel::makecontext;
+//!	use timetravel::restorecontext;
+//!
+//!	let mut stack = [0u8; MINSIGSTKSZ];
+//!	let mut context = None;
+//!	makecontext(&mut stack[..], |thing| context = Some(thing), || unreachable!()).unwrap();
+//!	restorecontext(context.unwrap(), |_| unreachable!());
+//! }
+//! ```
+//!
+//! ```compile_fail
 //! let context: timetravel::Context = unsafe { std::mem::uninitialized() };
 //! timetravel::tests::assert_clone(&context)
 //! ```
