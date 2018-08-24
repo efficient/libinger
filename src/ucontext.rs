@@ -184,7 +184,9 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 			persistent,
 		}
 	}
+}
 
+impl<S: StableMutAddr<Target = [u8]>> Context<S> {
 	#[must_use]
 	pub fn swap(&mut self, other: &mut HandlerContext) -> bool {
 		use swap::Swap;
@@ -236,8 +238,8 @@ mod tests {
 		use ucontext::HandlerContext;
 		use ucontext::makecontext;
 
-		let mut st = [0u8; 1_024];
-		makecontext(&mut st[..], |mut first| {
+		let st: Box<[u8]> = Box::new([0u8; 1_024]);
+		makecontext(st, |mut first| {
 			let mut ack = [0u8; 1_024];
 			let mut second = None;
 			makecontext(&mut ack[..], |thing| second = Some(thing), || unreachable!()).unwrap();
