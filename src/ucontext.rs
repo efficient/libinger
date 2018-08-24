@@ -217,14 +217,13 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 #[cfg(test)]
 mod tests {
 	use libc::ucontext_t;
-	use super::getcontext;
-	use ucontext::HandlerContext;
 
 	#[test]
 	fn context_moveinvariant() {
 		use invar::MoveInvariant;
+		use super::getcontext;
 
-		let mut context = getcontext(|context| context, || unreachable!()).unwrap();
+		let context = getcontext(|context| context, || unreachable!()).unwrap();
 		let mut context = context.context.borrow_mut();
 		assert!(! uc_inbounds(context.uc_mcontext.fpregs as _, &*context));
 		context.after_move();
@@ -234,7 +233,8 @@ mod tests {
 	#[test]
 	fn context_swapinvariant() {
 		use invar::MoveInvariant;
-		use std::mem::transmute;
+		use ucontext::HandlerContext;
+		use ucontext::makecontext;
 
 		let mut first = getcontext(|context| context, || unreachable!()).unwrap();
 		let second = getcontext(|context| context, || unreachable!()).unwrap();
