@@ -264,7 +264,6 @@ mod tests {
 			assert!(uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
 			assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
 			assert!(uc_inbounds(first.uc_link, second));
-			assert!(uc_inbounds(second.uc_link, &*first));
 		}, || unreachable!()).unwrap();
 	}
 
