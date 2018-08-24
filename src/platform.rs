@@ -3,14 +3,23 @@ use libc::ucontext_t;
 pub use self::imp::*;
 use uninit::Uninit;
 
+pub trait Link {
+	fn link(&self) -> &'static mut *mut Self;
+}
+
 #[cfg(target_os = "linux")]
 mod imp {
+	use self::regs::*;
 	use super::*;
 
 	#[cfg(target_arch = "x86_64")]
-	const NGREG: usize = 23;
+	mod regs {
+		#[allow(dead_code)]
+		pub const NGREG: usize = 23;
+		pub const REG_RBX: usize = 11;
+	}
 	#[cfg(not(target_arch = "x86_64"))]
-	compile_error!("NGREG not defined for this target architecture");
+	compile_error!("registers not defined for this target architecture");
 
 	unsafe impl Uninit for ucontext_t {
 		#[inline]
@@ -47,6 +56,17 @@ mod imp {
 		}
 	}
 
+	impl Link for ucontext_t {
+		#[inline]
+		fn link(&self) -> &'static mut *mut Self {
+			use std::mem::transmute;
+
+			let link = self.uc_mcontext.gregs[REG_RBX];
+			unsafe {
+				transmute(link)
+			}
+		}
+	}
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -55,4 +75,10 @@ mod imp {
 
 	unsafe impl Uninit for ucontext_t {}
 	impl MoveInvariant for ucontext_t {}
+
+	impl Link for ucontext_t {
+		fn link(&self) -> &'static mut *mut Self {
+			unimplemented!()
+		}
+	}
 }

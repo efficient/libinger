@@ -68,6 +68,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 		|successor| -> Result<()> {
 			use libc::getcontext;
 			use libc::makecontext;
+			use platform::Link;
 
 			let mut this = Context::new(stack, successor.id);
 			if unsafe {
@@ -92,10 +93,8 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 						call >> 32
 					);
 				}
-				let link = context.uc_mcontext.gregs[11]; // rbx
-				let link: &mut *mut ucontext_t = unsafe {
-					transmute(link)
-				};
+
+				let link = context.link();
 				debug_assert!(
 					context.uc_link == *link,
 					"makecontext(): inconsistent link address! (stack moved?)"
