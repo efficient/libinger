@@ -236,8 +236,15 @@ mod tests {
 		use ucontext::HandlerContext;
 		use ucontext::makecontext;
 
-		let mut first = getcontext(|context| context, || unreachable!()).unwrap();
-		let second = getcontext(|context| context, || unreachable!()).unwrap();
+		let mut st = [0u8; 1_024];
+		let mut first = None;
+		let mut ack = [0u8; 1_024];
+		let mut second = None;
+		makecontext(&mut st[..], |thing| first = Some(thing), || unreachable!()).unwrap();
+		makecontext(&mut ack[..], |thing| second = Some(thing), || unreachable!()).unwrap();
+
+		let mut first = first.unwrap();
+		let second = second.unwrap();
 		let mut second = HandlerContext (second.context.into_inner());
 		{
 			let mut first = first.context.borrow_mut();
