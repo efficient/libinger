@@ -90,8 +90,8 @@ fn get_repeated() {
 	let context = RefCell::new(None);
 	getcontext(
 		|thing| {
-			context.replace(Some(thing));
-			panic!(setcontext(context.borrow().as_ref().unwrap()));
+			let thing: *const _ = context.borrow_mut().get_or_insert(thing);
+			panic!(setcontext(thing));
 		},
 		|| if context.try_borrow().is_ok() {
 			panic!(setcontext(context.borrow_mut().as_ref().unwrap()));
@@ -112,8 +112,8 @@ fn get_nested() {
 	getcontext(
 		|outer| panic!(getcontext(
 			|thing| {
-				inner.replace(Some(thing));
-				panic!(setcontext(inner.borrow().as_ref().unwrap()));
+				let thing: *const _ = inner.borrow_mut().get_or_insert(thing);
+				panic!(setcontext(thing));
 			},
 			|| {
 				panic!(setcontext(&outer));

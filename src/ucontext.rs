@@ -60,9 +60,13 @@ pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(pe
 }
 
 #[must_use]
-pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>) -> Option<Error> {
+pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -> Option<Error> {
 	use invar::MoveInvariant;
 	use libc::setcontext;
+
+	let continuation = unsafe {
+		continuation.as_ref()
+	}?;
 
 	if ! continuation.id.is_valid() {
 		None?;
