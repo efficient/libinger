@@ -18,6 +18,7 @@ pub struct HandlerContext (ucontext_t);
 
 struct Persistent<S: DerefMut<Target = [u8]>> {
 	stack: S,
+	link: &'static mut *mut ucontext_t,
 	successor: Id,
 }
 
@@ -78,9 +79,9 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 			let call: usize = call as *const fn() as _;
 			{
 				let mut context = this.context.borrow_mut();
-				let stack = &mut this.persistent.as_mut().unwrap().stack;
-				context.uc_stack.ss_sp = stack.as_mut_ptr() as _;
-				context.uc_stack.ss_size = stack.len();
+				let persistent = this.persistent.as_mut().unwrap();
+				context.uc_stack.ss_sp = persistent.stack.as_mut_ptr() as _;
+				context.uc_stack.ss_size = persistent.stack.len();
 				context.uc_link = successor.context.as_ptr();
 				unsafe {
 					makecontext(
@@ -91,6 +92,15 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 						call >> 32
 					);
 				}
+				let link = context.uc_mcontext.gregs[11]; // rbx
+				let link: &mut *mut ucontext_t = unsafe {
+					transmute(link)
+				};
+				debug_assert!(
+					context.uc_link == *link,
+					"makecontext(): inconsistent link address! (stack moved?)"
+				);
+				persistent.link = link;
 			}
 			gate(this);
 
@@ -103,8 +113,21 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 	Ok(())
 }
 
-pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(persistent: Context<S>, scope: F) -> Result<()> {
-	unimplemented!()
+pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(mut persistent: Context<S>, scope: F) -> Result<()> {
+	getcontext(
+		|successor| {
+			{
+				let next = persistent.persistent.as_mut().unwrap();
+				*next.link = successor.context.as_ptr();
+				next.successor = successor.id;
+			}
+			persistent.id = Id::new();
+
+			scope(persistent);
+		},
+		|| (),
+	)
+	// The inner context's guard is invalidated as collateral damage upon return from this call.
 }
 
 #[must_use]
@@ -143,8 +166,14 @@ impl Context<Void> {
 
 impl<S: DerefMut<Target = [u8]>> Context<S> {
 	fn new(stack: S, successor: Id) -> Self {
+		use std::mem::transmute;
+
+		let link = unsafe {
+			transmute(stack.as_ptr())
+		};
 		Self::from(Some(Persistent {
 			stack,
+			link,
 			successor,
 		}))
 	}
