@@ -14,6 +14,7 @@ pub mod tests;
 mod ucontext;
 mod uninit;
 mod void;
+mod volatile;
 mod zero;
 
 #[doc(inline)]

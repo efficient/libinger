@@ -21,8 +21,34 @@ struct Persistent<S: DerefMut<Target = [u8]>> {
 	successor: Id,
 }
 
-pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, checkpoint: B) -> Result<T> {
-	unimplemented!()
+pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, mut checkpoint: B) -> Result<T> {
+	use libc::getcontext;
+	use std::mem::forget;
+	use volatile::VolBool;
+
+	let mut unused = VolBool::new(true);
+	let this = Context::default();
+	let guard = this.id;
+	if unsafe {
+		getcontext(this.context.as_ptr())
+	} != 0 {
+		Err(Error::last_os_error())?;
+	}
+
+	let res;
+	if unused.read() {
+		unused.write(false);
+		res = scope(this);
+	} else {
+		forget(this);
+		forget(scope);
+		res = checkpoint();
+	}
+
+	guard.invalidate();
+	drop(checkpoint);
+
+	Ok(res)
 }
 
 pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, gate: F, call: fn()) -> Result<()> {
@@ -35,7 +61,20 @@ pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(pe
 
 #[must_use]
 pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>) -> Option<Error> {
-	unimplemented!()
+	use invar::MoveInvariant;
+	use libc::setcontext;
+
+	if ! continuation.id.is_valid() {
+		None?;
+	}
+	continuation.id.invalidate_subsequent();
+
+	continuation.context.borrow_mut().after_move();
+	unsafe {
+		setcontext(continuation.context.as_ptr());
+	}
+
+	Some(Error::last_os_error())
 }
 
 impl Context<Void> {
