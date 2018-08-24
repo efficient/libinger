@@ -101,7 +101,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 		|| Ok(()),
 	)??;
 
-	guard.take().unwrap().invalidate();
+	guard.take().expect("makecontext(): guard was already invalidated! (fell through to successor multiple times?)").invalidate();
 
 	Ok(())
 }
@@ -123,6 +123,12 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 		None?;
 	}
 	continuation.id.invalidate_subsequent();
+	debug_assert!(
+		continuation.persistent.as_ref().map(|persistent|
+			persistent.successor.is_valid()
+		).unwrap_or(true),
+		"setcontext(): makecontext()-generated Context is valid but has an invalid successor!"
+	);
 
 	continuation.context.borrow_mut().after_move();
 	unsafe {
