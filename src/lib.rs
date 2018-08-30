@@ -19,4 +19,6 @@ mod volatile;
 mod zero;
 
 #[doc(inline)]
+pub use swap::Swap;
+#[doc(inline)]
 pub use ucontext::*;

@@ -1,6 +1,8 @@
 extern crate libc;
 extern crate timetravel;
 
+use timetravel::stable::StableMutAddr;
+use timetravel::Context;
 use timetravel::getcontext;
 use timetravel::makecontext;
 use timetravel::restorecontext;
@@ -125,4 +127,84 @@ fn get_nested() {
 		},
 	).unwrap();
 	panic!(format!("{}", reached));
+}
+
+#[test]
+fn swap_unreached() {
+	use libc::SIGSTKSZ;
+	use std::cell::RefCell;
+
+	thread_local! {
+		static CONTEXT: RefCell<Option<Context<Box<[u8]>>>> = RefCell::new(None);
+	}
+
+	let stack: Box<[_]> = Box::new([0u8; 2 * SIGSTKSZ]);
+	makecontext(stack,
+		|thing| {
+			let thing = CONTEXT.with(|context| {
+				let thing: *const _ = context.borrow_mut().get_or_insert(thing);
+				thing
+			});
+			panic!(setcontext(thing));
+		},
+		|| {
+			swap_helper(&mut CONTEXT.with(|context| context.borrow_mut().take()).unwrap());
+			unreachable!();
+		},
+	).unwrap();
+}
+
+fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: &mut Context<T>) {
+	use libc::SA_SIGINFO;
+	use libc::SIGUSR1;
+	use libc::pthread_kill;
+	use libc::pthread_self;
+	use libc::sigaction;
+	use libc::siginfo_t;
+	use std::cell::Cell;
+	use std::io::Error;
+	use std::mem::transmute;
+	use std::mem::zeroed;
+	use std::os::raw::c_int;
+	use std::ptr::null_mut;
+	use timetravel::HandlerContext;
+	use timetravel::Swap;
+
+	thread_local! {
+		static CHECKPOINT: Cell<Option<&'static mut dyn Swap<Other = HandlerContext>>> =
+			Cell::new(None);
+	}
+
+	extern "C" fn handler(
+		_: c_int,
+		_: Option<&mut siginfo_t>,
+		context: Option<&mut HandlerContext>,
+	) {
+		let context = context.unwrap();
+		CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap().swap(context);
+	}
+
+	let config = sigaction {
+		sa_flags: SA_SIGINFO,
+		sa_sigaction: handler as _,
+		sa_restorer: None,
+		sa_mask: unsafe {
+			zeroed()
+		},
+	};
+	if unsafe {
+		sigaction(SIGUSR1, &config, null_mut())
+	} != 0 {
+		panic!(Error::last_os_error());
+	}
+
+	let context: &mut dyn Swap<Other = HandlerContext> = context;
+	let context: Option<&'static mut (dyn Swap<Other = HandlerContext> + 'static)> = Some(unsafe {
+		transmute(context)
+	});
+	CHECKPOINT.with(|checkpoint| checkpoint.set(context));
+
+	unsafe {
+		pthread_kill(pthread_self(), SIGUSR1);
+	}
 }
