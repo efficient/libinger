@@ -7,6 +7,7 @@ use timetravel::getcontext;
 use timetravel::makecontext;
 use timetravel::restorecontext;
 use timetravel::setcontext;
+use timetravel::sigsetcontext;
 
 #[test]
 fn get_expired() {
@@ -129,8 +130,7 @@ fn get_nested() {
 	panic!(format!("{}", reached));
 }
 
-#[test]
-fn swap_unreached() {
+fn swap() -> Context<Box<[u8]>> {
 	use libc::SIGSTKSZ;
 	use std::cell::RefCell;
 
@@ -139,22 +139,37 @@ fn swap_unreached() {
 	}
 
 	let stack: Box<[_]> = Box::new([0u8; 2 * SIGSTKSZ]);
-	makecontext(stack,
+	makecontext(
+		stack,
 		|thing| {
-			let thing = CONTEXT.with(|context| {
-				let thing: *const _ = context.borrow_mut().get_or_insert(thing);
-				thing
+			let thing = CONTEXT.with(|context| -> *const _ {
+				context.borrow_mut().get_or_insert(thing)
 			});
 			panic!(setcontext(thing));
 		},
 		|| {
-			swap_helper(&mut CONTEXT.with(|context| context.borrow_mut().take()).unwrap());
+			let checkpoint = CONTEXT.with(|context| -> *mut _ {
+				context.borrow_mut().as_mut().unwrap()
+			});
+			swap_helper(checkpoint);
 			unreachable!();
 		},
 	).unwrap();
+
+	CONTEXT.with(|context| context.borrow_mut().take()).unwrap()
 }
 
-fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: &mut Context<T>) {
+#[test]
+fn swap_unreached() {
+	swap();
+}
+
+#[test]
+fn swap_expired() {
+	assert!(sigsetcontext(&mut swap()).is_none());
+}
+
+fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
 	use libc::pthread_kill;
@@ -171,7 +186,7 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: &mut Context<T>) {
 	use timetravel::Swap;
 
 	thread_local! {
-		static CHECKPOINT: Cell<Option<&'static mut dyn Swap<Other = HandlerContext>>> =
+		static CHECKPOINT: Cell<Option<*mut dyn Swap<Other = HandlerContext>>> =
 			Cell::new(None);
 	}
 
@@ -180,8 +195,10 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: &mut Context<T>) {
 		_: Option<&mut siginfo_t>,
 		context: Option<&mut HandlerContext>,
 	) {
-		let context = context.unwrap();
-		CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap().swap(context);
+		let checkpoint = unsafe {
+			&mut *CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap()
+		};
+		checkpoint.swap(context.unwrap());
 	}
 
 	let config = sigaction {
@@ -198,8 +215,8 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: &mut Context<T>) {
 		panic!(Error::last_os_error());
 	}
 
-	let context: &mut dyn Swap<Other = HandlerContext> = context;
-	let context: Option<&'static mut (dyn Swap<Other = HandlerContext> + 'static)> = Some(unsafe {
+	let context: *mut dyn Swap<Other = HandlerContext> = context;
+	let context: Option<*mut (dyn Swap<Other = HandlerContext> + 'static)> = Some(unsafe {
 		transmute(context)
 	});
 	CHECKPOINT.with(|checkpoint| checkpoint.set(context));
