@@ -296,8 +296,11 @@ impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 			&mut *link
 		});
 
+		// We mustn't call the member function on the signal HandlerContext because this
+		// will enforce the MoveInvariant, which is *not* correct for such contexts.  So
+		// it's important that we flip the call order around.
 		let HandlerContext (ref mut other) = other;
-		other.swap(&mut this);
+		this.swap(other);
 
 		true
 	}
