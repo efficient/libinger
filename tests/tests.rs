@@ -210,7 +210,7 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 	use timetravel::Swap;
 
 	thread_local! {
-		static CHECKPOINT: Cell<Option<*mut dyn Swap<Other = HandlerContext>>> =
+		static CHECKPOINT: Cell<Option<&'static mut dyn Swap<Other = HandlerContext>>> =
 			Cell::new(None);
 	}
 
@@ -219,9 +219,7 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 		_: Option<&mut siginfo_t>,
 		context: Option<&mut HandlerContext>,
 	) {
-		let checkpoint = unsafe {
-			&mut *CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap()
-		};
+		let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
 		checkpoint.swap(context.unwrap());
 	}
 
@@ -239,8 +237,11 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 		panic!(Error::last_os_error());
 	}
 
-	let context: *mut dyn Swap<Other = HandlerContext> = context;
-	let context: Option<*mut (dyn Swap<Other = HandlerContext> + 'static)> = Some(unsafe {
+	let context = unsafe {
+		&mut *context
+	};
+	let context: &mut dyn Swap<Other = HandlerContext> = context;
+	let context: Option<&'static mut (dyn Swap<Other = HandlerContext> + 'static)> = Some(unsafe {
 		transmute(context)
 	});
 	CHECKPOINT.with(|checkpoint| checkpoint.set(context));
