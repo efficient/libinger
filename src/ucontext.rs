@@ -221,8 +221,8 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
 			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
 			let checkpoint = unsafe {
-				checkpoint.as_mut()
-			}.unwrap();
+				&mut *checkpoint
+			};
 			debug_assert!(checkpoint.swap(context.unwrap()));
 		}
 
