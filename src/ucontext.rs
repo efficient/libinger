@@ -7,6 +7,7 @@ use std::io::Error;
 use std::io::Result;
 use std::ops::DerefMut;
 use std::os::raw::c_int;
+use std::result::Result as StdResult;
 use swap::Swap;
 use uninit::Uninit;
 use void::Void;
@@ -118,7 +119,20 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 	Ok(())
 }
 
-pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(mut persistent: Context<S>, scope: F) -> Result<()> {
+pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(mut persistent: Context<S>, scope: F) -> StdResult<(), Option<Error>> {
+	use platform::Stack;
+
+	// Allow use on contexts from swap(), but not those from sigsetcontext(); the latter never
+	// returns successfully, so we don't intend to allow using it as a checkpoint.
+	let stack_ptr = persistent.context.borrow().stack_ptr();
+	{
+		let stack = &*persistent.persistent.as_ref().unwrap().stack;
+		let stack_base = stack as *const _ as *const u8 as _;
+		if stack_ptr < stack_base || stack_ptr > stack_base + stack.len() {
+			Err(None)?;
+		}
+	}
+
 	getcontext(
 		|successor| {
 			{
@@ -131,7 +145,7 @@ pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(mu
 			scope(persistent);
 		},
 		|| (),
-	)
+	).map_err(|or| Some(or))
 	// The inner context's guard is invalidated as collateral damage upon return from this call.
 }
 
@@ -193,7 +207,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	if ! validatecontext(unsafe {
 		continuation.as_ref()
 	}?, true) {
-		None?
+		None?;
 	}
 
 	let mut err = None;

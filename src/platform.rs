@@ -6,6 +6,10 @@ use swap::Swap;
 use uninit::Uninit;
 use zero::Zero;
 
+pub trait Stack {
+	fn stack_ptr(&self) -> usize;
+}
+
 pub trait Link {
 	fn link(&self) -> &'static mut *mut Self;
 }
@@ -23,6 +27,7 @@ mod imp {
 		pub const NGREG: usize = 23;
 		pub const REG_CSGSFS: usize = 18;
 		pub const REG_RBX: usize = 11;
+		pub const REG_RSP: usize = 15;
 	}
 	#[cfg(not(target_arch = "x86_64"))]
 	compile_error!("registers not defined for this target architecture");
@@ -89,6 +94,13 @@ mod imp {
 		}
 	}
 
+	impl Stack for ucontext_t {
+		#[inline]
+		fn stack_ptr(&self) -> usize {
+			self.uc_mcontext.gregs[REG_RSP] as _
+		}
+	}
+
 	impl Link for ucontext_t {
 		#[inline]
 		fn link(&self) -> &'static mut *mut Self {
@@ -113,6 +125,12 @@ mod imp {
 		type Other = Self;
 
 		fn swap(&mut self, other: &Self::Other) -> bool {
+			unimplemented!()
+		}
+	}
+
+	impl Stack for ucontext_t {
+		fn stack_ptr(&self) -> usize {
 			unimplemented!()
 		}
 	}
