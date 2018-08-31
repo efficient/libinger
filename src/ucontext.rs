@@ -289,26 +289,41 @@ impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 	#[must_use]
 	fn swap(&mut self, other: &mut Self::Other) -> bool {
 		let persistent = self.persistent.as_mut().unwrap();
-		if ! persistent.successor.is_valid() {
-			return false;
+
+		let dest;
+		if persistent.handler {
+			// We're under a call to sigsetcontext(), whose input was already validated.
+			dest = self.id;
+		} else {
+			// This is a direct call from client code; we must validate it.
+			if ! persistent.successor.is_valid() {
+				return false;
+			}
+
+			dest = persistent.successor;
 		}
-		// Blacklist any further use of setcontext() with the successor context.  We're
+
+		// Blacklist any further use of setcontext() with the destination context.  We're
 		// about to restore it for the last time when the current signal handler returns.
-		persistent.successor.invalidate();
+		dest.invalidate();
 		debug_assert!(
 			! self.id.is_valid(),
-			"Context::swap(): invalidating successor's guard did not invalidate my own!"
+			"Context::swap(): invalidating destination guard did not invalidate my own!"
 		);
 
 		// What was originally the call gate will become a checkpoint of the current
 		// preemption point.  Flag it to ensure we restore it using sigsetcontext().
-		persistent.handler = true;
+		persistent.handler = ! persistent.handler;
 
 		let mut this = self.context.borrow_mut();
-		let link = *persistent.link;
-		this.swap(unsafe {
-			&mut *link
-		});
+		if persistent.handler {
+			// If we were invoked directly by client code, perform a three-way swap so
+			// that we restore the successor context rather than the call gate.
+			let link = *persistent.link;
+			this.swap(unsafe {
+				&mut *link
+			});
+		}
 
 		// We mustn't call the member function on the signal HandlerContext because this
 		// will enforce the MoveInvariant, which is *not* correct for such contexts.  So
