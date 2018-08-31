@@ -71,11 +71,11 @@ mod imp {
 			swap(&mut self.uc_mcontext, &mut other.uc_mcontext);
 			swap(&mut self.uc_mcontext.gregs[REG_CSGSFS], &mut other.uc_mcontext.gregs[REG_CSGSFS]);
 
-			let self_fp = &mut unsafe {
-				*self.uc_mcontext.fpregs
+			let self_fp = unsafe {
+				&mut *self.uc_mcontext.fpregs
 			};
-			let other_fp = &mut unsafe {
-				*other.uc_mcontext.fpregs
+			let other_fp = unsafe {
+				&mut *other.uc_mcontext.fpregs
 			};
 			swap(self_fp, other_fp);
 			swap(&mut self.uc_mcontext.fpregs, &mut other.uc_mcontext.fpregs);

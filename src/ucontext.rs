@@ -292,11 +292,11 @@ impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 
 		let mut this = self.context.borrow_mut();
 		let link = *persistent.link;
-		this.swap(&mut unsafe {
-			*link
+		this.swap(unsafe {
+			&mut *link
 		});
 
-		let HandlerContext (other) = other;
+		let HandlerContext (ref mut other) = other;
 		other.swap(&mut this);
 
 		true
