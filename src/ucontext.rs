@@ -220,7 +220,8 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 
 		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
 			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
-			debug_assert!(checkpoint.swap(context.unwrap()));
+			let success = checkpoint.swap(context.unwrap());
+			debug_assert!(success);
 		}
 
 		let config = sigaction {
