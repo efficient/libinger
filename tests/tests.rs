@@ -2,7 +2,6 @@ extern crate libc;
 extern crate timetravel;
 
 use std::cell::Cell;
-use std::thread::LocalKey;
 use timetravel::stable::StableMutAddr;
 use timetravel::Context;
 use timetravel::getcontext;
@@ -132,13 +131,20 @@ fn get_nested() {
 	panic!(format!("{}", reached));
 }
 
-fn swap() -> (Context<Box<[u8]>>, &'static LocalKey<Cell<bool>>) {
+fn swap(afterparty: Option<fn()>) -> Context<Box<[u8]>> {
 	use libc::SIGSTKSZ;
 	use std::cell::RefCell;
 
 	thread_local! {
 		static CONTEXT: RefCell<Option<Context<Box<[u8]>>>> = RefCell::new(None);
-		static REACHED: Cell<bool> = Cell::new(false);
+		static AFTERPARTY: Cell<fn()> = Cell::new(default);
+	}
+
+	fn default() { unreachable!(); }
+	if let Some(fun) = afterparty {
+		AFTERPARTY.with(|afterparty| afterparty.set(fun));
+	} else {
+		AFTERPARTY.with(|afterparty| afterparty.set(default));
 	}
 
 	let stack: Box<[_]> = Box::new([0u8; 2 * SIGSTKSZ]);
@@ -155,42 +161,43 @@ fn swap() -> (Context<Box<[u8]>>, &'static LocalKey<Cell<bool>>) {
 				context.borrow_mut().as_mut().unwrap()
 			});
 			swap_helper(checkpoint);
-			REACHED.with(|reached| reached.set(true));
+			AFTERPARTY.with(|afterparty| afterparty.get())();
 		},
 	).unwrap();
 
-	(CONTEXT.with(|context| context.borrow_mut().take()).unwrap(), &REACHED)
+	CONTEXT.with(|context| context.borrow_mut().take()).unwrap()
 }
 
 #[test]
 fn swap_unreached() {
-	let (_, reached) = swap();
-	assert!(! reached.with(|reached| reached.get()));
+	swap(None);
 }
 
 #[test]
 fn swap_expired() {
-	let (mut checkpoint, reached) = swap();
-	assert!(sigsetcontext(&mut checkpoint).is_none());
-	assert!(! reached.with(|reached| reached.get()));
+	assert!(sigsetcontext(&mut swap(None)).is_none());
 }
 
 #[should_panic(expected = "true")]
 #[test]
 fn swap_incorrect() {
 	let mut none = false;
-	let (checkpoint, reached) = swap();
-	restorecontext(checkpoint, |checkpoint| none = setcontext(&checkpoint).is_none()).unwrap();
-	assert!(! reached.with(|reached| reached.get()));
+	restorecontext(swap(None), |checkpoint| none = setcontext(&checkpoint).is_none()).unwrap();
 	panic!(format!("{}", none));
 }
 
 #[should_panic(expected = "true")]
 #[test]
 fn swap_reached() {
-	let (checkpoint, reached) = swap();
-	restorecontext(checkpoint, |mut checkpoint| panic!(sigsetcontext(&mut checkpoint))).unwrap();
-	panic!(format!("{}", reached.with(|reached| reached.get())));
+	thread_local! {
+		static REACHED: Cell<bool> = Cell::new(false);
+	}
+
+	restorecontext(
+		swap(Some(|| REACHED.with(|reached| reached.set(true)))),
+		|mut checkpoint| panic!(sigsetcontext(&mut checkpoint))
+	).unwrap();
+	panic!(format!("{}", REACHED.with(|reached| reached.get())));
 }
 
 fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
