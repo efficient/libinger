@@ -201,7 +201,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 
 	static INIT: Once = ONCE_INIT;
 	thread_local! {
-		static CHECKPOINT: Cell<Option<*mut dyn Swap<Other = HandlerContext>>> = Cell::new(None);
+		static CHECKPOINT: Cell<Option<&'static mut dyn Swap<Other = HandlerContext>>> = Cell::new(None);
 	}
 
 	if ! validatecontext(unsafe {
@@ -220,9 +220,6 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 
 		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
 			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
-			let checkpoint = unsafe {
-				&mut *checkpoint
-			};
 			debug_assert!(checkpoint.swap(context.unwrap()));
 		}
 
@@ -242,7 +239,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 		return Some(err);
 	}
 
-	let continuation: *mut dyn Swap<Other = HandlerContext> = continuation as _;
+	let continuation: *mut dyn Swap<Other = HandlerContext> = continuation;
 	CHECKPOINT.with(|checkpoint| checkpoint.set(Some(unsafe {
 		transmute(continuation)
 	})));
