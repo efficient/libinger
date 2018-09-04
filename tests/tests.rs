@@ -200,6 +200,41 @@ fn swap_reached() {
 	panic!(format!("{}", REACHED.with(|reached| reached.get())));
 }
 
+#[should_panic(expected = "true")]
+#[test]
+fn swap_repeated() {
+	use std::cell::RefCell;
+
+	thread_local! {
+		static CHECKPOINT: RefCell<Option<Context<Box<[u8]>>>> = RefCell::new(None);
+		static REACHED: Cell<bool> = Cell::new(false);
+	}
+
+	let checkpoint = swap(Some(|| {
+		swap_helper(CHECKPOINT.with(|checkpoint| -> *mut _ {
+			checkpoint.borrow_mut().as_mut().unwrap()
+		}));
+		REACHED.with(|reached| reached.set(true));
+	}));
+
+	restorecontext(
+		checkpoint,
+		|checkpoint| {
+			let checkpoint = CHECKPOINT.with(|point| -> *mut _ {
+				point.borrow_mut().get_or_insert(checkpoint)
+			});
+			panic!(sigsetcontext(checkpoint));
+		},
+	).unwrap();
+	assert!(! REACHED.with(|reached| reached.get()));
+
+	restorecontext(
+		CHECKPOINT.with(|checkpoint| checkpoint.borrow_mut().take()).unwrap(),
+		|mut checkpoint| panic!(sigsetcontext(&mut checkpoint)),
+	).unwrap();
+	panic!(format!("{}", REACHED.with(|reached| reached.get())));
+}
+
 fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
