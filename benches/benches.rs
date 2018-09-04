@@ -96,3 +96,21 @@ fn make_timetravel(lo: &mut Bencher) {
 	let mut stack = [0u8; MINSIGSTKSZ];
 	lo.iter(|| makecontext(&mut stack[..], |_| (), || ()));
 }
+
+#[bench]
+fn makeset_native(lo: &mut Bencher) {
+	use libc::setcontext;
+
+	make_helper(lo, |gate| unsafe {
+		setcontext(&gate)
+	});
+}
+
+#[bench]
+fn makeset_timetravel(lo: &mut Bencher) {
+	use timetravel::makecontext;
+	use timetravel::setcontext;
+
+	let mut stack = [0u8; MINSIGSTKSZ];
+	lo.iter(|| makecontext(&mut stack[..], |gate| panic!(setcontext(&gate)), || ()));
+}
