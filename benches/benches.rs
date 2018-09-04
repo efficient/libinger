@@ -5,6 +5,7 @@ extern crate test;
 extern crate timetravel;
 
 use libc::MINSIGSTKSZ;
+use libc::ucontext_t;
 use std::mem::uninitialized;
 use std::ptr::read_volatile;
 use std::ptr::write_volatile;
@@ -26,10 +27,8 @@ fn get_timetravel(lo: &mut Bencher) {
 	lo.iter(|| getcontext(|_| (), || ()));
 }
 
-#[bench]
-fn getset_native(lo: &mut Bencher) {
+fn get_helper<T, F: FnMut(ucontext_t) -> T>(lo: &mut Bencher, mut fun: F) {
 	use libc::getcontext;
-	use libc::setcontext;
 
 	lo.iter(|| {
 		let mut initial = true;
@@ -38,9 +37,18 @@ fn getset_native(lo: &mut Bencher) {
 			getcontext(&mut context);
 			if read_volatile(&initial) {
 				write_volatile(&mut initial, false);
-				setcontext(&context);
+				fun(context);
 			}
 		}
+	});
+}
+
+#[bench]
+fn getset_native(lo: &mut Bencher) {
+	use libc::setcontext;
+
+	get_helper(lo, |context| unsafe {
+		setcontext(&context)
 	});
 }
 
@@ -52,42 +60,33 @@ fn getset_timetravel(lo: &mut Bencher) {
 	lo.iter(|| getcontext(|context| setcontext(&context), || None));
 }
 
-#[bench]
-fn make_native(lo: &mut Bencher) {
+fn make_helper<T, F: FnMut(ucontext_t) -> T>(lo: &mut Bencher, mut fun: F) {
 	use libc::getcontext;
 	use libc::makecontext;
 
 	extern "C" fn stub() {}
 
 	let mut stack = [0u8; MINSIGSTKSZ];
-	lo.iter(|| {
-		let mut initial = true;
-		let mut context = unsafe {
+	get_helper(lo, |mut context| {
+		let mut gate = unsafe {
 			uninitialized()
 		};
 		unsafe {
-			getcontext(&mut context);
+			getcontext(&mut gate);
 		}
-		if unsafe {
-			read_volatile(&initial)
-		} {
-			unsafe {
-				write_volatile(&mut initial, false);
-			}
-			let mut gate = unsafe {
-				uninitialized()
-			};
-			unsafe {
-				getcontext(&mut gate);
-			}
-			gate.uc_stack.ss_sp = stack.as_mut_ptr() as _;
-			gate.uc_stack.ss_size = stack.len();
-			gate.uc_link = &mut context;
-			unsafe {
-				makecontext(&mut gate, stub, 0);
-			}
+		gate.uc_stack.ss_sp = stack.as_mut_ptr() as _;
+		gate.uc_stack.ss_size = stack.len();
+		gate.uc_link = &mut context;
+		unsafe {
+			makecontext(&mut gate, stub, 0);
 		}
+		fun(gate);
 	});
+}
+
+#[bench]
+fn make_native(lo: &mut Bencher) {
+	make_helper(lo, |_| ());
 }
 
 #[bench]
