@@ -1,3 +1,5 @@
+//! A library for safely working with continuations.
+
 extern crate libc;
 
 #[cfg(debug_assertions)]

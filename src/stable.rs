@@ -1,3 +1,5 @@
+//! Markers for allocation structures that never change the addresses of their owned members.
+
 use std::cell::Ref;
 use std::cell::RefMut;
 use std::ops::Deref;

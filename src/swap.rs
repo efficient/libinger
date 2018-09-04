@@ -1,3 +1,4 @@
+///! Exchange contents.
 pub trait Swap {
 	type Other;
 
