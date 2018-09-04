@@ -1,10 +1,13 @@
 use id::Id;
 use libc::SIGVTALRM;
+use libc::sigset_t;
 use libc::ucontext_t;
 use stable::StableMutAddr;
 use std::cell::RefCell;
+use std::cell::RefMut;
 use std::io::Error;
 use std::io::Result;
+use std::ops::Deref;
 use std::ops::DerefMut;
 use std::os::raw::c_int;
 use std::result::Result as StdResult;
@@ -28,6 +31,8 @@ struct Persistent<S: DerefMut<Target = [u8]>> {
 	successor: Id,
 	handler: bool,
 }
+
+pub struct SignalMask<'a> (RefMut<'a, ucontext_t>);
 
 pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, mut checkpoint: B) -> Result<T> {
 	use libc::getcontext;
@@ -279,6 +284,10 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 			persistent,
 		}
 	}
+
+	pub fn mask(&mut self) -> SignalMask {
+		SignalMask (self.context.borrow_mut())
+	}
 }
 
 impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
@@ -330,6 +339,22 @@ impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 		this.swap(other);
 
 		true
+	}
+}
+
+impl<'a> Deref for SignalMask<'a> {
+	type Target = sigset_t;
+
+	fn deref(&self) -> &Self::Target {
+		let SignalMask (this) = self;
+		&this.uc_sigmask
+	}
+}
+
+impl<'a> DerefMut for SignalMask<'a> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		let SignalMask (this) = self;
+		&mut this.uc_sigmask
 	}
 }
 
