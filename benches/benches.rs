@@ -65,11 +65,10 @@ fn getset_timetravel(lo: &mut Bencher) {
 	lo.iter(|| getcontext(|context| setcontext(&context), || None));
 }
 
-fn make_helper<T, F: FnMut(ucontext_t) -> T>(gated: extern "C" fn(), mut fun: F) {
+fn make_helper<T, F: FnMut(ucontext_t) -> T>(stack: &mut [u8], gated: extern "C" fn(), mut fun: F) {
 	use libc::getcontext;
 	use libc::makecontext;
 
-	let mut stack = [0u8; MINSIGSTKSZ];
 	get_helper(|mut context| {
 		let mut gate = unsafe {
 			uninitialized()
@@ -91,7 +90,7 @@ fn make_helper<T, F: FnMut(ucontext_t) -> T>(gated: extern "C" fn(), mut fun: F)
 fn make_native(lo: &mut Bencher) {
 	extern "C" fn stub() {}
 
-	lo.iter(|| make_helper(stub, |_| ()));
+	lo.iter(|| make_helper(&mut [0u8; MINSIGSTKSZ][..], stub, |_| ()));
 }
 
 #[bench]
@@ -108,7 +107,7 @@ fn makeset_native(lo: &mut Bencher) {
 
 	extern "C" fn stub() {}
 
-	lo.iter(|| make_helper(stub, |gate| unsafe {
+	lo.iter(|| make_helper(&mut [0u8; MINSIGSTKSZ][..], stub, |gate| unsafe {
 		setcontext(&gate)
 	}));
 }
