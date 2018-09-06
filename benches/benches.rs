@@ -145,6 +145,71 @@ fn swapsig_helper(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&
 }
 
 #[bench]
+fn swapsig_native(lo: &mut Bencher) {
+	use libc::getcontext;
+	use libc::setcontext;
+	use lifetimes::unbound_mut;
+	use std::mem::transmute;
+	use timetravel::Swap;
+
+	static mut CHECKPOINT: Option<&'static mut ucontext_t> = None;
+	static mut GATE: Option<&'static mut ucontext_t> = None;
+	static mut LO: Option<&'static mut Bencher> = None;
+
+	extern "C" fn checkpoint(_: c_int, _: Option<&mut siginfo_t>, context: Option<&mut ucontext_t>) {
+		let context = context.unwrap();
+		unsafe {
+			GATE.as_mut()
+		}.unwrap().swap(context);
+
+		let mut checkpoint: ucontext_t = **unsafe {
+			CHECKPOINT.as_ref()
+		}.unwrap();
+		checkpoint.swap(context);
+	}
+
+	extern "C" fn restore(_: c_int, _: Option<&mut siginfo_t>, context: Option<&mut ucontext_t>) {
+		unsafe {
+			GATE.as_mut()
+		}.unwrap().swap(context.unwrap());
+	}
+
+	extern "C" fn benchmark() {
+		let checkpoint: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>) = checkpoint;
+		unsafe {
+			LO.as_mut()
+		}.unwrap().iter(|| swapsig_helper(unsafe {
+			transmute(checkpoint)
+		}));
+	}
+
+	let restore: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>) = restore;
+	unsafe {
+		LO = Some(unbound_mut(lo));
+	}
+	make_helper(&mut [0u8; SIGSTKSZ][..], benchmark, |mut gate| {
+		unsafe {
+			GATE = Some(unbound_mut(&mut gate));
+		}
+		get_helper(|mut checkpoint| unsafe {
+			CHECKPOINT = Some(unbound_mut(&mut checkpoint));
+			setcontext(&mut gate);
+		});
+
+		let mut checkpoint = unsafe {
+			uninitialized()
+		};
+		unsafe {
+			CHECKPOINT = Some(unbound_mut(&mut checkpoint));
+			getcontext(&mut checkpoint);
+		}
+		swapsig_helper(unsafe {
+			transmute(restore)
+		});
+	});
+}
+
+#[bench]
 fn swapsig_timetravel(lo: &mut Bencher) {
 	use lifetimes::unbound_mut;
 	use timetravel::Context;
