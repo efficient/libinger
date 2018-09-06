@@ -8,6 +8,7 @@ extern crate timetravel;
 mod lifetimes;
 
 use libc::MINSIGSTKSZ;
+use libc::SIGSTKSZ;
 use libc::siginfo_t;
 use libc::ucontext_t;
 use std::mem::uninitialized;
@@ -164,7 +165,7 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 		}.unwrap().swap(context.unwrap());
 	}
 
-	let stack: Box<[_]> = Box::new([0u8; MINSIGSTKSZ]);
+	let stack: Box<[_]> = Box::new([0u8; SIGSTKSZ]);
 	drop(makecontext(
 		stack,
 		|gate| {
