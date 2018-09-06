@@ -4,12 +4,18 @@ extern crate libc;
 extern crate test;
 extern crate timetravel;
 
+#[allow(dead_code)]
+mod lifetimes;
+
 use libc::MINSIGSTKSZ;
+use libc::siginfo_t;
 use libc::ucontext_t;
 use std::mem::uninitialized;
+use std::os::raw::c_int;
 use std::ptr::read_volatile;
 use std::ptr::write_volatile;
 use test::Bencher;
+use timetravel::HandlerContext;
 
 #[bench]
 fn get_native(lo: &mut Bencher) {
@@ -113,4 +119,88 @@ fn makeset_timetravel(lo: &mut Bencher) {
 
 	let mut stack = [0u8; MINSIGSTKSZ];
 	lo.iter(|| makecontext(&mut stack[..], |gate| panic!(setcontext(&gate)), || ()));
+}
+
+fn swapsig_helper(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut HandlerContext>)) {
+	use libc::SA_SIGINFO;
+	use libc::SIGUSR1;
+	use libc::pthread_kill;
+	use libc::pthread_self;
+	use libc::sigaction;
+	use std::mem::zeroed;
+	use std::ptr::null_mut;
+
+	let config = sigaction {
+		sa_flags: SA_SIGINFO,
+		sa_sigaction: handler as _,
+		sa_restorer: None,
+		sa_mask: unsafe {
+			zeroed()
+		},
+	};
+	unsafe {
+		sigaction(SIGUSR1, &config, null_mut());
+		pthread_kill(pthread_self(), SIGUSR1);
+	}
+}
+
+#[bench]
+fn swapsig_timetravel(lo: &mut Bencher) {
+	use lifetimes::unbound_mut;
+	use timetravel::Context;
+	use timetravel::Swap;
+	use timetravel::makecontext;
+	use timetravel::restorecontext;
+	use timetravel::setcontext;
+	use timetravel::sigsetcontext;
+
+	static mut CHECKPOINT: Option<Context<Box<[u8]>>> = None;
+	static mut GOING: bool = true;
+	static mut LO: Option<&'static mut Bencher> = None;
+
+	extern "C" fn handler(_: c_int, _: Option<&mut siginfo_t>, context: Option<&mut HandlerContext>) {
+		unsafe {
+			CHECKPOINT.as_mut()
+		}.unwrap().swap(context.unwrap());
+	}
+
+	let stack: Box<[_]> = Box::new([0u8; MINSIGSTKSZ]);
+	drop(makecontext(
+		stack,
+		|gate| {
+			let gate = unsafe {
+				CHECKPOINT.get_or_insert(gate)
+			};
+			unsafe {
+				LO = Some(unbound_mut(lo));
+			}
+			panic!(setcontext(gate));
+		},
+		|| {
+			unsafe {
+				LO.as_mut()
+			}.unwrap().iter(|| swapsig_helper(handler));
+			unsafe {
+				GOING = false;
+			}
+		},
+	));
+
+	while {
+		drop(restorecontext(
+			unsafe {
+				CHECKPOINT.take()
+			}.unwrap(),
+			|checkpoint| {
+				let checkpoint = unsafe {
+					CHECKPOINT.get_or_insert(checkpoint)
+				};
+				panic!(sigsetcontext(checkpoint));
+			},
+		));
+
+		unsafe {
+			GOING
+		}
+	} {}
 }
