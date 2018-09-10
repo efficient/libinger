@@ -243,7 +243,6 @@ fn stack_inbounds(within: &ucontext_t, stack: &[u8]) -> bool {
 #[cfg_attr(test, test)]
 fn killswap_makecontext() {
 	use libc::MINSIGSTKSZ;
-	use libc::uintptr_t;
 	use std::cell::Cell;
 
 	thread_local! {
