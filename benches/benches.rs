@@ -121,6 +121,27 @@ fn makeset_timetravel(lo: &mut Bencher) {
 	lo.iter(|| makecontext(&mut stack[..], |gate| panic!(setcontext(&gate)), || ()));
 }
 
+#[bench]
+fn swapsig_fork(lo: &mut Bencher) {
+	use libc::fork;
+	use libc::waitpid;
+	use std::process::exit;
+	use std::ptr::null_mut;
+
+	lo.iter(|| {
+		let pid = unsafe {
+			fork()
+		};
+		if pid == 0 {
+			exit(0);
+		} else {
+			unsafe {
+				waitpid(pid, null_mut(), 0);
+			}
+		}
+	});
+}
+
 fn swapsig_helper(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut HandlerContext>)) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
