@@ -123,11 +123,25 @@ fn makeset_timetravel(lo: &mut Bencher) {
 
 #[bench]
 fn swapsig_fork(lo: &mut Bencher) {
+	use libc::CPU_SET;
+	use libc::CPU_ZERO;
 	use libc::fork;
+	use libc::pthread_self;
+	use libc::pthread_setaffinity_np;
+	use libc::sched_getcpu;
 	use libc::waitpid;
+	use std::mem::size_of_val;
 	use std::process::exit;
 	use std::ptr::null_mut;
 
+	let mut cpus = unsafe {
+		uninitialized()
+	};
+	unsafe {
+		CPU_ZERO(&mut cpus);
+		CPU_SET(sched_getcpu() as _, &mut cpus);
+		pthread_setaffinity_np(pthread_self(), size_of_val(&cpus), &cpus);
+	}
 	lo.iter(|| {
 		let pid = unsafe {
 			fork()
