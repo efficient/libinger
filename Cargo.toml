@@ -7,3 +7,6 @@ crate-type = ["dylib"]
 
 [dependencies]
 libc = "0.2.36"
+
+[dependencies.timetravel]
+path = "external/libtimetravel"

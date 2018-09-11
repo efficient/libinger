@@ -3,6 +3,7 @@
 extern crate libc;
 #[cfg(bench)]
 extern crate test;
+extern crate timetravel;
 
 mod compile_assert;
 mod continuation;

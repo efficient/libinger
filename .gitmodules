@@ -1,0 +1,4 @@
+[submodule "libtimetravel"]
+	path = external/libtimetravel
+	url = ../libinger
+	branch = timetravel
