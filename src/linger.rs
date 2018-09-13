@@ -18,6 +18,7 @@ use std::cmp::max;
 use std::cmp::min;
 pub use std::io::Error;
 use std::io::Result;
+use std::mem::uninitialized;
 use std::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 use std::panic::resume_unwind;
@@ -38,7 +39,9 @@ use time::timeval;
 use timetravel::HandlerContext;
 use timetravel::Swap;
 use timetravel::makecontext;
+use timetravel::restorecontext;
 use timetravel::setcontext;
+use timetravel::sigsetcontext;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 const TIME_QUANTUM_DIVISOR: u64 = 3;
@@ -140,8 +143,26 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 				panic!("launch(): Call gate expired before it was ever used!");
 			}
 		},
-		LaunchResume::Resume((mut cont, mut inuations)) => {
-			unimplemented!();
+		LaunchResume::Resume((mut cont, inuations)) => {
+			let mut call_stack = CallStack::lock();
+			let checkpoint = cont.pause_resume;
+			cont.pause_resume = unsafe {
+				uninitialized()
+			};
+			restorecontext(
+				checkpoint,
+				|checkpoint| {
+					cont.nested = Some(inuations);
+					cont.pause_resume = checkpoint;
+					call_stack.push(cont);
+					drop(call_stack);
+					preemptor();
+				},
+			).map_err(|or| if let Some(or) = or {
+				or
+			} else {
+				panic!("resume(): Checkpoint could not be restored!")
+			})?;
 		},
 	}
 
@@ -197,6 +218,8 @@ fn preemptor() {
 	let index = call_stack.len() - 1;
 
 	let thunk;
+	let checkpoint: *mut _;
+	let nested;
 	let time_out;
 	{
 		let frame = call_stack.last_mut().unwrap();
@@ -204,6 +227,8 @@ fn preemptor() {
 		thunk = unsafe {
 			ptr.as_mut()
 		}.unwrap();
+		checkpoint = &mut frame.pause_resume;
+		nested = frame.nested.take();
 
 		let time_limit = frame.time_limit;
 		maybe_update_quantum(max(time_limit / TIME_QUANTUM_DIVISOR, 1));
@@ -221,8 +246,29 @@ fn preemptor() {
 		}
 	});
 
-	drop(call_stack);
-	thunk();
+	if let Some(mut nested) = nested {
+		if ! nested.is_empty() {
+			let quantum = nested.iter()
+				.map(|frame| frame.time_limit).min()
+				.unwrap_or(u64::max_value()) / TIME_QUANTUM_DIVISOR;
+			maybe_update_quantum(quantum);
+
+			let ts = nsnow();
+			for frame in nested.iter_mut() {
+				frame.time_out += ts;
+			}
+
+			call_stack.append(&mut nested);
+			search_update_earliest(&call_stack);
+		}
+
+		drop(nested);
+		drop(call_stack);
+		panic!(format!("resume(): Failed to restore checkpoint, error {:?}", sigsetcontext(checkpoint)));
+	} else {
+		drop(call_stack);
+		thunk();
+	}
 }
 
 extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut HandlerContext>) {
@@ -235,14 +281,16 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut Han
 		CallStack::preempt()
 	} {
 		if let Some(index) = EARLIEST.with(|earliest| earliest.get()) {
-			let frame = &mut call_stack[index];
-			if nsnow() < frame.time_out {
-				return;
-			}
-			frame.time_out = 0;
+			{
+				let frame = &mut call_stack[index];
+				if nsnow() < frame.time_out {
+					return;
+				}
+				frame.time_out = 0;
 
-			let sigctxt = sigctxt.unwrap();
-			frame.pause_resume.swap(&mut sigctxt);
+				let mut sigctxt = sigctxt.unwrap();
+				frame.pause_resume.swap(&mut sigctxt);
+			}
 
 			// No more preemptions until resume() has finished bundling up the
 			// continuation, at which point they will be automatically reenabled

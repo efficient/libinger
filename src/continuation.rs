@@ -11,6 +11,7 @@ thread_local! {
 
 pub struct UntypedContinuation {
 	pub thunk: Box<FnMut()>,
+	pub nested: Option<Vec<UntypedContinuation>>,
 	pub time_limit: u64,
 	pub time_out: u64,
 	pub pause_resume: Context<Box<[u8]>>,
@@ -20,6 +21,7 @@ impl UntypedContinuation {
 	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64, context: Context<Box<[u8]>>) -> Self {
 		Self {
 			thunk: Box::new(thunk),
+			nested: None,
 			time_limit: timeout,
 			time_out: 0,
 			pause_resume: context,
