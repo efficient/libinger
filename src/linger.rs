@@ -225,8 +225,8 @@ fn preemptor() {
 		let frame = call_stack.last_mut().unwrap();
 		let ptr: *mut _ = &mut *frame.thunk;
 		thunk = unsafe {
-			ptr.as_mut()
-		}.unwrap();
+			&mut *ptr
+		};
 		checkpoint = &mut frame.pause_resume;
 		nested = frame.nested.take();
 
