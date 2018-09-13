@@ -1,4 +1,5 @@
 use continuation::CallStack;
+use continuation::CallStackLock;
 use continuation::UntypedContinuation;
 use libc::SA_RESTART;
 use libc::SA_SIGINFO;
@@ -6,7 +7,6 @@ use libc::__errno_location;
 use libc::siginfo_t;
 use libc::suseconds_t;
 use libc::time_t;
-use libc::ucontext_t;
 use signal::Action;
 use signal::Set;
 use signal::Sigaction;
@@ -35,13 +35,12 @@ use time::Timer;
 use time::itimerval;
 use time::setitimer;
 use time::timeval;
-use ucontext::REG_CSGSFS;
-use ucontext::getcontext;
-use ucontext::makecontext;
-use ucontext::setcontext;
-use ucontext::sigsetcontext;
-use ucontext::swap;
+use timetravel::HandlerContext;
+use timetravel::Swap;
+use timetravel::makecontext;
+use timetravel::setcontext;
 
+const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 const TIME_QUANTUM_DIVISOR: u64 = 3;
 
 static QUANTUM: AtomicUsize = ATOMIC_USIZE_INIT;
@@ -87,8 +86,15 @@ impl<T, F: FnMut() -> T> Linger<T, F> {
 }
 
 pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Result<Linger<T, F>> {
+	use libc::ucontext_t;
+	use std::mem::transmute;
+
 	static INIT_HANDLER: Once = ONCE_INIT;
 	INIT_HANDLER.call_once(|| {
+		let preempt: extern "C" fn(Signal, Option<&siginfo_t>, Option<&mut HandlerContext>) = preempt;
+		let preempt: extern "C" fn(Signal, Option<&siginfo_t>, Option<&mut ucontext_t>) = unsafe {
+			transmute(preempt)
+		};
 		let handler = Sigaction::new(preempt, Sigset::empty(), SA_SIGINFO | SA_RESTART);
 		sigaction(Signal::Alarm, &handler, None).unwrap();
 	});
@@ -101,73 +107,45 @@ pub fn launch<T: 'static, F: 'static + FnMut() -> T>(fun: F, us: u64) -> Result<
 
 pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, us: u64) -> Result<Linger<T, F>> {
 	let mut res = funs.result;
-	let mut call_stack = CallStack::lock()?;
+	match funs.function {
+		LaunchResume::Launch(mut thunk) => {
+			let mut err = None;
+			let mut call_stack = CallStack::lock();
+			let stack: Box<[_]> = Box::new([0u8; STACK_SIZE_BYTES]);
+			makecontext(
+				stack,
+				|call_gate| {
+					let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
+					res = Rc::downgrade(&ult);
 
-	// The call_stack must be locked before this line; otherwise, SIGALRM will be unblocked in
-	// the context's mask and preemption will be possible during the second trip to this line
-	// via setcontext()!
-	if let Some(first_time_here) = getcontext()? {
-		match funs.function {
-			LaunchResume::Launch(mut thunk) => {
-				let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
-				res = Rc::downgrade(&ult);
-				let thunk = move || {
-					let res = catch_unwind(AssertUnwindSafe (&mut thunk));
-					EARLIEST.with(|earliest| earliest.set(None));
-					ult.set(res);
-				};
+					let thunk = move || {
+						let res = catch_unwind(AssertUnwindSafe (&mut thunk));
+						EARLIEST.with(|earliest| earliest.set(None));
+						ult.set(res);
+					};
+					let frame = UntypedContinuation::new(thunk, us, call_gate);
+					call_stack.push(frame);
 
-				let mut frame = UntypedContinuation::new(thunk, us, first_time_here);
-				let mut call_gate = makecontext(preemptor, &mut frame.stack,
-					Some(&mut frame.pause_resume))?;
-				call_stack.push(frame);
+					let call_gate: *const _ = &call_stack[call_stack.len() - 1].pause_resume;
+					drop(call_stack);
+					err = Some(setcontext(call_gate));
+				},
+				preemptor,
+			)?;
 
-				drop(call_stack);
-				setcontext(&mut call_gate)?;
-			},
-			LaunchResume::Resume((mut cont, mut inuations)) => {
-				use ucontext::fixupcontext;
-
-				let mut checkpoint = *cont.pause_resume;
-				*cont.pause_resume = first_time_here;
-				fixupcontext(&mut cont.pause_resume);
-				checkpoint.uc_link = &mut *cont.pause_resume;
-
-				let thunk = cont.thunk;
-				let thunk = Box::new(move || {
-					let _ = thunk;
-
-					if ! inuations.is_empty() {
-						let mut call_stack = CallStack::lock().unwrap();
-
-						let quantum = inuations.iter()
-							.map(|frame| frame.time_limit).min()
-							.unwrap_or(u64::max_value()) / TIME_QUANTUM_DIVISOR;
-						maybe_update_quantum(quantum);
-
-						let ts = nsnow();
-						for frame in inuations.iter_mut() {
-							frame.time_out += ts;
-						}
-
-						call_stack.append(&mut inuations);
-						search_update_earliest(&call_stack);
-					}
-
-					sigsetcontext(&mut checkpoint).unwrap();
-				});
-				cont.thunk = thunk;
-				cont.time_limit = us;
-
-				call_stack.push(cont);
-
-				drop(call_stack);
-				preemptor();
-			},
-		}
+			if let Some(err) = err {
+				if let Some(err) = err {
+					Err(err)?;
+				}
+				panic!("launch(): Call gate expired before it was ever used!");
+			}
+		},
+		LaunchResume::Resume((mut cont, mut inuations)) => {
+			unimplemented!();
+		},
 	}
 
-	let mut call_stack = CallStack::lock()?;
+	let mut call_stack = CallStack::lock();
 	let index = EARLIEST.with(|earliest| earliest.take())
 		.map(|earliest| earliest + 1).unwrap_or(call_stack.len());
 	let mut tail = call_stack.split_off(index);
@@ -203,7 +181,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 	})
 }
 
-extern "C" fn preemptor() {
+fn preemptor() {
 	// If we got preempted before taking this lock, we would never be able to resume() this
 	// invocation's continuation because we wouldn't yet have captured the address of the
 	// original thunk closure.  However, one cannot actually construct such a scenario:
@@ -215,7 +193,7 @@ extern "C" fn preemptor() {
 	// frame's continuation.  If said continuation is later resumed, we'll continue from here;
 	// otherwise, we'll be cleaned up along with it, and resume()'ing will no longer be possible
 	// in any case.
-	let mut call_stack = CallStack::lock().unwrap();
+	let mut call_stack = CallStack::lock();
 	let index = call_stack.len() - 1;
 
 	let thunk;
@@ -247,7 +225,7 @@ extern "C" fn preemptor() {
 	thunk();
 }
 
-extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut ucontext_t>) {
+extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut HandlerContext>) {
 	let errno = unsafe {
 		__errno_location().as_mut()
 	}.unwrap();
@@ -264,13 +242,11 @@ extern "C" fn preempt(_: Signal, _: Option<&siginfo_t>, sigctxt: Option<&mut uco
 			frame.time_out = 0;
 
 			let sigctxt = sigctxt.unwrap();
-			let segs = sigctxt.uc_mcontext.gregs[REG_CSGSFS];
-			swap(sigctxt, &mut *frame.pause_resume);
-			sigctxt.uc_mcontext.gregs[REG_CSGSFS] = segs;
+			frame.pause_resume.swap(&mut sigctxt);
 
 			// No more preemptions until resume() has finished bundling up the
 			// continuation, at which point they will be automatically reenabled
-			sigctxt.uc_sigmask.add(Signal::Alarm);
+			call_stack.lock();
 		}
 	}
 

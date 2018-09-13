@@ -1,36 +1,28 @@
-use guard::PreemptGuard;
-use libc::ucontext_t;
+use std::cell::Cell;
 use std::cell::RefMut;
-use std::io::Error;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::thread::AccessError;
+use timetravel::Context;
 
-const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
+thread_local! {
+	static BLOCK: Cell<bool> = Cell::new(false);
+}
 
 pub struct UntypedContinuation {
 	pub thunk: Box<FnMut()>,
 	pub time_limit: u64,
 	pub time_out: u64,
-	pub pause_resume: Box<ucontext_t>,
-	pub stack: Box<[u8]>,
+	pub pause_resume: Context<Box<[u8]>>,
 }
 
 impl UntypedContinuation {
-	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64, context: ucontext_t) -> Self {
-		use ucontext::fixupcontext;
-
-		let mut context = Box::new(context);
-		fixupcontext(&mut context);
-
+	pub fn new<T: 'static + FnMut()>(thunk: T, timeout: u64, context: Context<Box<[u8]>>) -> Self {
 		Self {
 			thunk: Box::new(thunk),
 			time_limit: timeout,
 			time_out: 0,
-			// We must box the context so its address won't change if a collection
-			// relocates the UntypedContinuation that contains it!
 			pause_resume: context,
-			stack: vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
 		}
 	}
 }
@@ -40,26 +32,24 @@ pub struct CallStack<'a> (Option<RefMut<'a, Vec<UntypedContinuation>>>);
 
 impl CallStack<'static> {
 	/// Returns a guard that holds preemption disabled throughout its lifetime.
-	///
-	/// Note that a preemption signal is asserted upon releasing the guard.  **As such, calling
-	/// this from the associated signal handler will cause the latter to be invoked endlessly!**
-	pub fn lock() -> Result<Self, Error> {
-		use std::mem::forget;
-
-		// Prevent preemption before we run any RefCell code!
-		forget(PreemptGuard::block()?);
+	pub fn lock() -> Self {
+		BLOCK.with(|block| block.set(true));
 
 		// Assert because we should never find ourselves lock()'ing during teardown.
-		Ok(CallStack (Some(call_stack_handle().unwrap())))
+		CallStack (Some(call_stack_handle().unwrap()))
 	}
 
-	/// Similar to `lock()`, but merely assumes that preemption is already disabled.
+	/// Similar to `lock()`, but only succeeds if the call stack is presently unlocked.
 	///
-	/// This function is only safe to call when preemption is impossible (e.g. while inside a
-	/// signal handler; misuse opens the underlying RefCell to concurrency violations.  Returns
-	/// an error if invoked during thread teardown.
-	pub unsafe fn preempt() -> Result<RefMut<'static, Vec<UntypedContinuation>>, AccessError> {
-		Ok(call_stack_handle()?)
+	/// On success, the returned guard will **not** reenable preemption when it dies.
+	/// On failure, returns a `Concurrency` error if the call stack is currently `lock()`'d, or
+	/// a `Teardown` error if invoked during thread teardown.
+	pub unsafe fn preempt() -> Result<RefMut<'static, Vec<UntypedContinuation>>, CallStackError> {
+		if BLOCK.with(|block| block.get()) {
+			Err(CallStackError::Concurrency)?;
+		}
+
+		Ok(call_stack_handle().map_err(|or| CallStackError::Teardown(or))?)
 	}
 }
 
@@ -79,14 +69,23 @@ impl<'a> DerefMut for CallStack<'a> {
 
 impl<'a> Drop for CallStack<'a> {
 	fn drop(&mut self) {
-		let empty = self.0.as_ref().unwrap().is_empty();
 		self.0.take();
-
-		if ! empty {
-			PreemptGuard::unblock().unwrap();
-		}
+		BLOCK.with(|block| block.set(false));
 	}
 }
+
+pub enum CallStackError {
+	Concurrency,
+	Teardown(AccessError),
+}
+
+pub trait CallStackLock {
+	fn lock(&self) {
+		BLOCK.with(|block| block.set(true));
+	}
+}
+
+impl CallStackLock for Vec<UntypedContinuation> {}
 
 fn call_stack_handle() -> Result<RefMut<'static, Vec<UntypedContinuation>>, AccessError> {
 	use std::cell::RefCell;
