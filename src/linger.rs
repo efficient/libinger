@@ -157,6 +157,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 
 					cont.nested = Some(inuations);
 					cont.pause_resume = checkpoint;
+					cont.time_limit = us;
 					call_stack.push(cont);
 					drop(call_stack);
 					preemptor();
