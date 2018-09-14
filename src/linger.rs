@@ -117,9 +117,10 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 			let stack = vec![0u8; STACK_SIZE_BYTES].into_boxed_slice();
 			makecontext(
 				stack,
-				|call_gate| {
+				|mut call_gate| {
 					let ult: Rc<Cell<PanicResult<T>>> = Rc::new(Cell::new(Err(Box::new(()))));
 					res = Rc::downgrade(&ult);
+					call_gate.mask().del(Signal::Alarm);
 
 					let thunk = move || {
 						let res = catch_unwind(AssertUnwindSafe (&mut thunk));
@@ -151,7 +152,9 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 			};
 			restorecontext(
 				checkpoint,
-				|checkpoint| {
+				|mut checkpoint| {
+					checkpoint.mask().del(Signal::Alarm);
+
 					cont.nested = Some(inuations);
 					cont.pause_resume = checkpoint;
 					call_stack.push(cont);
