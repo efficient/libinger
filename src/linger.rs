@@ -114,7 +114,7 @@ pub fn resume<T: 'static, F: 'static + FnMut() -> T>(funs: Continuation<T, F>, u
 		LaunchResume::Launch(mut thunk) => {
 			let mut err = None;
 			let mut call_stack = CallStack::lock();
-			let stack: Box<[_]> = Box::new([0u8; STACK_SIZE_BYTES]);
+			let stack = vec![0u8; STACK_SIZE_BYTES].into_boxed_slice();
 			makecontext(
 				stack,
 				|call_gate| {
