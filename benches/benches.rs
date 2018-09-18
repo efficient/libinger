@@ -156,26 +156,58 @@ fn swapsig_fork(lo: &mut Bencher) {
 	});
 }
 
-fn swapsig_helper<T: ContextRefMut>(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<T>)) {
+// Pass None to reset the internal state at the start of a new test.
+fn swapsig_helper<T: ContextRefMut>(handler: Option<extern "C" fn(c_int, Option<&mut siginfo_t>, Option<T>)>) -> impl FnMut() {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
+	use libc::SIGUSR2;
 	use libc::pthread_kill;
 	use libc::pthread_self;
 	use libc::sigaction;
+	use std::cell::RefCell;
+	use std::collections::VecDeque;
 	use std::mem::zeroed;
 	use std::ptr::null_mut;
 
-	let config = sigaction {
-		sa_flags: SA_SIGINFO,
-		sa_sigaction: handler as _,
-		sa_restorer: None,
-		sa_mask: unsafe {
-			zeroed()
-		},
-	};
-	unsafe {
-		sigaction(SIGUSR1, &config, null_mut());
-		pthread_kill(pthread_self(), SIGUSR1);
+	const SIGNUMS: [c_int; 2] = [SIGUSR1, SIGUSR2];
+
+	// This assumes the benchmarks are *not* run in parallel!
+	thread_local! {
+		static SIGNALS: RefCell<VecDeque<c_int>> = RefCell::new(SIGNUMS.iter().cloned().collect());
+	}
+	let signal = SIGNALS.with(|signals| signals.borrow_mut().pop_front());
+	let mut setup = None;
+	if let Some(handler) = handler {
+		setup = Some(sigaction {
+			sa_flags: SA_SIGINFO,
+			sa_sigaction: handler as _,
+			sa_restorer: None,
+			sa_mask: unsafe {
+				zeroed()
+			},
+		});
+	} else {
+		SIGNALS.with(|signals| {
+			let mut signals = signals.borrow_mut();
+			signals.clear();
+			for signal in SIGNUMS.iter() {
+				signals.push_back(*signal);
+			}
+		});
+	}
+
+	move || {
+		let signal = signal.unwrap();
+
+		if let Some(setup) = setup.take() {
+			unsafe {
+				sigaction(signal, &setup, null_mut());
+			}
+		}
+
+		unsafe {
+			pthread_kill(pthread_self(), signal);
+		}
 	}
 }
 
@@ -211,9 +243,13 @@ fn swapsig_native(lo: &mut Bencher) {
 	extern "C" fn benchmark() {
 		unsafe {
 			LO.as_mut()
-		}.unwrap().iter(|| swapsig_helper(checkpoint));
+		}.unwrap().iter(swapsig_helper(Some(checkpoint)));
 	}
 
+	let reset: Option<Handler> = None;
+	swapsig_helper(reset);
+
+	let mut swapsig_helper = swapsig_helper(Some(restore));
 	unsafe {
 		LO = Some(unbound_mut(lo));
 	}
@@ -233,7 +269,7 @@ fn swapsig_native(lo: &mut Bencher) {
 			CHECKPOINT = Some(unbound_mut(&mut checkpoint));
 			getcontext(&mut checkpoint);
 		}
-		swapsig_helper(restore);
+		swapsig_helper();
 	});
 }
 
@@ -257,6 +293,9 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 		}.unwrap().swap(context.unwrap());
 	}
 
+	let reset: Option<Handler> = None;
+	swapsig_helper(reset);
+
 	let stack: Box<[_]> = Box::new([0u8; SIGSTKSZ]);
 	drop(makecontext(
 		stack,
@@ -272,7 +311,7 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 		|| {
 			unsafe {
 				LO.as_mut()
-			}.unwrap().iter(|| swapsig_helper(handler));
+			}.unwrap().iter(swapsig_helper(Some(handler)));
 			unsafe {
 				GOING = false;
 			}
@@ -301,3 +340,5 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 trait ContextRefMut {}
 impl<'a> ContextRefMut for &'a mut HandlerContext {}
 impl<'a> ContextRefMut for &'a mut ucontext_t {}
+
+type Handler = extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>);
