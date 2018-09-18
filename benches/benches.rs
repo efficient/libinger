@@ -156,7 +156,7 @@ fn swapsig_fork(lo: &mut Bencher) {
 	});
 }
 
-fn swapsig_helper(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut HandlerContext>)) {
+fn swapsig_helper<T: ContextRefMut>(handler: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<T>)) {
 	use libc::SA_SIGINFO;
 	use libc::SIGUSR1;
 	use libc::pthread_kill;
@@ -184,7 +184,6 @@ fn swapsig_native(lo: &mut Bencher) {
 	use libc::getcontext;
 	use libc::setcontext;
 	use lifetimes::unbound_mut;
-	use std::mem::transmute;
 	use timetravel::Swap;
 
 	static mut CHECKPOINT: Option<&'static mut ucontext_t> = None;
@@ -210,15 +209,11 @@ fn swapsig_native(lo: &mut Bencher) {
 	}
 
 	extern "C" fn benchmark() {
-		let checkpoint: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>) = checkpoint;
 		unsafe {
 			LO.as_mut()
-		}.unwrap().iter(|| swapsig_helper(unsafe {
-			transmute(checkpoint)
-		}));
+		}.unwrap().iter(|| swapsig_helper(checkpoint));
 	}
 
-	let restore: extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>) = restore;
 	unsafe {
 		LO = Some(unbound_mut(lo));
 	}
@@ -238,9 +233,7 @@ fn swapsig_native(lo: &mut Bencher) {
 			CHECKPOINT = Some(unbound_mut(&mut checkpoint));
 			getcontext(&mut checkpoint);
 		}
-		swapsig_helper(unsafe {
-			transmute(restore)
-		});
+		swapsig_helper(restore);
 	});
 }
 
@@ -304,3 +297,7 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 		}
 	} {}
 }
+
+trait ContextRefMut {}
+impl<'a> ContextRefMut for &'a mut HandlerContext {}
+impl<'a> ContextRefMut for &'a mut ucontext_t {}
