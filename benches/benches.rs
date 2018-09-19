@@ -339,13 +339,28 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 
 #[bench]
 fn cswitch_yield(lo: &mut Bencher) {
+	use libc::CPU_SET;
+	use libc::CPU_ZERO;
+	use libc::pthread_self;
+	use libc::pthread_setaffinity_np;
+	use libc::sched_getcpu;
 	use libc::sched_yield;
+	use std::mem::size_of_val;
 	use std::sync::atomic::ATOMIC_BOOL_INIT;
 	use std::sync::atomic::AtomicBool;
 	use std::sync::atomic::Ordering;
 	use std::thread::spawn;
 
 	static FINISHED: AtomicBool = ATOMIC_BOOL_INIT;
+
+	let mut cpus = unsafe {
+		uninitialized()
+	};
+	unsafe {
+		CPU_ZERO(&mut cpus);
+		CPU_SET(sched_getcpu() as _, &mut cpus);
+		pthread_setaffinity_np(pthread_self(), size_of_val(&cpus), &cpus);
+	}
 
 	let thread = spawn(|| while ! FINISHED.load(Ordering::Relaxed) {
 		unsafe {
