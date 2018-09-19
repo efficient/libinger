@@ -377,6 +377,28 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 	} {}
 }
 
+#[bench]
+fn cswitch_yield(lo: &mut Bencher) {
+	use libc::sched_yield;
+	use std::sync::atomic::ATOMIC_BOOL_INIT;
+	use std::sync::atomic::AtomicBool;
+	use std::sync::atomic::Ordering;
+	use std::thread::spawn;
+
+	static FINISHED: AtomicBool = ATOMIC_BOOL_INIT;
+
+	let thread = spawn(|| while ! FINISHED.load(Ordering::Relaxed) {
+		unsafe {
+			sched_yield();
+		}
+	});
+	lo.iter(|| unsafe {
+		sched_yield();
+	});
+	FINISHED.store(true, Ordering::Relaxed);
+	thread.join().unwrap();
+}
+
 trait ContextRefMut {}
 impl<'a> ContextRefMut for &'a mut HandlerContext {}
 impl<'a> ContextRefMut for &'a mut ucontext_t {}
