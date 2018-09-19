@@ -212,6 +212,16 @@ fn swapsig_helper<T: ContextRefMut>(handler: Option<extern "C" fn(c_int, Option<
 }
 
 #[bench]
+fn swapsig_handler(lo: &mut Bencher) {
+	extern "C" fn handler(_: c_int, _: Option<&mut siginfo_t>, _: Option<&mut ucontext_t>) {}
+
+	let reset: Option<Handler> = None;
+	swapsig_helper(reset);
+
+	lo.iter(swapsig_helper(Some(handler)));
+}
+
+#[bench]
 fn swapsig_native(lo: &mut Bencher) {
 	use libc::getcontext;
 	use libc::setcontext;
