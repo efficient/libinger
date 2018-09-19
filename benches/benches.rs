@@ -212,46 +212,6 @@ fn swapsig_helper<T: ContextRefMut>(handler: Option<extern "C" fn(c_int, Option<
 }
 
 #[bench]
-fn swapsig_handler(lo: &mut Bencher) {
-	use std::cell::Cell;
-	use std::time::SystemTime;
-
-	thread_local! {
-		static ONE_WAY: Cell<(u32, i64)> = Cell::default();
-	}
-
-	fn now() -> i64 {
-		let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-		(now.as_secs() * 1_000_000_000 + now.subsec_nanos() as u64) as _
-	}
-
-	extern "C" fn handler(_: c_int, _: Option<&mut siginfo_t>, _: Option<&mut ucontext_t>) {
-		ONE_WAY.with(|one_way| {
-			let (count, duration) = one_way.take();
-			one_way.replace((count, duration + now()));
-		});
-	}
-
-	let reset: Option<Handler> = None;
-	swapsig_helper(reset);
-
-	let mut swapsig_helper = swapsig_helper(Some(handler));
-	lo.iter(|| {
-		ONE_WAY.with(|one_way| {
-			let (count, duration) = one_way.take();
-			one_way.replace((count + 1, duration - now()));
-		});
-		swapsig_helper();
-	});
-
-	ONE_WAY.with(|one_way| {
-		let (count, duration) = one_way.take();
-		let spaces: String = (0..26).map(|_| ' ').collect();
-		println!("{}one-way: {:11} ns/iter", spaces, duration / count as i64);
-	});
-}
-
-#[bench]
 fn swapsig_native(lo: &mut Bencher) {
 	use libc::getcontext;
 	use libc::setcontext;
@@ -397,6 +357,46 @@ fn cswitch_yield(lo: &mut Bencher) {
 	});
 	FINISHED.store(true, Ordering::Relaxed);
 	thread.join().unwrap();
+}
+
+#[bench]
+fn cswitch_handler(lo: &mut Bencher) {
+	use std::cell::Cell;
+	use std::time::SystemTime;
+
+	thread_local! {
+		static ONE_WAY: Cell<(u32, i64)> = Cell::default();
+	}
+
+	fn now() -> i64 {
+		let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+		(now.as_secs() * 1_000_000_000 + now.subsec_nanos() as u64) as _
+	}
+
+	extern "C" fn handler(_: c_int, _: Option<&mut siginfo_t>, _: Option<&mut ucontext_t>) {
+		ONE_WAY.with(|one_way| {
+			let (count, duration) = one_way.take();
+			one_way.replace((count, duration + now()));
+		});
+	}
+
+	let reset: Option<Handler> = None;
+	swapsig_helper(reset);
+
+	let mut swapsig_helper = swapsig_helper(Some(handler));
+	lo.iter(|| {
+		ONE_WAY.with(|one_way| {
+			let (count, duration) = one_way.take();
+			one_way.replace((count + 1, duration - now()));
+		});
+		swapsig_helper();
+	});
+
+	ONE_WAY.with(|one_way| {
+		let (count, duration) = one_way.take();
+		let spaces: String = (0..26).map(|_| ' ').collect();
+		println!("{}one-way: {:11} ns/iter", spaces, duration / count as i64);
+	});
 }
 
 trait ContextRefMut {}
