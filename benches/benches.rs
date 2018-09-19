@@ -337,6 +337,45 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 	} {}
 }
 
+#[derive(Clone)]
+#[derive(Copy)]
+struct Latency {
+	count: u32,
+	duration: i64,
+}
+
+impl Latency {
+	const NEW: Self = Self {
+		count: 0,
+		duration: 0,
+	};
+
+	fn now() -> i64 {
+		use std::time::SystemTime;
+
+		let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
+		(now.as_secs() * 1_000_000_000 + now.subsec_nanos() as u64) as _
+	}
+
+	fn log_entry(&self) -> Latency {
+		Self {
+			count: self.count + 1,
+			duration: self.duration - Self::now(),
+		}
+	}
+
+	fn log_exit(&self) -> Latency {
+		Self {
+			count: self.count,
+			duration: self.duration + Self::now(),
+		}
+	}
+
+	fn mean(&self) -> i64 {
+		self.duration / self.count as i64
+	}
+}
+
 #[bench]
 fn cswitch_yield(lo: &mut Bencher) {
 	use libc::CPU_SET;
@@ -377,22 +416,13 @@ fn cswitch_yield(lo: &mut Bencher) {
 #[bench]
 fn cswitch_handler(lo: &mut Bencher) {
 	use std::cell::Cell;
-	use std::time::SystemTime;
 
 	thread_local! {
-		static ONE_WAY: Cell<(u32, i64)> = Cell::default();
-	}
-
-	fn now() -> i64 {
-		let now = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-		(now.as_secs() * 1_000_000_000 + now.subsec_nanos() as u64) as _
+		static ONE_WAY: Cell<Latency> = Cell::new(Latency::NEW);
 	}
 
 	extern "C" fn handler(_: c_int, _: Option<&mut siginfo_t>, _: Option<&mut ucontext_t>) {
-		ONE_WAY.with(|one_way| {
-			let (count, duration) = one_way.take();
-			one_way.replace((count, duration + now()));
-		});
+		ONE_WAY.with(|one_way| one_way.replace(one_way.get().log_exit()));
 	}
 
 	let reset: Option<Handler> = None;
@@ -400,17 +430,13 @@ fn cswitch_handler(lo: &mut Bencher) {
 
 	let mut swapsig_helper = swapsig_helper(Some(handler));
 	lo.iter(|| {
-		ONE_WAY.with(|one_way| {
-			let (count, duration) = one_way.take();
-			one_way.replace((count + 1, duration - now()));
-		});
+		ONE_WAY.with(|one_way| one_way.replace(one_way.get().log_entry()));
 		swapsig_helper();
 	});
 
 	ONE_WAY.with(|one_way| {
-		let (count, duration) = one_way.take();
 		let spaces: String = (0..26).map(|_| ' ').collect();
-		println!("{}one-way: {:11} ns/iter", spaces, duration / count as i64);
+		println!("{}one-way: {:11} ns/iter", spaces, one_way.get().mean());
 	});
 }
 
