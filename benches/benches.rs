@@ -371,6 +371,10 @@ impl Latency {
 		}
 	}
 
+	fn log_interrupting(&self) -> bool {
+		self.duration < 0
+	}
+
 	fn mean(&self) -> i64 {
 		self.duration / self.count as i64
 	}
@@ -391,6 +395,7 @@ fn cswitch_yield(lo: &mut Bencher) {
 	use std::thread::spawn;
 
 	static FINISHED: AtomicBool = ATOMIC_BOOL_INIT;
+	static mut ONE_WAY: Latency = Latency::NEW;
 
 	let mut cpus = unsafe {
 		uninitialized()
@@ -403,14 +408,25 @@ fn cswitch_yield(lo: &mut Bencher) {
 
 	let thread = spawn(|| while ! FINISHED.load(Ordering::Relaxed) {
 		unsafe {
+			if ONE_WAY.log_interrupting() {
+				ONE_WAY = ONE_WAY.log_exit();
+			}
 			sched_yield();
 		}
 	});
 	lo.iter(|| unsafe {
+		if ! ONE_WAY.log_interrupting() {
+			ONE_WAY = ONE_WAY.log_entry();
+		}
 		sched_yield();
 	});
 	FINISHED.store(true, Ordering::Relaxed);
 	thread.join().unwrap();
+
+	let spaces: String = (0..26).map(|_| ' ').collect();
+	println!("{}one-way: {:11} ns/iter", spaces, unsafe {
+		ONE_WAY.mean()
+	});
 }
 
 #[bench]
