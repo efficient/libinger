@@ -1,3 +1,5 @@
+/mirror.rs
+
 *.a
 *.o
 *.so
