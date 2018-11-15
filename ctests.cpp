@@ -1,4 +1,5 @@
 #include "error.h"
+#include "ctestfuns.h"
 extern "C" {
 #include "mirror_object_containing.h"
 }
@@ -14,6 +15,7 @@ using std::cout;
 using std::endl;
 
 static enum error contained_in_executable(const link_map *, const char *);
+static enum error contained_in_library(const link_map *, const char *);
 
 static void fun(void) {}
 
@@ -35,6 +37,23 @@ static void executable_contains_fn(void) {
 	test_object_containing(contained_in_executable, &fun);
 }
 
+static void library_contains_func(void) {
+	test_object_containing(contained_in_library, (void *) make_func);
+	test_object_containing(contained_in_library, (void *) make_func());
+}
+
+static void library_contains_fnc(void) {
+	test_object_containing(contained_in_library, (void *) make_fnc);
+	test_object_containing(contained_in_library, (void *) make_fnc());
+}
+
+static void library_contains_fn(void) {
+	test_object_containing(contained_in_library, (void *) make_fn);
+
+	auto fun = make_fn();
+	test_object_containing(contained_in_library, &fun);
+}
+
 static const struct {
 	const char *const name;
 	void (*const func)(void);
@@ -42,6 +61,9 @@ static const struct {
 	{"executable_contains_func", executable_contains_func},
 	{"executable_contains_fnc", executable_contains_fnc},
 	{"executable_contains_fn", executable_contains_fn},
+	{"library_contains_func", library_contains_func},
+	{"library_contains_fnc", library_contains_fnc},
+	{"library_contains_fn", library_contains_fn},
 };
 
 static bool passed;
@@ -89,5 +111,18 @@ static enum error contained_in_executable(const link_map *l, const char *fname) 
 	extern const char *__progname_full;
 	assert(fname);
 	check_eq(__progname_full, fname);
+	return SUCCESS;
+}
+
+static enum error contained_in_library(const link_map *l, const char *fname) {
+	(void) l;
+
+	static char lname[PATH_MAX];
+	if(!*lname) {
+		auto succ = realpath("./libctestfuns.so", lname);
+		assert(succ);
+	}
+	assert(fname);
+	check_eq(lname, fname);
 	return SUCCESS;
 }
