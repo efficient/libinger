@@ -3,11 +3,16 @@ RUSTC := rustc
 
 override BINDFLAGS := --default-enum-style rust $(BINDFLAGS)
 override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
+override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
 override RUSTFLAGS := -O $(RUSTFLAGS)
 
 libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
 libgotcha.rlib: libmirror_object.a mirror.rs
+
+ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
+ctests: private LDLIBS += -ldl
+ctests: libmirror_object.a
 
 libmirror_object.a: error.o mirror_object_containing.o
 
