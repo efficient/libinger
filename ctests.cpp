@@ -69,12 +69,25 @@ static const struct {
 static bool passed;
 
 int main(int argc, const char **argv) {
-	bool failed = false;
+	auto (*search)(const char *, const char *) = strstr;
+	auto filter = (bool (*)(const char *, const char *)) search;
+	int argb = 1;
+	if(argc > 1 && *argv[argb] == '-') {
+		if(strcmp(argv[argb], "--exact")) {
+			printf("USAGE: %s [[--exact] <filter>...]\n", argv[0]);
+			return 1;
+		}
+		filter = [](const char *left, const char *right) {
+			return !strcmp(left, right);
+		};
+		++argb;
+	}
 
+	bool failed = false;
 	for(auto test : TESTS) {
 		bool found = argc == 1;
-		for(int arg = 1; arg < argc; ++arg)
-			if((found = strstr(test.name, argv[arg])))
+		for(int arg = argb; arg < argc; ++arg)
+			if((found = filter(test.name, argv[arg])))
 				break;
 		if(!found)
 			continue;

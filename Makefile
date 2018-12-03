@@ -10,6 +10,7 @@ libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
 libgotcha.rlib: libmirror_object.a mirror.rs
 
+ctests: private CXXFLAGS += -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl
 ctests: libmirror_object.a libctestfuns.so
