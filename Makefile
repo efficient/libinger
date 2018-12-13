@@ -10,12 +10,12 @@ libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
 libgotcha.rlib: libmirror_object.a mirror.rs
 
-ctests: private CXXFLAGS += -Wno-cast-function-type
+ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl
 ctests: libmirror_object.a libctestfuns.so
 
-libmirror_object.a: error.o mirror_object_containing.o
+libmirror_object.a: error.o handle.o mirror_object_containing.o
 
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h

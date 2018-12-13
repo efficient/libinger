@@ -1,6 +1,7 @@
 #include "error.h"
 #include "ctestfuns.h"
 extern "C" {
+#include "handle.h"
 #include "mirror_object_containing.h"
 }
 
@@ -16,6 +17,7 @@ using std::endl;
 
 static enum error contained_in_executable(const link_map *, const char *);
 static enum error contained_in_library(const link_map *, const char *);
+static void assert_success(enum error);
 
 static void fun(void) {}
 
@@ -54,6 +56,22 @@ static void library_contains_fn(void) {
 	test_object_containing(contained_in_library, &fun);
 }
 
+static bool passed;
+
+static void executable_handle_init(void) {
+	struct handle h;
+	const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
+	assert_success(handle_init(&h, l));
+}
+
+static void library_handle_init(void) {
+	struct handle h;
+	const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
+	while(!strstr(l->l_name, "/libctestfuns.so"))
+		l = l->l_next;
+	assert_success(handle_init(&h, l));
+}
+
 static const struct {
 	const char *const name;
 	void (*const func)(void);
@@ -64,9 +82,9 @@ static const struct {
 	{"library_contains_func", library_contains_func},
 	{"library_contains_fnc", library_contains_fnc},
 	{"library_contains_fn", library_contains_fn},
+	{"executable_handle_init", executable_handle_init},
+	{"library_handle_init", library_handle_init},
 };
-
-static bool passed;
 
 int main(int argc, const char **argv) {
 	auto (*search)(const char *, const char *) = strstr;
@@ -138,4 +156,10 @@ static enum error contained_in_library(const link_map *l, const char *fname) {
 	assert(fname);
 	check_eq(lname, fname);
 	return SUCCESS;
+}
+
+static void assert_success(enum error code) {
+	if(code != SUCCESS)
+		cerr << "warning: exited with error code " << code << endl;
+	assert(code == SUCCESS);
 }
