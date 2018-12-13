@@ -8,12 +8,14 @@ override RUSTFLAGS := -O $(RUSTFLAGS)
 
 libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
-libgotcha.rlib: libmirror_object.a mirror.rs
+libgotcha.rlib: libmirror_object.a mirror.rs whitelist_copy.rs
+
+libgotcha.a: libmirror_object.a mirror.rs whitelist_copy.rs
 
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
-ctests: private LDLIBS += -ldl
-ctests: libmirror_object.a libctestfuns.so
+ctests: private LDLIBS += -ldl -lpthread
+ctests: libgotcha.a libctestfuns.so
 
 libmirror_object.a: error.o handle.o mirror_object_containing.o
 
@@ -40,6 +42,10 @@ clean:
 
 lib%.a: %.o
 	$(AR) rs $@ $^
+
+lib%.a: %.rs
+	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type staticlib $< $(LDLIBS)
+	if [ -e $*.mri ]; then ar -M <$*.mri; fi
 
 lib%.rlib: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type rlib $< $(LDLIBS)

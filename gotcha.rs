@@ -1,4 +1,5 @@
 mod mirror;
+mod whitelist_copy;
 
 pub use mirror::error;
 #[doc(hidden)]
@@ -9,6 +10,8 @@ use std::fmt::Debug;
 use std::fmt::Error as FmtError;
 use std::fmt::Formatter;
 use std::os::raw::c_char;
+#[doc(hidden)]
+pub use whitelist_copy::*;
 
 pub struct Error {
 	pub error: error,

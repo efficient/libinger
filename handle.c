@@ -1,5 +1,7 @@
 #include "handle.h"
 
+#include "whitelist.h"
+
 #include <sys/mman.h>
 #include <assert.h>
 #include <fcntl.h>
@@ -168,7 +170,11 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 		case R_X86_64_TLSDESC:
 		case R_X86_64_TPOFF64:
 		case R_X86_64_COPY:
-		case R_X86_64_IRELATIVE:
+		case R_X86_64_IRELATIVE: {
+			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
+			if(whitelist_copy_contains(h->strtab + st->st_name))
+				continue;
+
 			if(!sh) {
 				const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
 				assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "Ehdr missing magic");
@@ -187,13 +193,13 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 				sh = (ElfW(Shdr) *) (obj + shoff);
 			}
 
-			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			if(sh[st->st_shndx].sh_flags & SHF_WRITE) {
 				munmap((void *) ((uintptr_t) sh - shoff), shlen);
 				close(fd);
 				return ERROR_UNSUPPORTED_RELOCS;
 			}
 			break;
+		}
 		}
 	h->got_start = (intptr_t) h->got->e - l->l_addr - first;
 	if(sh) {
