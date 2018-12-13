@@ -1,4 +1,3 @@
-#include "error.h"
 #include "mirror_object.h"
 
 #include <assert.h>

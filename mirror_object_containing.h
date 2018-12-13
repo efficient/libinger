@@ -1,7 +1,8 @@
 #ifndef MIRROR_OBJECT_CONTAINING_
 #define MIRROR_OBJECT_CONTAINING_
 
-enum error;
+#include "error.h"
+
 struct link_map;
 
 enum error mirror_object_containing(const void *function);

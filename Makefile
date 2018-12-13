@@ -18,14 +18,14 @@ ctests: libmirror_object.a libctestfuns.so
 libmirror_object.a: error.o mirror_object_containing.o
 
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types)]"
-mirror.rs: error.h mirror_object.h mirror_object_containing.h
+mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
 ctestfuns.o: ctestfuns.h
 error.o: error.h
 mirror_object.o: private CPPFLAGS += -D_DEFAULT_SOURCE
 mirror_object.o: mirror_object.h error.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
-mirror_object_containing.o: mirror_object_containing.h error.h mirror_object.h
+mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
 
 .PHONY: clean
 clean:

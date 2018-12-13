@@ -1,7 +1,8 @@
-#include "error.h"
-#include "mirror_object.h"
 #include "mirror_object_containing.h"
 
+#include "mirror_object.h"
+
+#include <assert.h>
 #include <dlfcn.h>
 #include <stdlib.h>
 
