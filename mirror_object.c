@@ -22,6 +22,9 @@ static const char *progname(void) {
 }
 
 enum error mirror_object(const struct link_map *l, const char *fname) {
+	assert(l);
+	assert(fname);
+
 	if(l->l_name && *l->l_name) {
 		if(fname && strcmp(fname, l->l_name))
 			return ERROR_FNAME_MISMATCH;

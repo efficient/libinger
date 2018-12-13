@@ -14,6 +14,9 @@ enum error test_object_containing(
 	enum error (*plugin)(const struct link_map *, const char *),
 	const void *function
 ) {
+	assert(plugin);
+	assert(function);
+
 	Dl_info dli;
 	struct link_map *l = NULL;
 	if(!dladdr1(function, &dli, (void *) &l, RTLD_DL_LINKMAP))
