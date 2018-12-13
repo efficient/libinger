@@ -22,7 +22,8 @@ mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
 ctestfuns.o: ctestfuns.h
 error.o: error.h
-mirror_object.o: private CPPFLAGS += -D_DEFAULT_SOURCE
+handle.o: private CPPFLAGS += -D_DEFAULT_SOURCE
+handle.o: handle.h error.h
 mirror_object.o: mirror_object.h error.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h

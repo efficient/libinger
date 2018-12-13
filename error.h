@@ -7,6 +7,9 @@ enum error {
 	ERROR_DLI_FNAME,
 	ERROR_FNAME_MISMATCH,
 	ERROR_FNAME_REALPATH,
+	ERROR_OPEN,
+	ERROR_MMAP,
+	ERROR_UNSUPPORTED_RELOCS,
 };
 
 // Returns a statically-allocated string literal broadly describing the error, or NULL on SUCCESS.
