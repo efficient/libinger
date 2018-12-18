@@ -1,4 +1,5 @@
 /ctests
+/handle.rs
 /mirror.rs
 
 *.a

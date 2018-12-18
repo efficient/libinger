@@ -8,9 +8,9 @@ override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
 
 libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
-libgotcha.rlib: libmirror_object.a mirror.rs whitelist_copy.rs
+libgotcha.rlib: libmirror_object.a handle.rs handle_storage.rs mirror.rs whitelist_copy.rs
 
-libgotcha.a: libmirror_object.a mirror.rs whitelist_copy.rs
+libgotcha.a: libmirror_object.a handle.rs handle_storage.rs mirror.rs whitelist_copy.rs
 
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
@@ -19,6 +19,7 @@ ctests: libgotcha.a libctestfuns.so
 
 libmirror_object.a: error.o handle.o mirror_object_containing.o
 
+handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
@@ -26,7 +27,7 @@ ctestfuns.o: ctestfuns.h
 error.o: error.h
 handle.o: private CPPFLAGS += -D_DEFAULT_SOURCE
 handle.o: handle.h error.h
-mirror_object.o: mirror_object.h error.h
+mirror_object.o: mirror_object.h error.h handle.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
 

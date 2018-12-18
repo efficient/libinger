@@ -34,6 +34,12 @@ struct handle {
 };
 
 enum error handle_init(struct handle *, const struct link_map *);
+
+const struct handle *handle_get(
+	const struct link_map *,
+	enum error (*)(struct handle *, const struct link_map *),
+	enum error *);
+
 const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
 
 #endif
