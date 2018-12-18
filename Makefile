@@ -4,7 +4,7 @@ RUSTC := rustc
 override BINDFLAGS := --default-enum-style rust $(BINDFLAGS)
 override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
-override RUSTFLAGS := -O $(RUSTFLAGS)
+override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
 
 libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
