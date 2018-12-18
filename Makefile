@@ -19,7 +19,7 @@ ctests: libgotcha.a libctestfuns.so
 
 libmirror_object.a: error.o handle.o mirror_object_containing.o
 
-mirror.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types)]"
+mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
 ctestfuns.o: ctestfuns.h
