@@ -3,9 +3,9 @@ pub mod mirror;
 #[doc(hidden)]
 pub mod whitelist_copy;
 
-pub use mirror::error;
+pub use crate::mirror::error;
 #[doc(hidden)]
-pub use mirror::link_map;
+pub use crate::mirror::link_map;
 use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt::Debug;
@@ -23,7 +23,7 @@ pub struct Error {
 pub struct ObjectFile (*const link_map);
 
 pub unsafe fn mirror_object_containing<T>(function: &T) -> Result<(), Error> {
-	use mirror::mirror_object;
+	use crate::mirror::mirror_object;
 	use std::mem::transmute;
 
 	let mirror_object: unsafe extern "C" fn(_, _) -> _ = mirror_object;
@@ -36,7 +36,7 @@ pub fn test_object_containing<T>(
 	plugin: extern "C" fn(*const link_map, *const c_char) -> error,
 	function: &T
 ) -> Result<(), Error> {
-	use mirror::test_object_containing;
+	use crate::mirror::test_object_containing;
 
 	Error::from(unsafe {
 		test_object_containing(Some(plugin), function as *const _ as _)
@@ -44,7 +44,7 @@ pub fn test_object_containing<T>(
 }
 
 pub unsafe fn mirror_object(object: ObjectFile, path: Option<&CStr>) -> Result<(), Error> {
-	use mirror::mirror_object;
+	use crate::mirror::mirror_object;
 	use std::ptr::null;
 
 	let ObjectFile (object) = object;
@@ -53,8 +53,8 @@ pub unsafe fn mirror_object(object: ObjectFile, path: Option<&CStr>) -> Result<(
 
 impl Error {
 	fn from(error: error) -> Result<(), Error> {
-		use mirror::error_explanation;
-		use mirror::error_message;
+		use crate::mirror::error_explanation;
+		use crate::mirror::error_message;
 
 		if error == error::SUCCESS {
 			Ok(())
