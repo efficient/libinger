@@ -8,6 +8,10 @@
 #include <string.h>
 
 static enum error hook_object(struct handle *h, const struct link_map *l) {
+	// Do not create a handle for the vdso.
+	if(l->l_name && *l->l_name && *l->l_name != '/')
+		return SUCCESS;
+
 	enum error code = handle_init(h, l);
 	if(code)
 		return code;
