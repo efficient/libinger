@@ -1,6 +1,7 @@
 #include "mirror_object.h"
 
 #include "handle.h"
+#include "whitelist.h"
 
 #include <assert.h>
 #include <link.h>
@@ -19,6 +20,8 @@ enum error mirror_object(const struct link_map *l, const char *fname) {
 	assert(fname);
 	if(l->l_name && *l->l_name && strcmp(l->l_name, fname))
 		return ERROR_FNAME_MISMATCH;
+
+	whitelist_shared_contains(NULL);
 
 	enum error fresh;
 	for(fresh = -1; l && handle_get(l, hook_object, &fresh) && fresh <= SUCCESS; l = l->l_next);

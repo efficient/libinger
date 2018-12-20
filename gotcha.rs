@@ -6,6 +6,8 @@ pub mod handle_storage;
 pub mod mirror;
 #[doc(hidden)]
 pub mod whitelist_copy;
+#[doc(hidden)]
+pub mod whitelist_shared;
 
 pub use crate::mirror::error;
 #[doc(hidden)]

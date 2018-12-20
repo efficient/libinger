@@ -151,6 +151,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 
 	// Dynamic relocation types enumerated in the switch statement in ld.so's dl-machine.h
 	intptr_t first = (intptr_t) &h->got;
+	bool whitelisted_obj = whitelist_so_contains(h->path);
 	const ElfW(Shdr) *sh = NULL;
 	size_t shoff;
 	size_t shlen;
@@ -172,7 +173,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 		case R_X86_64_COPY:
 		case R_X86_64_IRELATIVE: {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
-			if(whitelist_copy_contains(h->strtab + st->st_name))
+			if(whitelisted_obj || whitelist_copy_contains(h->strtab + st->st_name))
 				continue;
 
 			if(!sh) {
