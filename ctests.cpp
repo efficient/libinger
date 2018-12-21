@@ -72,6 +72,15 @@ static void library_handle_init(void) {
 	assert_success(handle_init(&h, l));
 }
 
+static void executable_mirror(void) {
+	assert_success(mirror_object_containing((void *) fun));
+}
+
+static void library_mirror(void) {
+	assert_success(mirror_object_containing((void *) make_func));
+	assert_success(mirror_object_containing((void *) make_func()));
+}
+
 static const struct {
 	const char *const name;
 	void (*const func)(void);
@@ -84,6 +93,8 @@ static const struct {
 	{"library_contains_fn", library_contains_fn},
 	{"executable_handle_init", executable_handle_init},
 	{"library_handle_init", library_handle_init},
+	{"executable_mirror", executable_mirror},
+	{"library_mirror", library_mirror},
 };
 
 int main(int argc, const char **argv) {
