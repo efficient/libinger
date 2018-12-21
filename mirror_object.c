@@ -28,8 +28,8 @@ enum error mirror_object(const struct link_map *l, const char *fname) {
 	whitelist_shared_contains(NULL);
 
 	enum error fresh;
-	for(fresh = -1; l && handle_get(l, hook_object, &fresh) && fresh <= SUCCESS; l = l->l_next);
-	if(fresh > SUCCESS)
+	for(fresh = -1; l && handle_get(l, hook_object, &fresh) && (signed) fresh <= SUCCESS; l = l->l_next);
+	if((signed) fresh > SUCCESS)
 		return fresh;
 
 	return SUCCESS;
