@@ -1,6 +1,7 @@
 #include "error.h"
 #include "ctestfuns.h"
 extern "C" {
+#include "goot.h"
 #include "handle.h"
 #include "mirror_object_containing.h"
 }
@@ -81,6 +82,25 @@ static void library_mirror(void) {
 	assert_success(mirror_object_containing((void *) make_func()));
 }
 
+static void goot_abuse(void) {
+	struct goot table;
+	goot_init(&table);
+
+	struct handle mock;
+	memset(&mock, 0, sizeof mock);
+	mock.got_start = GOT_GAP;
+
+	for(mock.got_len = 1; mock.got_len <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.got_len) {
+		size_t entries;
+		for(entries = 0; goot_insert_lib(&table, &mock); ++entries);
+		assert(entries == PLOT_ENTRIES_PER_PAGE / mock.got_len);
+
+		for(unsigned index = 0; index < PLOT_ENTRIES_PER_PAGE; ++index)
+			assert(goot_remove_lib(&table, index) == (!(index % mock.got_len) &&
+				PLOT_ENTRIES_PER_PAGE - index >= mock.got_len));
+	}
+}
+
 static const struct {
 	const char *const name;
 	void (*const func)(void);
@@ -95,6 +115,7 @@ static const struct {
 	{"library_handle_init", library_handle_init},
 	{"executable_mirror", executable_mirror},
 	{"library_mirror", library_mirror},
+	{"goot_abuse", goot_abuse},
 };
 
 int main(int argc, const char **argv) {
