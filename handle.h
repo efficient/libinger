@@ -23,6 +23,7 @@ struct handle {
 	const char *path;
 	struct got *got;
 	ssize_t got_start;
+	size_t got_len;
 	const ElfW(Rela) *pltrel; // Not always present.
 	const ElfW(Rela) *pltrel_end; // Not always present.
 	const ElfW(Rela) *miscrel;
@@ -41,5 +42,9 @@ const struct handle *handle_get(
 	enum error *);
 
 const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
+
+static inline size_t handle_got_num_entries(const struct handle *h) {
+	return -h->got_start + GOT_GAP + h->got_len;
+}
 
 #endif

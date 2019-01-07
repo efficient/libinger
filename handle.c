@@ -208,5 +208,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 		close(fd);
 	}
 
+	h->got_len = h->pltrel_end - h->pltrel;
+
 	return SUCCESS;
 }

@@ -17,7 +17,7 @@ ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl -lpthread
 ctests: libgotcha.a libctestfuns.so
 
-libmirror_object.a: error.o handle.o mirror_object_containing.o whitelist.o
+libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o whitelist.o
 
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
@@ -25,6 +25,8 @@ mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
 ctestfuns.o: ctestfuns.h
 error.o: error.h
+goot.o: private CPPFLAGS += -D_GNU_SOURCE
+goot.o: goot.h handle.h plot.h
 handle.o: private CPPFLAGS += -D_DEFAULT_SOURCE
 handle.o: handle.h error.h
 mirror_object.o: mirror_object.h error.h handle.h whitelist.h
