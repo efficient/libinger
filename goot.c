@@ -84,12 +84,17 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 
 	const struct handle *object = table->entries[first_index].lib;
 	unsigned entries = handle_got_num_entries(object);
+	unsigned end = first_index + entries - 1;
+	if(end + 1 < PLOT_ENTRIES_PER_PAGE && table->entries[end + 1].free.odd_tag & 0x1)
+		++end;
+	if(end + 1 < PLOT_ENTRIES_PER_PAGE && table->entries[end + 1].free.odd_tag & 0x1)
+		end = table->entries[end].free.next_free;
 	for(unsigned index = first_index; index < first_index + entries; ++index) {
 		union goot_entry *entry = table->entries + index;
 		assert(!(entry->free.odd_tag & 0x1));
 		assert(entry->lib == object);
 		entry->free.odd_tag = 0x1;
-		entry->free.next_free = first_index + entries - 1;
+		entry->free.next_free = end;
 	}
 
 	unsigned next = table->first_free;
@@ -101,13 +106,15 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 			prev = next;
 		next = entry->free.next_free;
 	}
-	table->entries[first_index + entries - 1].free.next_free = next;
+	if(end == first_index + entries - 1)
+		table->entries[end].free.next_free = next;
+
 	if(prev == -1u)
 		table->first_free = first_index;
 	else
 		for(union goot_entry *free = table->entries + prev;
 			free != table->entries + first_index; ++free)
-			free->free.next_free = first_index + entries - 1;
+			free->free.next_free = end;
 
 	return true;
 }
