@@ -45,20 +45,22 @@ bool goot_insert_lib(struct goot *table, const struct handle *object) {
 	for(start = table->first_free; start != -1u && table->entries[start].free.odd_tag & 0x1;) {
 		union goot_entry *entry = table->entries + start;
 		assert(entry->free.odd_tag & 0x1);
-		if(entry->free.next_free - start + 1 >= entries) {
+		if((entry->free.next_free != -1u || entries == 1) &&
+			entry->free.next_free - start + 1 >= entries) {
 			entry += entries - 1;
 			assert(entry->free.odd_tag & 0x1);
 			if(entry->free.next_free == -1u || !(entry[1].free.odd_tag & 0x1))
 				next = entry->free.next_free;
 			else
 				next = start + entries;
-			entry->free.odd_tag = 0x0;
+			entry[1 - (signed) entries].free.odd_tag = 0x0;
 		} else if(entry->free.next_free != -1u) {
 			prev = entry->free.next_free;
 			entry = table->entries + prev;
 			assert(entry->free.odd_tag & 0x1);
 			start = entry->free.next_free;
-		}
+		} else
+			start = -1u;
 	}
 	if(start == -1u)
 		return false;
