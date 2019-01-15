@@ -59,7 +59,7 @@ plot_size:
 
 .globl plot_entries_offset
 plot_entries_offset:
-	.quad plot_template_entries - plot_template
+	.quad plot_template_entries - plot_template - 8
 
 .globl plot_entry_size
 plot_entry_size:
