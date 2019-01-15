@@ -2,7 +2,10 @@
 
 #include "handle.h"
 
+#include <sys/mman.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Each Global Offset Override Table (GOOT) is associated with a particular Procedure Linkage
 // Override Table (PLOT) codepage.  For each trampoline function entry in the latter, we store a
@@ -125,4 +128,40 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 
 	object->shadow->first_entry = -1u;
 	return true;
+}
+
+bool goot_empty(const struct goot *table) {
+	return table->first_free == 0 &&
+		table->entries[0].free.next_free == PLOT_ENTRIES_PER_PAGE - 1 &&
+		table->entries[1].free.odd_tag & 0x1;
+}
+
+const struct plot *plot_alloc(void) {
+	struct goot *goot = malloc(sizeof *goot);
+	if(!goot)
+		return NULL;
+
+	struct plot *plot = mmap(NULL, plot_size, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	if(plot == MAP_FAILED) {
+		free(goot);
+		return NULL;
+	}
+
+	memcpy(plot, &plot_template, plot_size);
+	plot->goot = goot;
+
+	if(mprotect(plot, plot_size, PROT_READ | PROT_EXEC)) {
+		munmap(plot, plot_size);
+		free(goot);
+		return NULL;
+	}
+
+	goot_init(goot);
+	return plot;
+}
+
+void plot_free(const struct plot *plot) {
+	assert(plot != &plot_template && "Attempt to free template PLOT");
+	free(plot->goot);
+	munmap((struct plot *) plot, plot_size);
 }

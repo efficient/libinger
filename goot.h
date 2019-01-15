@@ -26,4 +26,6 @@ bool goot_insert_lib(struct goot *table, struct handle *object);
 // Returns false if the specified entry is already free.
 bool goot_remove_lib(struct goot *table, unsigned first_index);
 
+bool goot_empty(const struct goot *table);
+
 #endif
