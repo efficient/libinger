@@ -34,6 +34,8 @@ handle.o: handle.h error.h
 mirror_object.o: mirror_object.h error.h handle.h whitelist.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
+namespace.o: private CPPFLAGS += -D_GNU_SOURCE
+namespace.o: namespace.h threads.h
 plot.o: CPPFLAGS += -D_asm
 plot.o: plot.h
 whitelist.o: whitelist.h handle.h
