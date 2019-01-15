@@ -21,6 +21,11 @@ extern const size_t plot_size;
 // Relative to code member.
 extern const size_t plot_entries_offset;
 extern const size_t plot_entry_size;
+
+// Idempotent.  Returns NULL if this library's GOT is too big to fit in any GOOT.
+const struct plot *plot_insert_lib(struct handle *);
+
+void plot_remove_lib(struct handle *);
 #endif
 
 #endif

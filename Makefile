@@ -8,9 +8,9 @@ override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
 
 libgotcha.rlib: private RUSTFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
-libgotcha.rlib: libmirror_object.a handle.rs handle_storage.rs mirror.rs whitelist_copy.rs whitelist_shared.rs
+libgotcha.rlib: libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
-libgotcha.a: libmirror_object.a handle.rs handle_storage.rs mirror.rs whitelist_copy.rs whitelist_shared.rs
+libgotcha.a: libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
@@ -19,6 +19,8 @@ ctests: libgotcha.a libctestfuns.so
 
 libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o whitelist.o
 
+goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
+goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
