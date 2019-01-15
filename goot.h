@@ -20,8 +20,8 @@ struct goot {
 
 void goot_init(struct goot *table);
 
-// Returns false if this table doesn't have enough remaining space.
-bool goot_insert_lib(struct goot *table, const struct handle *object);
+// Idempotent.  Returns false if this table doesn't have enough remaining space.
+bool goot_insert_lib(struct goot *table, struct handle *object);
 
 // Returns false if the specified entry is already free.
 bool goot_remove_lib(struct goot *table, unsigned first_index);

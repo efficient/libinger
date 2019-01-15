@@ -19,11 +19,17 @@ struct got {
 	const void *e[];
 };
 
+struct shadow_gots {
+	size_t override_table;
+	unsigned first_entry;
+};
+
 struct handle {
 	const char *path;
 	struct got *got;
 	ssize_t got_start;
 	size_t got_len;
+	struct shadow_gots *shadow; // Not always present, but owned when it is.
 	const ElfW(Rela) *pltrel; // Not always present.
 	const ElfW(Rela) *pltrel_end; // Not always present.
 	const ElfW(Rela) *miscrel;
