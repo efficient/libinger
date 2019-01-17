@@ -10,6 +10,11 @@ enum error {
 	ERROR_OPEN,
 	ERROR_MMAP,
 	ERROR_UNSUPPORTED_RELOCS,
+	ERROR_CALLOC,
+	ERROR_MALLOC,
+	ERROR_LIB_SIZE,
+	ERROR_DLOPEN,
+	ERROR_MPROTECT,
 };
 
 // Returns a statically-allocated string literal broadly describing the error, or NULL on SUCCESS.

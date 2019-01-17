@@ -2,10 +2,10 @@
 #define HANDLE_H_
 
 #include "error.h"
+#include "namespace.h"
 
 #include <sys/types.h>
 #include <link.h>
-#include <stdbool.h>
 
 #define GOT_GAP -3
 
@@ -13,8 +13,8 @@ struct link_map;
 struct sym_hash;
 
 struct got {
-	uint64_t reserved;
-	const struct link_map *l;
+	const uint64_t reserved;
+	struct link_map *l;
 	void (*f)(void);
 	const void *e[];
 };
@@ -22,6 +22,12 @@ struct got {
 struct shadow_gots {
 	size_t override_table;
 	unsigned first_entry;
+
+	// Each of these entries points into a single owned buffer.  Within each ancillary GOT
+	// (i.e., in each namespace with the exception of BASE) lies a strong (owned) reference to
+	// a link_map.  Unlike the main link_map, each of these is owned jointly with any loaded
+	// dependent libraries, and are therefore always dlclose()'d by handle_cleanup().
+	struct got *gots[NUM_SHADOW_NAMESPACES + 1];
 };
 
 struct handle {
@@ -41,6 +47,7 @@ struct handle {
 };
 
 enum error handle_init(struct handle *, const struct link_map *);
+void handle_cleanup(struct handle *);
 
 const struct handle *handle_get(
 	const struct link_map *,
@@ -48,6 +55,9 @@ const struct handle *handle_get(
 	enum error *);
 
 const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
+
+// Idempotent.
+enum error handle_got_shadow(struct handle *);
 
 static inline size_t handle_got_num_entries(const struct handle *h) {
 	return -h->got_start + GOT_GAP + h->got_len;

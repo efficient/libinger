@@ -17,11 +17,13 @@ ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl -lpthread
 ctests: libgotcha.a libctestfuns.so
 
-libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o whitelist.o
+libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o whitelist.o
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
+handle.rs: private CPPFLAGS += -D_GNU_SOURCE
+handle.rs: error.h namespace.h
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
@@ -29,16 +31,18 @@ ctestfuns.o: ctestfuns.h
 error.o: error.h
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
-handle.o: private CPPFLAGS += -D_DEFAULT_SOURCE
-handle.o: handle.h error.h
-mirror_object.o: mirror_object.h error.h handle.h whitelist.h
+handle.o: private CPPFLAGS += -D_GNU_SOURCE
+handle.o: handle.h error.h namespace.h plot.h
+mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
+mirror_object.o: mirror_object.h error.h handle.h namespace.h whitelist.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: CPPFLAGS += -D_asm
 plot.o: plot.h
-whitelist.o: whitelist.h handle.h
+whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
+whitelist.o: whitelist.h handle.h namespace.h
 
 .PHONY: clean
 clean:

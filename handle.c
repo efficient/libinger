@@ -1,11 +1,14 @@
 #include "handle.h"
 
+#include "plot.h"
 #include "whitelist.h"
 
 #include <sys/mman.h>
 #include <assert.h>
+#include <dlfcn.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -74,6 +77,127 @@ static const char *progname(void) {
 	if(!ready && (res = realpath(__progname_full, progname)))
 		ready = true;
 	return res;
+}
+
+static size_t pagesize(void) {
+	static size_t pagesize;
+	static bool ready;
+	if(!ready)
+		pagesize = sysconf(_SC_PAGESIZE);
+	return pagesize;
+}
+
+static enum error load_shadow(struct handle *h, Lmid_t n) {
+	assert(h->shadow);
+	assert(h->shadow->gots[n]);
+
+	const struct plot *plot = plot_insert_lib(h);
+	if(!plot)
+		return ERROR_LIB_SIZE;
+
+	struct link_map *l = h->got->l;
+	const ElfW(Rela) *pltrel = h->pltrel;
+	const ElfW(Rela) *epltrel = h->pltrel_end;
+	struct got *got = h->got;
+	struct got *sgot = h->shadow->gots[n];
+	assert(!n == (n == LM_ID_BASE));
+	if(n) {
+		l = namespace_load(n, h->path, RTLD_LAZY);
+		if(!l)
+			return ERROR_DLOPEN;
+
+		const ElfW(Dyn) *d;
+		for(d = l->l_ld; d->d_tag != DT_JMPREL && d->d_tag != DT_NULL; ++d);
+		pltrel = (ElfW(Rela) *) d->d_un.d_ptr;
+		epltrel = h->pltrel_end - h->pltrel + pltrel;
+
+		for(d = l->l_ld; d->d_tag != DT_PLTGOT; ++d)
+			if(d == DT_NULL)
+				assert(false && "Dynamic section without PLTGOT entry");
+		got = (struct got *) d->d_un.d_ptr;
+	}
+
+	size_t len = handle_got_num_entries(h);
+	size_t size = sizeof *got + len * sizeof *got->e;
+	memcpy(sgot->e + h->got_start, got->e + h->got_start, size);
+
+	// Although this sets up correct shadowing of preresolved symbols, it breaks pointer
+	// comparison of pointers to such symbols passed across object boundaries.  In order to
+	// preserve this functionality, we'd need the PLOT entry to be a global associated directly
+	// with the symbol address (since otherwise we'd need to perform an expensive lookup to
+	// determine its address).  Whenever we handle_cleanup()'d, we'd need to traverse the symbol
+	// table in search of symbol addresses having such associated globals, deallocating them.
+	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
+		if(whitelist_shared_contains(h->strtab +
+			h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
+			ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - (h->got->e + h->got_start);
+			sgot->e[index] = h->shadow->gots[0]->e[index];
+		}
+
+	if(!sgot->l) {
+		// All entries in the GOT were resolved at load time, so the dynamic linker didn't
+		// bother to populate the special GOT entries.  We'll never need to call the
+		// resolver function f(), but we will need the link_map l in order to deallocate
+		// this (owned) library copy in the future, so manually populate it now.
+		sgot->l = l;
+		if(n)
+			for(const ElfW(Rela) *r = pltrel; r != epltrel; ++r) {
+				uintptr_t lazy = (const void **) (l->l_addr + r->r_offset) - got->e;
+				if(whitelist_shared_contains(h->strtab +
+					h->symtab[ELF64_R_SYM(r->r_info)].st_name))
+					// This symbol is shared across all namespaces.  Populate
+					// the shadow GOT entry with the sentinel NULL, meaning that
+					// the trampoline should load it from the *base* shadow GOT
+					// instead; this allows lazy resolution to work regardless
+					// of which namespace makes the initial call to the symbol!
+					sgot->e[lazy] = NULL;
+			}
+	} else if(pltrel) {
+		// The GOT contains entries that will be resolved lazily.  This poses a problem
+		// because, whenever one is resolved, the resolver function f() will automatically
+		// overwrite its corresponding GOT entry to memoize the result, thereby disabling
+		// our multiplexer trampoline!  We need it to rewrite the *shadow* GOT entry
+		// instead, so rewrite the dynamic relocation entry to target that location.
+		ElfW(Rela) *page = (ElfW(Rela) *) ((uintptr_t) pltrel & ~(pagesize() - 1));
+		size_t pgsz = epltrel - page;
+		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
+			if(n)
+				dlclose(l);
+			return ERROR_MPROTECT;
+		}
+
+		for(ElfW(Rela) *r = (ElfW(Rela) *) pltrel; r != epltrel; ++r) {
+			uintptr_t lazy = (const void **) (l->l_addr + r->r_offset) - got->e;
+			if(n && whitelist_shared_contains(h->strtab +
+				h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
+				// Install a sentinel shadow GOT entry, as above.  This should
+				// activate the trampoline's special logic, thereby preventing us
+				// from ever calling the resolver function f() with this index;
+				// however, as a means of asserting this, point the relocation entry
+				// to NULL so any later attempt by the dynamic linker to rewrite the
+				// sentinel entry will fail.
+				sgot->e[lazy] = NULL;
+				lazy = -(uintptr_t) got->e;
+			}
+			r->r_offset = (uintptr_t) (got->e + lazy) - l->l_addr;
+		}
+
+		if(mprotect(page, pgsz, PROT_READ)) {
+			if(n)
+				dlclose(l);
+			return ERROR_MPROTECT;
+		}
+	}
+
+	for(size_t index = 0; index < len; ++index) {
+		ssize_t entry = index + h->got_start;
+		if(entry >= GOT_GAP)
+			entry += GOT_GAP;
+		h->got->e[entry] = plot->code + plot_entries_offset +
+			(h->shadow->first_entry + entry) * plot_entry_size;
+	}
+
+	return SUCCESS;
 }
 
 enum error handle_init(struct handle *h, const struct link_map *l) {
@@ -209,6 +333,50 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	}
 
 	h->got_len = h->pltrel_end - h->pltrel;
+
+	return SUCCESS;
+}
+
+void handle_cleanup(struct handle *h) {
+	if(h && h->shadow) {
+		for(struct got **it = h->shadow->gots + 1,
+			**end = h->shadow->gots + NUM_SHADOW_NAMESPACES + 1;
+			it != end;
+			++it)
+			if(*it)
+				dlclose((*it)->l);
+		free(h->shadow->gots[0]->e + h->got_start);
+		free(h->shadow);
+	}
+}
+
+enum error handle_got_shadow(struct handle *h) {
+	if(h->shadow)
+		return SUCCESS;
+
+	size_t len = handle_got_num_entries(h);
+	size_t size = sizeof *h->got + len * sizeof *h->got->e;
+	h->shadow = calloc(sizeof *h->shadow, 1);
+	if(!h->shadow)
+		return ERROR_CALLOC;
+	h->shadow->override_table = -1u;
+	h->shadow->first_entry = -1u;
+
+	void **gots = malloc((NUM_SHADOW_NAMESPACES + 1) * size);
+	if(!gots) {
+		free(h->shadow);
+		return ERROR_MALLOC;
+	}
+	for(Lmid_t namespace = 0; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
+		h->shadow->gots[namespace] = (struct got *) gots + namespace * size -
+			h->got_start + GOT_GAP;
+
+		enum error fail = load_shadow(h, namespace);
+		if(fail) {
+			handle_cleanup(h);
+			return fail;
+		}
+	}
 
 	return SUCCESS;
 }
