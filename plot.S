@@ -1,8 +1,48 @@
 #include "plot.h"
 
+// Stack at entry:
+//  offset contents
+//  ===============
+//     0   GOOT address
+//     8   trampoline index
+//    16   return address (must be preserved)
 procedure_linkage_override:
-	add $16, %rsp
-	ret
+	push %rax
+	push %rcx
+
+	mov  16(%rsp), %rax          // GOOT address
+	mov  24(%rsp), %rcx          // trampoline index
+	mov   4(%rax, %rcx, 8), %rax // handle address
+	add  16(%rax), %rcx          // index += got_start
+	mov  32(%rax), %rax          // shadow address
+	sub   8(%rax), %ecx          // index -= first_entry
+	add  $16, %rax               // gots address
+
+	cmp  $GOT_GAP, %rcx
+	jge  fixed_index
+	sub  $GOT_GAP, %rcx
+fixed_index:
+	mov  %rcx, 24(%rsp)
+
+	mov  %rax, %rcx              // gots address
+	call namespace_thread        // namespace address
+	mov  (%rax), %rax            // namespace
+	mov  (%rcx, %rax, 8), %rax   // got address: gots[namespace]
+	mov  24(%rsp), %rcx          // GOT index
+	mov  24(%rax, %rcx, 8), %rax // symbol address
+
+	test %rax, %rax
+	jnz  found_symbol
+	mov  16(%rsp), %rax          // gots address
+	mov  (%rax), %rax            // got address: gots[BASE]
+	mov  24(%rax, %rcx, 8), %rax // symbol address
+found_symbol:
+
+	mov  %rax, 24(%rsp)
+	pop  %rcx
+	pop  %rax
+	add  $8, %rsp                // symbol address address
+	ret                          // symbol address
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.

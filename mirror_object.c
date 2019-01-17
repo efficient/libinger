@@ -16,7 +16,10 @@ static enum error hook_object(struct handle *h, const struct link_map *l) {
 	if(code)
 		return code;
 
-	return SUCCESS;
+	if(whitelist_so_contains(h->path))
+		return SUCCESS;
+
+	return handle_got_shadow(h);
 }
 
 enum error mirror_object(const struct link_map *l, const char *fname) {
