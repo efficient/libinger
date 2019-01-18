@@ -1,5 +1,7 @@
 #include "plot.h"
 
+#include "handle.h"
+
 // Stack at entry:
 //  offset contents
 //  ===============

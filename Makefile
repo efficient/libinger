@@ -39,8 +39,8 @@ mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
-plot.o: CPPFLAGS += -D_asm
-plot.o: plot.h
+plot.o: private CPPFLAGS += -D_asm
+plot.o: plot.h handle.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
 whitelist.o: whitelist.h handle.h namespace.h
 

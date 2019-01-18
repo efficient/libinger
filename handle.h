@@ -1,13 +1,14 @@
 #ifndef HANDLE_H_
 #define HANDLE_H_
 
+#define GOT_GAP -3
+
+#ifndef _asm
 #include "error.h"
 #include "namespace.h"
 
 #include <sys/types.h>
 #include <link.h>
-
-#define GOT_GAP -3
 
 struct link_map;
 struct sym_hash;
@@ -62,5 +63,6 @@ enum error handle_got_shadow(struct handle *);
 static inline size_t handle_got_num_entries(const struct handle *h) {
 	return -h->got_start + GOT_GAP + h->got_len;
 }
+#endif
 
 #endif
