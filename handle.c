@@ -274,7 +274,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 		h->symtab_end = (ElfW(Sym) *) h->strtab;
 
 	// Dynamic relocation types enumerated in the switch statement in ld.so's dl-machine.h
-	intptr_t first = (intptr_t) &h->got - l->l_addr;
+	intptr_t first = (intptr_t) h->got - l->l_addr;
 	bool whitelisted_obj = whitelist_so_contains(h->path);
 	const ElfW(Shdr) *sh = NULL;
 	size_t shoff;
@@ -326,7 +326,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 			break;
 		}
 		}
-	h->got_start = (intptr_t) h->got->e - l->l_addr - first;
+	h->got_start = (const void **) (l->l_addr + first) - h->got->e;
 	if(sh) {
 		munmap((void *) ((uintptr_t) sh - shoff), shlen);
 		close(fd);
