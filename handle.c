@@ -359,7 +359,7 @@ enum error handle_got_shadow(struct handle *h) {
 	h->shadow = calloc(sizeof *h->shadow, 1);
 	if(!h->shadow)
 		return ERROR_CALLOC;
-	h->shadow->override_table = -1u;
+	h->shadow->override_table = -1ul;
 	h->shadow->first_entry = -1u;
 
 	void **gots = malloc((NUM_SHADOW_NAMESPACES + 1) * size);
