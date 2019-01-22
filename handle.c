@@ -159,7 +159,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		// our multiplexer trampoline!  We need it to rewrite the *shadow* GOT entry
 		// instead, so rewrite the dynamic relocation entry to target that location.
 		ElfW(Rela) *page = (ElfW(Rela) *) ((uintptr_t) pltrel & ~(pagesize() - 1));
-		size_t pgsz = epltrel - page;
+		size_t pgsz = (uintptr_t) epltrel - (uintptr_t) page;
 		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
 			if(n)
 				dlclose(l);
