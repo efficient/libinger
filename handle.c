@@ -189,12 +189,26 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		}
 	}
 
+	void **page = (void **) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
+	size_t pgsz = (uintptr_t) got - (uintptr_t) page + size;
+	if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
+		if(n)
+			dlclose(l);
+		return ERROR_MPROTECT;
+	}
+
 	for(size_t index = 0; index < len; ++index) {
 		ssize_t entry = index + h->got_start;
 		if(entry >= GOT_GAP)
 			entry += GOT_GAP;
 		got->e[entry] = plot->code + plot_entries_offset +
 			(h->shadow->first_entry + entry) * plot_entry_size;
+	}
+
+	if(mprotect(page, pgsz, PROT_READ)) {
+		if(n)
+			dlclose(l);
+		return ERROR_MPROTECT;
 	}
 
 	return SUCCESS;
