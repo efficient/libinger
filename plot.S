@@ -14,15 +14,16 @@ procedure_linkage_override:
 
 	mov  16(%rsp), %rax          // GOOT address
 	mov  24(%rsp), %rcx          // trampoline index
-	mov   4(%rax, %rcx, 8), %rax // handle address
+	mov   8(%rax, %rcx, 8), %rax // handle address
 	add  16(%rax), %rcx          // index += got_start
 	mov  32(%rax), %rax          // shadow address
 	sub   8(%rax), %ecx          // index -= first_entry
+	movsx %ecx, %rcx
 	add  $16, %rax               // gots address
 
 	cmp  $GOT_GAP, %rcx
-	jge  fixed_index
-	sub  $GOT_GAP, %rcx
+	jl   fixed_index
+	add  $GOT_GAP, %rcx
 fixed_index:
 	mov  %rcx, 24(%rsp)
 
