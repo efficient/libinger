@@ -130,7 +130,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		if(whitelist_shared_contains(h->strtab +
 			h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
-			ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - (h->got->e + h->got_start);
+			ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - h->got->e;
 			sgot->e[index] = h->shadow->gots[0]->e[index];
 		}
 
@@ -368,8 +368,8 @@ enum error handle_got_shadow(struct handle *h) {
 		return ERROR_MALLOC;
 	}
 	for(Lmid_t namespace = 0; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
-		h->shadow->gots[namespace] = (struct got *) gots + namespace * size -
-			h->got_start + GOT_GAP;
+		h->shadow->gots[namespace] = (struct got *) ((uintptr_t) gots + namespace * size) -
+			h->got_start;
 
 		enum error fail = load_shadow(h, namespace);
 		if(fail) {
