@@ -202,7 +202,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		if(entry >= GOT_GAP)
 			entry += GOT_GAP;
 		got->e[entry] = plot->code + plot_entries_offset +
-			(h->shadow->first_entry + entry) * plot_entry_size;
+			(h->shadow->first_entry + index) * plot_entry_size;
 	}
 
 	if(mprotect(page, pgsz, PROT_READ)) {
