@@ -190,7 +190,8 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	}
 
 	void **page = (void **) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
-	size_t pgsz = (uintptr_t) got - (uintptr_t) page + size;
+	size_t pgsz = (uintptr_t) got - (uintptr_t) page;
+	assert(!(pgsz % pagesize()));
 	if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
 		if(n)
 			dlclose(l);
