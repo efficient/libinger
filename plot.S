@@ -23,7 +23,7 @@ procedure_linkage_override:
 
 	cmp  $GOT_GAP, %rcx
 	jl   fixed_index
-	add  $GOT_GAP, %rcx
+	sub  $GOT_GAP, %rcx
 fixed_index:
 	mov  %rcx, 24(%rsp)
 

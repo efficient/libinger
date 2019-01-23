@@ -201,7 +201,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	for(size_t index = 0; index < len; ++index) {
 		ssize_t entry = index + h->got_start;
 		if(entry >= GOT_GAP)
-			entry += GOT_GAP;
+			entry -= GOT_GAP;
 		got->e[entry] = plot->code + plot_entries_offset +
 			(h->shadow->first_entry + index) * plot_entry_size;
 	}
