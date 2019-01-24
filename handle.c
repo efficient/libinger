@@ -179,7 +179,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 				sgot->e[lazy] = NULL;
 				lazy = -(uintptr_t) got->e;
 			}
-			r->r_offset = (uintptr_t) (got->e + lazy) - l->l_addr;
+			r->r_offset = (uintptr_t) (sgot->e + lazy) - l->l_addr;
 		}
 
 		if(mprotect(page, pgsz, PROT_READ)) {
