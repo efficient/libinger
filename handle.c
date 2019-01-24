@@ -383,8 +383,9 @@ enum error handle_got_shadow(struct handle *h) {
 		return ERROR_MALLOC;
 	}
 	for(Lmid_t namespace = 0; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
-		h->shadow->gots[namespace] = (struct got *) ((uintptr_t) gots + namespace * size) -
-			h->got_start;
+		h->shadow->gots[namespace] = (struct got *) (
+			(const void **) ((uintptr_t) gots + namespace * size) -
+			h->got_start + GOT_GAP);
 
 		enum error fail = load_shadow(h, namespace);
 		if(fail) {
