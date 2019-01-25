@@ -14,6 +14,20 @@ static const char *WHITELIST[] = {
 	"/libc.so.",
 	"/libpthread.so.",
 	"/libstdc++.so.",
+
+	// Debugging facilities:
+	//
+	// As of writing, the rr runtime ships with a PT_GNU_RELRO program header entry that
+	// describes a segment to be made read only at load time that includes the GOT.  While this
+	// wouldn't ordinarily be a problem because the shared library is also tagged as BIND_NOW
+	// via both DT_FLAGS and DT_FLAGS_1 dynamic section entries to prevent lazy dynamic symbol
+	// resolution, it means we unexpectedly fail to install the trampoline entries into the GOT.
+	//
+	// Some other options for actually detecting libraries with this setup:
+	//  * Check whether .got.plt is aligned to a page and, if so, assume it might be protected.
+	//  * Map the program header in from disk and check for an overlapping PT_GNU_RELRO entry.
+	//  * Temporarily catch segfaults and use them to conclude that the page is protected.
+	"/librrpreload.so",
 };
 
 struct whitelist;
