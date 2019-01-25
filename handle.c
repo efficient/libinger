@@ -65,6 +65,11 @@ const ElfW(Sym) *handle_symbol(const struct handle *handle, const char *symbol) 
 	return handle_symbol_linkedlist(handle, symbol);
 }
 
+static inline bool handle_got_has_glob_dat(const struct handle *handle) {
+	assert(handle->got_start <= GOT_GAP);
+	return handle->got_start != GOT_GAP;
+}
+
 // Returns NULL on error.
 static const char *progname(void) {
 	extern const char *__progname_full;
@@ -189,13 +194,17 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		}
 	}
 
-	void **page = (void **) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
-	size_t pgsz = (uintptr_t) got - (uintptr_t) page;
-	assert(!(pgsz % pagesize()));
-	if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
-		if(n)
-			dlclose(l);
-		return ERROR_MPROTECT;
+	void *page = NULL;
+	size_t pgsz = 0;
+	if(handle_got_has_glob_dat(h)) {
+		page = (void *) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
+		pgsz = (uintptr_t) got - (uintptr_t) page;
+		assert(!(pgsz % pagesize()));
+		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
+			if(n)
+				dlclose(l);
+			return ERROR_MPROTECT;
+		}
 	}
 
 	for(size_t index = 0; index < len; ++index) {
@@ -206,7 +215,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 			(h->shadow->first_entry + index) * plot_entry_size;
 	}
 
-	if(mprotect(page, pgsz, PROT_READ)) {
+	if(page && mprotect(page, pgsz, PROT_READ)) {
 		if(n)
 			dlclose(l);
 		return ERROR_MPROTECT;
