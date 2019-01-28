@@ -6,6 +6,11 @@
 #include <string.h>
 
 static const char *WHITELIST[] = {
+	// [Runtime] dynamic linker:
+	"/ld-linux-x86-64.so.",
+	"/libdl.so.",
+
+	// Standard OS/language facilities:
 	"/libc.so.",
 	"/libpthread.so.",
 	"/libstdc++.so.",
