@@ -85,10 +85,12 @@ static const char *progname(void) {
 }
 
 static size_t pagesize(void) {
-	static size_t pagesize;
-	static bool ready;
-	if(!ready)
+	static volatile size_t pagesize;
+	static volatile bool ready;
+	if(!ready) {
 		pagesize = sysconf(_SC_PAGESIZE);
+		ready = true;
+	}
 	return pagesize;
 }
 
