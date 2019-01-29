@@ -108,8 +108,10 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	assert(!n == (n == LM_ID_BASE));
 	if(n) {
 		l = namespace_load(n, h->path, RTLD_LAZY);
-		if(!l)
+		if(!l) {
+			h->shadow->gots[n] = NULL;
 			return ERROR_DLOPEN;
+		}
 
 		const ElfW(Dyn) *d;
 		for(d = l->l_ld; d->d_tag != DT_JMPREL && d->d_tag != DT_NULL; ++d);
@@ -380,13 +382,13 @@ enum error handle_got_shadow(struct handle *h) {
 
 	size_t len = handle_got_num_entries(h);
 	size_t size = sizeof *h->got + len * sizeof *h->got->e;
-	h->shadow = calloc(sizeof *h->shadow, 1);
+	h->shadow = calloc(1, sizeof *h->shadow);
 	if(!h->shadow)
-		return ERROR_CALLOC;
+		return ERROR_MALLOC;
 	h->shadow->override_table = -1;
 	h->shadow->first_entry = -1;
 
-	void **gots = malloc((NUM_SHADOW_NAMESPACES + 1) * size);
+	void **gots = calloc(NUM_SHADOW_NAMESPACES + 1, size);
 	if(!gots) {
 		free(h->shadow);
 		return ERROR_MALLOC;

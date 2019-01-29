@@ -29,9 +29,6 @@ const char *error_message(enum error error) {
 	case ERROR_UNSUPPORTED_RELOCS:
 		res = "Object file contains unsupported relocation type(s)";
 		break;
-	case ERROR_CALLOC:
-		res = "Unable to allocate zero-initialized memory";
-		break;
 	case ERROR_MALLOC:
 		res = "Unable to allocate memory";
 		break;
@@ -57,7 +54,6 @@ const char *error_explanation(enum error error) {
 	case ERROR_FNAME_REALPATH:
 	case ERROR_OPEN:
 	case ERROR_MMAP:
-	case ERROR_CALLOC:
 	case ERROR_MALLOC:
 	case ERROR_MPROTECT:
 		res = strerror(errno);
