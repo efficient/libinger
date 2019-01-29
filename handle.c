@@ -136,12 +136,13 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	// with the symbol address (since otherwise we'd need to perform an expensive lookup to
 	// determine its address).  Whenever we handle_cleanup()'d, we'd need to traverse the symbol
 	// table in search of symbol addresses having such associated globals, deallocating them.
-	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
-		if(whitelist_shared_contains(h->strtab +
-			h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
-			ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - h->got->e;
-			sgot->e[index] = h->shadow->gots[0]->e[index];
-		}
+	if(n)
+		for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
+			if(whitelist_shared_contains(h->strtab +
+				h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
+				ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - h->got->e;
+				sgot->e[index] = NULL;
+			}
 
 	if(!sgot->l) {
 		// All entries in the GOT were resolved at load time, so the dynamic linker didn't
