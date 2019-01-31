@@ -108,6 +108,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	struct got *got = h->got;
 	struct got *sgot = h->shadow->gots[n];
 	assert(!n == (n == LM_ID_BASE));
+	assert(l);
 	if(n) {
 		l = namespace_load(n, h->path, RTLD_LAZY);
 		if(!l) {
@@ -362,6 +363,9 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	}
 
 	h->got_len = h->pltrel_end - h->pltrel;
+
+	if(!whitelisted_obj && !h->got->l)
+		h->got->l = (struct link_map *) l;
 
 	return SUCCESS;
 }
