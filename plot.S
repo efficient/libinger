@@ -15,8 +15,8 @@ procedure_linkage_override:
 	mov  16(%rsp), %rax          // GOOT address
 	mov  24(%rsp), %rcx          // trampoline index
 	mov   8(%rax, %rcx, 8), %rax // handle address
-	add  16(%rax), %rcx          // index += got_start
-	mov  32(%rax), %rax          // shadow address
+	add  24(%rax), %rcx          // index += sgot_start
+	mov  40(%rax), %rax          // shadow address
 	sub   8(%rax), %ecx          // index -= first_entry
 	movsx %ecx, %rcx
 	add  $16, %rax               // gots address

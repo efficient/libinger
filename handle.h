@@ -35,6 +35,7 @@ struct handle {
 	const char *path;
 	struct got *got;
 	ssize_t got_start;
+	ssize_t sgot_start;
 	size_t got_len;
 	struct shadow_gots *shadow; // Not always present, but owned when it is.
 	const ElfW(Rela) *pltrel; // Not always present.
@@ -61,7 +62,7 @@ const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
 enum error handle_got_shadow(struct handle *);
 
 static inline size_t handle_got_num_entries(const struct handle *h) {
-	return -h->got_start + GOT_GAP + h->got_len;
+	return -h->sgot_start + GOT_GAP + h->got_len;
 }
 #endif
 

@@ -66,7 +66,7 @@ const ElfW(Sym) *handle_symbol(const struct handle *handle, const char *symbol) 
 }
 
 static inline bool handle_got_has_glob_dat(const struct handle *handle) {
-	assert(handle->got_start <= GOT_GAP);
+	assert((handle->got_start == GOT_GAP) == (handle->sgot_start == GOT_GAP));
 	return handle->got_start != GOT_GAP;
 }
 
@@ -128,8 +128,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	}
 
 	size_t len = handle_got_num_entries(h);
-	size_t size = sizeof *got + len * sizeof *got->e;
-	memcpy(sgot->e + h->got_start, got->e + h->got_start, size);
+	memcpy(sgot, got, sizeof *got + h->got_len * sizeof *h->got->e);
 
 	// Although this sets up correct shadowing of preresolved symbols, it breaks pointer
 	// comparison of pointers to such symbols passed across object boundaries.  In order to
@@ -137,13 +136,16 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	// with the symbol address (since otherwise we'd need to perform an expensive lookup to
 	// determine its address).  Whenever we handle_cleanup()'d, we'd need to traverse the symbol
 	// table in search of symbol addresses having such associated globals, deallocating them.
-	if(n)
-		for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
-			if(whitelist_shared_contains(h->strtab +
-				h->symtab[ELF64_R_SYM(r->r_info)].st_name)) {
-				ssize_t index = (const void **) (h->got->l->l_addr + r->r_offset) - h->got->e;
-				sgot->e[index] = NULL;
-			}
+	ssize_t index = h->sgot_start;
+	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
+		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
+			if(n && whitelist_shared_contains(h->strtab +
+				h->symtab[ELF64_R_SYM(r->r_info)].st_name))
+				sgot->e[index++] = NULL;
+			else
+				sgot->e[index++] = *(const void **) (l->l_addr + r->r_offset);
+		}
+	assert(index <= GOT_GAP);
 
 	if(!sgot->l) {
 		// All entries in the GOT were resolved at load time, so the dynamic linker didn't
@@ -200,31 +202,44 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		}
 	}
 
-	void *page = NULL;
-	size_t pgsz = 0;
 	if(handle_got_has_glob_dat(h)) {
-		page = (void *) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
-		pgsz = (uintptr_t) got - (uintptr_t) page;
+		void *page = (void *) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
+		size_t pgsz = (uintptr_t) got - (uintptr_t) page;
 		assert(!(pgsz % pagesize()));
 		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
 			if(n)
 				dlclose(l);
 			return ERROR_MPROTECT;
 		}
+
+		if(!n) {
+			ssize_t sindex = h->sgot_start;
+			for(ssize_t index = h->got_start; index < GOT_GAP; ++index) {
+				const void **entry = got->e + index;
+				const void **sentry = sgot->e + sindex;
+				if(*entry == *sentry) {
+					*entry = plot->code + plot_entries_offset + plot_entry_size *
+						(sindex - h->sgot_start + h->shadow->first_entry);
+					++sindex;
+				}
+			}
+			assert(sindex == GOT_GAP);
+		} else
+			for(ssize_t index = h->got_start; index < GOT_GAP; ++index)
+				if(plot_contains_entry(plot, h->got->e[index]))
+					got->e[index] = h->got->e[index];
+
+		if(page && mprotect(page, pgsz, PROT_READ)) {
+			if(n)
+				dlclose(l);
+			return ERROR_MPROTECT;
+		}
 	}
 
-	for(size_t index = 0; index < len; ++index) {
-		ssize_t entry = index + h->got_start;
-		if(entry >= GOT_GAP)
-			entry -= GOT_GAP;
+	for(size_t index = -h->sgot_start + GOT_GAP; index < len; ++index) {
+		ssize_t entry = index + h->sgot_start - GOT_GAP;
 		got->e[entry] = plot->code + plot_entries_offset +
 			(h->shadow->first_entry + index) * plot_entry_size;
-	}
-
-	if(page && mprotect(page, pgsz, PROT_READ)) {
-		if(n)
-			dlclose(l);
-		return ERROR_MPROTECT;
 	}
 
 	return SUCCESS;
@@ -304,7 +319,9 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 		h->symtab_end = (ElfW(Sym) *) h->strtab;
 
 	// Dynamic relocation types enumerated in the switch statement in ld.so's dl-machine.h
-	intptr_t first = (intptr_t) h->got - l->l_addr;
+	uintptr_t first = (uintptr_t) h->got - l->l_addr;
+	const uintptr_t *last = &first;
+	size_t count = 0;
 	bool whitelisted_obj = whitelist_so_contains(h->path);
 	const ElfW(Shdr) *sh = NULL;
 	size_t shoff;
@@ -313,8 +330,18 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		switch(ELF64_R_TYPE(r->r_info)) {
 		case R_X86_64_GLOB_DAT:
-			if(r->r_offset < (uintptr_t) first)
+			assert(l->l_addr + r->r_offset < (uintptr_t) h->got &&
+				"Object file tagged with unsupported BIND_NOW or NOW?");
+			if(r->r_offset < first)
 				first = r->r_offset;
+			else if(!whitelisted_obj) {
+				// load_shaodw() relies on GLOB_DAT entries to be in order when it
+				// sets up the shadow GOTs, so assert() that this is the case if we
+				// might multiplex this object file in the future.
+				assert(r->r_offset > *last);
+				last = &r->r_offset;
+			}
+			++count;
 			break;
 
 		case R_X86_64_JUMP_SLOT:
@@ -356,13 +383,18 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 			break;
 		}
 		}
-	h->got_start = (const void **) (l->l_addr + first) - h->got->e;
 	if(sh) {
 		munmap((void *) ((uintptr_t) sh - shoff), shlen);
 		close(fd);
 	}
+	h->got_start = (const void **) (l->l_addr + first) - h->got->e;
+	h->sgot_start = GOT_GAP - count;
 
 	h->got_len = h->pltrel_end - h->pltrel;
+
+	assert(h->got_start <= GOT_GAP);
+	assert(h->sgot_start <= GOT_GAP);
+	assert(h->got_start <= h->sgot_start);
 
 	if(!whitelisted_obj && !h->got->l)
 		h->got->l = (struct link_map *) l;
@@ -378,7 +410,7 @@ void handle_cleanup(struct handle *h) {
 			++it)
 			if(*it)
 				dlclose((*it)->l);
-		free(h->shadow->gots[0]->e + h->got_start);
+		free(h->shadow->gots[0]->e + h->sgot_start);
 		free(h->shadow);
 	}
 }
@@ -403,7 +435,7 @@ enum error handle_got_shadow(struct handle *h) {
 	for(Lmid_t namespace = 0; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
 		h->shadow->gots[namespace] = (struct got *) (
 			(const void **) ((uintptr_t) gots + namespace * size) -
-			h->got_start + GOT_GAP);
+			h->sgot_start + GOT_GAP);
 
 		enum error fail = load_shadow(h, namespace);
 		if(fail) {
