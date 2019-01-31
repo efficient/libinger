@@ -304,10 +304,12 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 
 	if(h->pltrel) {
 		assert(pltrelsz && "Dynamic section without PLTRELSZ entry");
+		assert(!(pltrelsz % sizeof *h->pltrel) && "Relocation size entry does not divide PLTRELSZ");
 		h->pltrel_end = (ElfW(Rela) *) ((uintptr_t) h->pltrel + pltrelsz);
 	}
 
 	assert(relasz && "Dynamic section without RELASZ entry");
+	assert(!(relasz % sizeof *h->miscrel) && "Relocation size entry does not divide RELASZ");
 	h->miscrel_end = (ElfW(Rela) *) ((uintptr_t) h->miscrel + relasz);
 
 	// The symbol hash table is supposed to be present in all executables and shared libraries
