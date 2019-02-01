@@ -17,7 +17,7 @@ ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl -lpthread
 ctests: libgotcha.a libctestfuns.so
 
-bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN
+bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN -Wl,-zlazy
 bench: private LDLIBS += -lbenchmark
 bench: private RUSTFLAGS += --test
 bench: libbenchmark.so
@@ -34,6 +34,8 @@ handle.rs: error.h namespace.h
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
+benchmark.o: private CFLAGS += -fpic
+benchmark.o: private CPPFLAGS += -UNDEBUG
 ctestfuns.o: ctestfuns.h
 error.o: error.h
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
