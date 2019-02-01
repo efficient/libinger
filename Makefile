@@ -35,7 +35,7 @@ mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
 mirror.rs: mirror_object.h mirror_object_containing.h error.h
 
 benchmark.o: private CFLAGS += -fpic
-benchmark.o: private CPPFLAGS += -UNDEBUG
+benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
 ctestfuns.o: ctestfuns.h
 error.o: error.h
 goot.o: private CPPFLAGS += -D_GNU_SOURCE

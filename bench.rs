@@ -11,19 +11,38 @@ unsafe fn nop() {
 	asm!("call nop");
 }
 
+fn with_eager_nop<T: FnMut()>(mut fun: T) {
+	use std::mem::transmute;
+
+	extern "C" {
+		fn with_eager_nop(fun: extern "C" fn());
+	}
+
+	static mut FUN: Option<*mut dyn FnMut()> = None;
+
+	extern "C" fn adapter() {
+		let fun = unsafe {
+			&mut *FUN.take().unwrap()
+		};
+		fun();
+	}
+
+	let fun: &mut dyn FnMut() = &mut fun;
+	unsafe {
+		FUN.replace(transmute(fun));
+		with_eager_nop(adapter);
+	}
+}
+
 extern "C" {
 	fn mirror(fun: usize) -> bool;
-	fn nop_location() -> unsafe extern "C" fn();
 }
 
 #[bench]
 fn eager(lo: &mut Bencher) {
-	let nop = unsafe {
-		nop_location()
-	};
-	lo.iter(|| unsafe {
+	with_eager_nop(|| lo.iter(|| unsafe {
 		nop()
-	});
+	}));
 }
 
 #[bench]
@@ -35,6 +54,16 @@ fn lazy(lo: &mut Bencher) {
 
 #[bench]
 fn shadow(lo: &mut Bencher) {
+	assert!(unsafe {
+		mirror(shadow as _)
+	});
+	with_eager_nop(|| lo.iter(|| unsafe {
+		nop()
+	}));
+}
+
+#[bench]
+fn total(lo: &mut Bencher) {
 	assert!(unsafe {
 		mirror(shadow as _)
 	});
