@@ -12,6 +12,7 @@ unsafe fn nop() {
 }
 
 extern "C" {
+	fn mirror(fun: usize) -> bool;
 	fn nop_location() -> unsafe extern "C" fn();
 }
 
@@ -27,6 +28,16 @@ fn eager(lo: &mut Bencher) {
 
 #[bench]
 fn lazy(lo: &mut Bencher) {
+	lo.iter(|| unsafe {
+		nop()
+	});
+}
+
+#[bench]
+fn shadow(lo: &mut Bencher) {
+	assert!(unsafe {
+		mirror(shadow as _)
+	});
 	lo.iter(|| unsafe {
 		nop()
 	});

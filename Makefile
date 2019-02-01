@@ -18,9 +18,9 @@ ctests: private LDLIBS += -ldl -lpthread
 ctests: libgotcha.a libctestfuns.so
 
 bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN -Wl,-zlazy
-bench: private LDLIBS += -lbenchmark
+bench: private LDLIBS += -lbenchmark -lgotcha
 bench: private RUSTFLAGS += --test
-bench: libbenchmark.so
+bench: libgotcha.a libbenchmark.so
 
 libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o whitelist.o
 
