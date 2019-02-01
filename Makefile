@@ -17,6 +17,11 @@ ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl -lpthread
 ctests: libgotcha.a libctestfuns.so
 
+bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN
+bench: private LDLIBS += -lbenchmark
+bench: private RUSTFLAGS += --test
+bench: libbenchmark.so
+
 libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o whitelist.o
 
 libctestfuns.so: private CC := c++
