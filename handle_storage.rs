@@ -27,7 +27,7 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 #[no_mangle]
 pub extern "C" fn handle_get(
 	obj: *const link_map,
-	setup: unsafe extern "C" fn(*mut handle, *const link_map) -> error,
+	setup: Option<unsafe extern "C" fn(*mut handle, *const link_map) -> error>,
 	code: Option<&mut error>,
 ) -> *const handle {
 	use std::mem::uninitialized;
@@ -49,35 +49,38 @@ pub extern "C" fn handle_get(
 		}
 	} else {
 		drop(lock);
-
-		let mut lock = handles().write().unwrap();
-		let mut new = false;
-		let entry = lock.entry(HandleId (obj)).or_insert_with(|| {
-			new = true;
-			Box::new((
-				unsafe {
-					uninitialized()
-				},
-				Mutex::new(()),
-			))
-		});
-		let (handle, init) = &mut **entry;
-		let handle: *mut _ = handle;
-		let init: *const _ = init;
-		if let Ok(init) = unsafe {
-			(*init).lock()
-		} {
-			drop(lock);
-			if new {
-				let res = unsafe {
-					setup(handle, obj)
-				};
-				if let Some(code) = code {
-					*code = res;
+		if let Some(setup) = setup {
+			let mut lock = handles().write().unwrap();
+			let mut new = false;
+			let entry = lock.entry(HandleId (obj)).or_insert_with(|| {;
+				new = true;
+				Box::new((
+					unsafe {
+						uninitialized()
+					},
+					Mutex::new(()),
+				))
+			});
+			let (handle, init) = &mut **entry;
+			let handle: *mut _ = handle;
+			let init: *const _ = init;
+			if let Ok(init) = unsafe {
+				(*init).lock()
+			} {
+				drop(lock);
+				if new {
+					let res = unsafe {
+						setup(handle, obj)
+					};
+					if let Some(code) = code {
+						*code = res;
+					}
 				}
+				drop(init);
+				handle
+			} else {
+				null()
 			}
-			drop(init);
-			handle
 		} else {
 			null()
 		}

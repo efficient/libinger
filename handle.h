@@ -51,6 +51,9 @@ struct handle {
 enum error handle_init(struct handle *, const struct link_map *);
 void handle_cleanup(struct handle *);
 
+// Set the function pointer to NULL to check for an existing handle, or to an initialization
+// function to create a new handle if one doesn't already exist.  The error code pointer is only
+// updated if it was non-NULL.
 const struct handle *handle_get(
 	const struct link_map *,
 	enum error (*)(struct handle *, const struct link_map *),
