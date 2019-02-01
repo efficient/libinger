@@ -73,15 +73,6 @@ static void library_handle_init(void) {
 	assert_success(handle_init(&h, l));
 }
 
-static void executable_mirror(void) {
-	assert_success(mirror_object_containing((void *) fun));
-}
-
-static void library_mirror(void) {
-	assert_success(mirror_object_containing((void *) make_func));
-	assert_success(mirror_object_containing((void *) make_func()));
-}
-
 static void goot_abuse(void) {
 	struct goot table;
 	goot_init(&table);
@@ -106,6 +97,28 @@ static void goot_abuse(void) {
 	}
 }
 
+static void mirror(void) {
+	assert_success(mirror_object_containing((void *) fun));
+
+	assert(!*mirror_mirror());
+	*mirror_mirror() = true;
+	assert(*mirror_mirror());
+
+	*namespace_thread() = 1;
+
+	assert(!*mirror_mirror());
+	*mirror_mirror() = true;
+	assert(*mirror_mirror());
+
+	assert(*mirror_mirror());
+	*mirror_mirror() = false;
+	assert(!*mirror_mirror());
+
+	*namespace_thread() = 0;
+
+	assert(*mirror_mirror());
+}
+
 static const struct {
 	const char *const name;
 	void (*const func)(void);
@@ -118,9 +131,8 @@ static const struct {
 	{"library_contains_fn", library_contains_fn},
 	{"executable_handle_init", executable_handle_init},
 	{"library_handle_init", library_handle_init},
-	{"executable_mirror", executable_mirror},
-	{"library_mirror", library_mirror},
 	{"goot_abuse", goot_abuse},
+	{"mirror", mirror},
 };
 
 int main(int argc, const char **argv) {

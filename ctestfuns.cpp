@@ -18,3 +18,8 @@ function<void(void)> make_fn(void) {
 		toggle = !toggle;
 	};
 }
+
+bool *mirror_mirror(void) {
+	static bool samplib;
+	return &samplib;
+}

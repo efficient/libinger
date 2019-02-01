@@ -7,4 +7,6 @@ void (*make_func(void))(void);
 void (*make_fnc(void))(void);
 std::function<void(void)> make_fn(void);
 
+bool *mirror_mirror(void);
+
 #endif

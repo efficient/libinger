@@ -19,6 +19,8 @@ ctests: libgotcha.a libctestfuns.so
 
 libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o whitelist.o
 
+libctestfuns.so: private CC := c++
+
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
