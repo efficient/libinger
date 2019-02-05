@@ -25,6 +25,7 @@ procedure_linkage_override:
 	jl   fixed_index
 	sub  $GOT_GAP, %rcx
 fixed_index:
+	mov  %rax, 16(%rsp)
 	mov  %rcx, 24(%rsp)
 
 	mov  %rax, %rcx              // gots address
