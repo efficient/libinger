@@ -41,7 +41,6 @@ void whitelist_shared_init(struct whitelist *out) {
 			for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
 				if(st->st_shndx != SHN_UNDEF && st->st_shndx != SHN_ABS)
 					whitelist_shared_insert(out, h->strtab + st->st_name);
-			break;
 		}
 }
 
