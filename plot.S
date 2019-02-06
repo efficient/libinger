@@ -50,14 +50,65 @@ fixed_index:
 	mov  24(%rsp), %rcx          // gots address
 	mov  (%rcx), %rcx            // got address: gots[BASE]
 	mov  24(%rcx, %rdx, 8), %rcx // symbol address
+	mov  (%rax), %rdx            // namespace
+	mov  %rdx,  32(%rsp)         // save namespace
+	lea  hook_trampoline(%rip), %rdx
+	mov  %rdx,  24(%rsp)         // intermediate return address
+	xor  %rdx, %rdx
+	mov  %rdx, (%rax)            // clear namespace
+	mov    (%rsp), %rdx          // saved %rdx
+	mov  %rdx, -16(%rsp)         // save %rdx
+	mov   8(%rsp), %rdx          // saved %rcx
+	mov  %rdx,  -8(%rsp)         // save %rcx
+	mov  16(%rsp), %rdx          // saved %rax
+	mov  %rdx,    (%rsp)         // save %rax
+	sub  $16, %rsp
 found_symbol:
 
-	mov  %rcx, 32(%rsp)
+	mov  %rcx, 32(%rsp)          // return address
 	pop  %rdx
 	pop  %rcx
 	pop  %rax
 	add  $8, %rsp                // symbol address address
 	ret                          // symbol address
+
+// Stack at entry:
+//  offset contents
+//  ===============
+//     0   saved namespace
+//     8   preserved return address
+//
+// Stack during execution:
+//  offset contents
+//  ===============
+//     0   saved %rax
+//     8   alignment gap
+//    16   saved namespace
+//    32   preserved return address
+hook_trampoline:
+	sub  $8, %rsp
+	push %rax
+
+	call namespace_thread        // namespace address
+	mov  16(%rsp), %rcx          // namespace
+	mov  %rcx, (%rax)            // restore namespace
+	mov    (%rsp), %rcx          // saved %rax
+	mov  %rcx, 16(%rsp)          // save %rax
+	lea  hook_ret(%rip), %rcx
+	mov  %rcx,  8(%rsp)          // intermediate return address
+
+	add  $8, %rsp
+	mov  shared_trampoline(%rip), %rcx
+	jmp  *%rcx
+
+// Stack at entry:
+//  offset contents
+//  ===============
+//     0   saved %rax
+//     8   return address
+hook_ret:
+	pop  %rax
+	ret                          // preserved return address
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.

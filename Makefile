@@ -22,7 +22,7 @@ bench: private LDLIBS += -lbenchmark -lgotcha
 bench: private RUSTFLAGS += --test
 bench: libgotcha.a libbenchmark.so
 
-libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o whitelist.o
+libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o shared.o whitelist.o
 
 libctestfuns.so: private CC := c++
 
@@ -51,6 +51,8 @@ namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: private CPPFLAGS += -D_asm
 plot.o: plot.h handle.h
+shared.o: private CPPFLAGS += -D_GNU_SOURCE
+shared.o: shared.h namespace.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
 whitelist.o: whitelist.h handle.h namespace.h
 
