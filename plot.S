@@ -78,6 +78,8 @@ found_symbol:
 .endif
 .endm
 
+.section .rodata
+.align 8
 .globl plot_template
 plot_template:
 	.quad 0x0
@@ -95,7 +97,6 @@ plot_template_entry_end:
 	ENTRY(1, (PLOT_ENTRIES_PER_PAGE - 1))
 plot_template_end:
 
-.section .rodata
 .align 8
 .globl plot_size
 plot_size:
