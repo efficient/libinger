@@ -12,51 +12,51 @@
 // Stack during execution:
 //  offset contents
 //  ===============
-//     0   saved %rcx
-//     8   saved %rax
-//    16   alignment gap
+//     0   saved %rdx
+//     8   saved %rcx
+//    16   saved %rax
 //    24   GOOT address
 //    32   trampoline index
 //    40   return address (must be preserved)
 procedure_linkage_override:
-	sub  $8, %rsp
 	push %rax
 	push %rcx
+	push %rdx
 
-	mov  24(%rsp), %rax          // GOOT address
-	mov  32(%rsp), %rcx          // trampoline index
-	mov   8(%rax, %rcx, 8), %rax // handle address
-	add  24(%rax), %rcx          // index += sgot_start
-	mov  40(%rax), %rax          // shadow address
-	sub   8(%rax), %ecx          // index -= first_entry
-	movsx %ecx, %rcx
-	add  $16, %rax               // gots address
+	mov  24(%rsp), %rcx          // GOOT address
+	mov  32(%rsp), %rdx          // trampoline index
+	mov   8(%rcx, %rdx, 8), %rcx // handle address
+	add  24(%rcx), %rdx          // index += sgot_start
+	mov  40(%rcx), %rcx          // shadow address
+	sub   8(%rcx), %edx          // index -= first_entry
+	movsx %edx, %rdx
+	add  $16, %rcx               // gots address
 
-	cmp  $GOT_GAP, %rcx
+	cmp  $GOT_GAP, %rdx
 	jl   fixed_index
-	sub  $GOT_GAP, %rcx
+	sub  $GOT_GAP, %rdx
 fixed_index:
-	mov  %rax, 24(%rsp)
-	mov  %rcx, 32(%rsp)
+	mov  %rcx, 24(%rsp)
+	mov  %rdx, 32(%rsp)
 
-	mov  %rax, %rcx              // gots address
 	call namespace_thread        // namespace address
-	mov  (%rax), %rax            // namespace
-	mov  (%rcx, %rax, 8), %rax   // got address: gots[namespace]
-	mov  32(%rsp), %rcx          // GOT index
-	mov  24(%rax, %rcx, 8), %rax // symbol address
+	mov  (%rax), %rdx            // namespace
+	mov  (%rcx, %rdx, 8), %rcx   // got address: gots[namespace]
+	mov  32(%rsp), %rdx          // GOT index
+	mov  24(%rcx, %rdx, 8), %rcx // symbol address
 
-	test %rax, %rax
+	test %rcx, %rcx
 	jnz  found_symbol
-	mov  24(%rsp), %rax          // gots address
-	mov  (%rax), %rax            // got address: gots[BASE]
-	mov  24(%rax, %rcx, 8), %rax // symbol address
+	mov  24(%rsp), %rcx          // gots address
+	mov  (%rcx), %rcx            // got address: gots[BASE]
+	mov  24(%rcx, %rdx, 8), %rcx // symbol address
 found_symbol:
 
-	mov  %rax, 32(%rsp)
+	mov  %rcx, 32(%rsp)
+	pop  %rdx
 	pop  %rcx
 	pop  %rax
-	add  $16, %rsp               // symbol address address
+	add  $8, %rsp                // symbol address address
 	ret                          // symbol address
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
