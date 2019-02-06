@@ -1,5 +1,8 @@
 #include "ctestfuns.h"
 
+#include <cassert>
+#include <dlfcn.h>
+
 using std::function;
 
 static void fun(void) {}
@@ -22,4 +25,19 @@ function<void(void)> make_fn(void) {
 bool *mirror_mirror(void) {
 	static bool samplib;
 	return &samplib;
+}
+
+extern "C" {
+void sync(void);
+}
+
+void sync(void) {
+	static bool anchor;
+	Dl_info dli;
+	void *l;
+	assert(dladdr1(&anchor, &dli, &l, RTLD_DL_LINKMAP));
+
+	Lmid_t n;
+	assert(!dlinfo(l, RTLD_DI_LMID, &n));
+	assert(!n);
 }

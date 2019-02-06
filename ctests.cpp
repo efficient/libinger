@@ -11,6 +11,7 @@ extern "C" {
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <unistd.h>
 
 using std::cerr;
 using std::cout;
@@ -109,6 +110,9 @@ static void mirror(void) {
 	assert(!*mirror_mirror());
 	*mirror_mirror() = true;
 	assert(*mirror_mirror());
+
+	sync();
+	assert(*namespace_thread() == 1);
 
 	assert(*mirror_mirror());
 	*mirror_mirror() = false;
