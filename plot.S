@@ -8,12 +8,23 @@
 //     0   GOOT address
 //     8   trampoline index
 //    16   return address (must be preserved)
+//
+// Stack during execution:
+//  offset contents
+//  ===============
+//     0   saved %rcx
+//     8   saved %rax
+//    16   alignment gap
+//    24   GOOT address
+//    32   trampoline index
+//    40   return address (must be preserved)
 procedure_linkage_override:
+	sub  $8, %rsp
 	push %rax
 	push %rcx
 
-	mov  16(%rsp), %rax          // GOOT address
-	mov  24(%rsp), %rcx          // trampoline index
+	mov  24(%rsp), %rax          // GOOT address
+	mov  32(%rsp), %rcx          // trampoline index
 	mov   8(%rax, %rcx, 8), %rax // handle address
 	add  24(%rax), %rcx          // index += sgot_start
 	mov  40(%rax), %rax          // shadow address
@@ -25,27 +36,27 @@ procedure_linkage_override:
 	jl   fixed_index
 	sub  $GOT_GAP, %rcx
 fixed_index:
-	mov  %rax, 16(%rsp)
-	mov  %rcx, 24(%rsp)
+	mov  %rax, 24(%rsp)
+	mov  %rcx, 32(%rsp)
 
 	mov  %rax, %rcx              // gots address
 	call namespace_thread        // namespace address
 	mov  (%rax), %rax            // namespace
 	mov  (%rcx, %rax, 8), %rax   // got address: gots[namespace]
-	mov  24(%rsp), %rcx          // GOT index
+	mov  32(%rsp), %rcx          // GOT index
 	mov  24(%rax, %rcx, 8), %rax // symbol address
 
 	test %rax, %rax
 	jnz  found_symbol
-	mov  16(%rsp), %rax          // gots address
+	mov  24(%rsp), %rax          // gots address
 	mov  (%rax), %rax            // got address: gots[BASE]
 	mov  24(%rax, %rcx, 8), %rax // symbol address
 found_symbol:
 
-	mov  %rax, 24(%rsp)
+	mov  %rax, 32(%rsp)
 	pop  %rcx
 	pop  %rax
-	add  $8, %rsp                // symbol address address
+	add  $16, %rsp               // symbol address address
 	ret                          // symbol address
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
