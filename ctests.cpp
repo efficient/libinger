@@ -4,6 +4,7 @@ extern "C" {
 #include "goot.h"
 #include "handle.h"
 #include "mirror_object_containing.h"
+#include "shared.h"
 }
 
 #include <cassert>
@@ -98,8 +99,15 @@ static void goot_abuse(void) {
 	}
 }
 
+static int invoked;
+
+void callback(void) {
+	++invoked;
+}
+
 static void mirror(void) {
 	assert_success(mirror_object_containing((void *) fun));
+	shared_hook(callback);
 
 	assert(!*mirror_mirror());
 	*mirror_mirror() = true;
@@ -111,8 +119,10 @@ static void mirror(void) {
 	*mirror_mirror() = true;
 	assert(*mirror_mirror());
 
+	assert(!invoked);
 	sync();
 	assert(*namespace_thread() == 1);
+	assert(invoked == 1);
 
 	assert(*mirror_mirror());
 	*mirror_mirror() = false;
@@ -121,6 +131,7 @@ static void mirror(void) {
 	*namespace_thread() = 0;
 
 	assert(*mirror_mirror());
+	shared_hook(NULL);
 }
 
 static const struct {
