@@ -71,6 +71,7 @@ clean:
 
 %: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) $< $(LDLIBS)
+	-if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
 
 %.rs: %.h
 	$(BINDGEN) $(BINDFLAGS) -o $@ $< -- $(CPPFLAGS)
@@ -90,3 +91,4 @@ lib%.so: %.o
 
 lib%.so: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)
+	-if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
