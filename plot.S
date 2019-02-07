@@ -33,9 +33,9 @@ procedure_linkage_override:
 	add  $16, %rcx               // gots address
 
 	cmp  $GOT_GAP, %rdx
-	jl   fixed_index
+	jl   .Lfixed_index
 	sub  $GOT_GAP, %rdx
-fixed_index:
+.Lfixed_index:
 	mov  %rcx, 24(%rsp)
 	mov  %rdx, 32(%rsp)
 
@@ -46,7 +46,7 @@ fixed_index:
 	mov  24(%rcx, %rdx, 8), %rcx // symbol address
 
 	test %rcx, %rcx
-	jnz  found_symbol
+	jnz  .Lfound_symbol
 	mov  24(%rsp), %rcx          // gots address
 	mov  (%rcx), %rcx            // got address: gots[BASE]
 	mov  24(%rcx, %rdx, 8), %rcx // symbol address
@@ -63,7 +63,7 @@ fixed_index:
 	mov  16(%rsp), %rdx          // saved %rax
 	mov  %rdx,    (%rsp)         // save %rax
 	sub  $16, %rsp
-found_symbol:
+.Lfound_symbol:
 
 	mov  %rcx, 32(%rsp)          // return address
 	pop  %rdx
