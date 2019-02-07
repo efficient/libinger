@@ -14,6 +14,7 @@ struct handle;
 
 struct plot {
 	struct goot *goot;
+	void (*resolver)(void);
 	const uint8_t code[];
 };
 

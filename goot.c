@@ -136,6 +136,8 @@ bool goot_empty(const struct goot *table) {
 		table->entries[1].free.odd_tag & 0x1;
 }
 
+void procedure_linkage_override(void);
+
 const struct plot *plot_alloc(void) {
 	struct goot *goot = malloc(sizeof *goot);
 	if(!goot)
@@ -149,6 +151,7 @@ const struct plot *plot_alloc(void) {
 
 	memcpy(plot, &plot_template, plot_size);
 	plot->goot = goot;
+	plot->resolver = procedure_linkage_override;
 
 	if(mprotect(plot, plot_size, PROT_READ | PROT_EXEC)) {
 		munmap(plot, plot_size);

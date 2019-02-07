@@ -18,6 +18,7 @@
 //    24   GOOT address
 //    32   trampoline index
 //    40   return address (must be preserved)
+.globl procedure_linkage_override
 procedure_linkage_override:
 	push %rax
 	push %rcx
@@ -146,7 +147,7 @@ hook_ret:
 .globl plot_template
 plot_template:
 	.quad 0x0
-	.quad procedure_linkage_override
+	.quad 0x0
 plot_template_code:
 	push -0x16(%rip)
 	push -0x14(%rip)
@@ -167,7 +168,7 @@ plot_size:
 
 .globl plot_entries_offset
 plot_entries_offset:
-	.quad plot_template_entries - plot_template - 8
+	.quad plot_template_entries - plot_template_code
 
 .globl plot_entry_size
 plot_entry_size:
