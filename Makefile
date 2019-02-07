@@ -6,11 +6,17 @@ override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
 override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
 
-libgotcha.rlib: private RUSTFLAGS += -L.
-libgotcha.rlib: private LDLIBS += -lmirror_object
-libgotcha.rlib: libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
+DEPS := libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
-libgotcha.a: libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
+libgotcha.rlib: private LDFLAGS += -L.
+libgotcha.rlib: private LDLIBS += -lmirror_object
+libgotcha.rlib: $(DEPS)
+
+libgotcha.a: $(DEPS)
+
+libgotcha.so: private LDFLAGS += -L.
+libgotcha.so: private LDLIBS += -lmirror_object
+libgotcha.so: $(DEPS)
 
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
@@ -38,19 +44,22 @@ benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
 ctestfuns.o: ctestfuns.h
 error.o: error.h
+goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
-handle.o: private CFLAGS += -Wno-array-bounds
+handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h namespace.h plot.h
 mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object.o: mirror_object.h error.h handle.h namespace.h whitelist.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
+namespace.o: private CFLAGS += -fpic
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: private CPPFLAGS += -D_asm
 plot.o: plot.h handle.h
+shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
 shared.o: shared.h namespace.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE

@@ -98,7 +98,8 @@ hook_trampoline:
 	mov  %rcx,  8(%rsp)          // intermediate return address
 
 	add  $8, %rsp
-	mov  shared_trampoline(%rip), %rcx
+	mov  shared_trampoline@gotpcrel(%rip), %rcx
+	mov  (%rcx), %rcx
 	jmp  *%rcx
 
 // Stack at entry:
