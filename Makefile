@@ -59,7 +59,7 @@ mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object.o: mirror_object.h error.h handle.h namespace.h whitelist.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
-namespace.o: private CFLAGS += -fpic
+namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: private CPPFLAGS += -D_asm
