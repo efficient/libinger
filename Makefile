@@ -18,6 +18,10 @@ libgotcha.so: private LDFLAGS += -L.
 libgotcha.so: private LDLIBS += -lmirror_object
 libgotcha.so: $(DEPS)
 
+libgotchapreload.so: private LDFLAGS += -Wl,--exclude-libs,ALL
+libgotchapreload.so: private LDLIBS += -ldl -lpthread
+libgotchapreload.so: libgotcha.a
+
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
 ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
 ctests: private LDLIBS += -ldl -lpthread
@@ -47,6 +51,7 @@ error.o: error.h
 goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
+gotchapreload.o: private CFLAGS += -fpic
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h namespace.h plot.h
