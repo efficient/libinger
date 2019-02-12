@@ -27,6 +27,9 @@ static const char *WHITELIST[] = {
 	//  * Check whether .got.plt is aligned to a page and, if so, assume it might be protected.
 	//  * Map the program header in from disk and check for an overlapping PT_GNU_RELRO entry.
 	//  * Temporarily catch segfaults and use them to conclude that the page is protected.
+	"/rr",
+	"/libcapnp-",
+	"/libkj-",
 	"/librrpreload.so",
 };
 
