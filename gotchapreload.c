@@ -30,3 +30,7 @@ static void __attribute__((constructor)) ctor(void) {
 // be non-NULL even though the shadow GOT contains a NULL, resulting in a segfault when
 // __libc_start_main() calls our _init() from within _start().
 void __gmon_start__(void) {}
+
+// Another NULL pointer workaround, this time for valgrind's VG_NOTIFY_ON_LOAD(freeres)(), which is
+// invoked from libc's __run_exit_handlers(), which in turn is called from _exit().
+void _ZN9__gnu_cxx9__freeresEv(void) {}
