@@ -6,6 +6,8 @@ override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
 override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
 
+REVISION := HEAD
+
 DEPS := libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
 libgotcha.rlib: private LDFLAGS += -L.
@@ -70,9 +72,16 @@ shared.o: shared.h namespace.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
 whitelist.o: whitelist.h handle.h namespace.h
 
+libgotcha.tar:
+	git archive --prefix=libgotcha/ -o $@ $(REVISION)
+	mkdir -p libgotcha/.git/objects libgotcha/.git/refs
+	echo "ref: refs/" >libgotcha/.git/HEAD
+	git log --oneline --decorate=short --abbrev-commit -1 $(REVISION) >libgotcha/VERSION
+	tar rf $@ libgotcha
+
 .PHONY: clean
 clean:
-	git clean -fX
+	git clean -ffdX
 
 %: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) $< $(LDLIBS)

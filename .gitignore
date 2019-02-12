@@ -1,3 +1,4 @@
+/libgotcha/
 /bench
 /ctests
 /goot.rs
@@ -8,3 +9,4 @@
 *.o
 *.rlib
 *.so
+*.tar
