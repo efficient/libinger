@@ -54,6 +54,7 @@ goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
 gotchapreload.o: private CFLAGS += -fpic
+gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h namespace.h plot.h
