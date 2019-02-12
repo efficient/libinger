@@ -332,11 +332,12 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		switch(ELF64_R_TYPE(r->r_info)) {
 		case R_X86_64_GLOB_DAT:
-			assert(l->l_addr + r->r_offset < (uintptr_t) h->got &&
-				"Object file tagged with unsupported BIND_NOW or NOW?");
 			if(r->r_offset < first)
 				first = r->r_offset;
 			else if(!whitelisted_obj) {
+				assert(l->l_addr + r->r_offset < (uintptr_t) h->got &&
+					"Object file tagged with unsupported BIND_NOW or NOW?");
+
 				// load_shaodw() relies on GLOB_DAT entries to be in order when it
 				// sets up the shadow GOTs, so assert() that this is the case if we
 				// might multiplex this object file in the future.
@@ -396,7 +397,8 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 
 	assert(h->got_start <= GOT_GAP);
 	assert(h->sgot_start <= GOT_GAP);
-	assert(h->got_start <= h->sgot_start);
+	if(!whitelisted_obj)
+		assert(h->got_start <= h->sgot_start);
 
 	if(!whitelisted_obj && !h->got->l)
 		h->got->l = (struct link_map *) l;
