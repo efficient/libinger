@@ -93,6 +93,7 @@ lib%.rlib: %.rs
 
 lib%.so: %.o
 	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
+	@if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
 
 lib%.so: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)
