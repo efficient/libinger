@@ -23,11 +23,29 @@ static enum error hook_object(struct handle *h, const struct link_map *l) {
 	return handle_got_shadow(h);
 }
 
+static bool in_ancillary_namespace(void) {
+	static bool ancillary;
+	static bool memoized;
+	if(!memoized) {
+		for(const struct link_map *l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
+			if(!l->l_next) {
+				ancillary = true;
+				break;
+			}
+		memoized = true;
+	}
+	return ancillary;
+}
+
 enum error mirror_object(const struct link_map *l, const char *fname) {
 	assert(l);
 	assert(fname);
 	if(l->l_name && *l->l_name && strcmp(l->l_name, fname))
 		return ERROR_FNAME_MISMATCH;
+
+	// There can be only one!
+	if(in_ancillary_namespace())
+		return SUCCESS;
 
 	// Open whitelisted objects and populate symbol whitelist.
 	whitelist_shared_contains(NULL);
