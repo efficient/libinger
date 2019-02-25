@@ -35,21 +35,3 @@ static void __attribute__((constructor)) ctor(void) {
 		} \
 		return fun; \
 	}
-
-#define MAYBE_INTERPOSE(sym) \
-	WRAPPER(void, sym, void) \
-	void sym(void) { \
-		void (*sym)(void); \
-		if((sym = sym##_location())) \
-			sym(); \
-	}
-
-// If this weak symbol is not defined, the default constructor code in crti.o will invoke a dynamic
-// symbol by the same name if it is non-NULL.  Unfortunately, since we wrap said symbol, it *will*
-// be non-NULL even though the shadow GOT contains a NULL, resulting in a segfault when
-// __libc_start_main() calls our _init() from within _start().
-MAYBE_INTERPOSE(__gmon_start__)
-
-// Another NULL pointer workaround, this time for valgrind's VG_NOTIFY_ON_LOAD(freeres)(), which is
-// invoked from libc's __run_exit_handlers(), which in turn is called from _exit().
-MAYBE_INTERPOSE(_ZN9__gnu_cxx9__freeresEv)

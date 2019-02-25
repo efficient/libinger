@@ -218,8 +218,13 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 				const void **entry = got->e + index;
 				const void **sentry = sgot->e + sindex;
 				if(*entry == *sentry) {
-					*entry = plot->code + plot_entries_offset + plot_entry_size *
-						(sindex - h->sgot_start + h->shadow->first_entry);
+					// Only install a PLOT trampoline if the existing GOT entry
+					// is non-NULL: code might NULL-check an address to decide
+					// whether to call it, and we don't want anyone invoking
+					// trampolines that will always lead to NULL!
+					if(*sentry)
+						*entry = plot->code + plot_entries_offset + plot_entry_size *
+							(sindex - h->sgot_start + h->shadow->first_entry);
 					++sindex;
 				}
 			}
