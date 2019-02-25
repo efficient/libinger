@@ -76,12 +76,33 @@ static const char *progname(void) {
 	static char progname[PATH_MAX];
 	static bool ready;
 
-	const char *res = progname;
 	// This can race during initialization, but it should still be correct because realpath()
 	// will always populate progname with the exact same contents.
-	if(!ready && (res = realpath(__progname_full, progname)))
+	if(!ready) {
+		if(strchr(__progname_full, '/'))
+			realpath(__progname_full, progname);
+		else {
+			char which[PATH_MAX];
+			char buf[PATH_MAX];
+			const char *paths = getenv("PATH");
+			assert(paths && "PATH variable not present in environment");
+			buf[PATH_MAX - 1] = '\0';
+			which[PATH_MAX - 2] = '\0';
+			strncpy(buf, paths, PATH_MAX - 1);
+			for(const char *path = strtok_r(buf, ":", (char **) &paths);
+				path;
+				path = strtok_r(NULL, ":", (char **) &paths)) {
+				strncpy(which, path, PATH_MAX - 2);
+				char *bound = strchr(which, '\0');
+				*bound++ = '/';
+				strncat(bound, __progname_full, PATH_MAX - (bound - which) - 1);
+				if(!access(which, X_OK))
+					strcpy(progname, which);
+			}
+		}
 		ready = true;
-	return res;
+	}
+	return progname;
 }
 
 static size_t pagesize(void) {
