@@ -346,15 +346,17 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	else
 		h->symtab_end = (ElfW(Sym) *) h->strtab;
 
+	const ElfW(Shdr) *sh = NULL;
+	const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
+	assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "ELF header not loaded into process image?");
+	if(e->e_shoff)
+		sh = (ElfW(Shdr) *) (l->l_addr + e->e_shoff);
+
 	// Dynamic relocation types enumerated in the switch statement in ld.so's dl-machine.h
 	uintptr_t first = (uintptr_t) h->got - l->l_addr;
 	const uintptr_t *last = &first;
 	size_t count = 0;
 	bool whitelisted_obj = whitelist_so_contains(h->path);
-	const ElfW(Shdr) *sh = NULL;
-	size_t shoff;
-	size_t shlen;
-	int fd;
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		switch(ELF64_R_TYPE(r->r_info)) {
 		case R_X86_64_GLOB_DAT:
@@ -385,37 +387,11 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			if(whitelisted_obj || whitelist_copy_contains(h->strtab + st->st_name))
 				continue;
-
-			if(!sh) {
-				const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
-				assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "Ehdr missing magic");
-				assert(e->e_shoff && "Object file missing section header");
-				shoff = e->e_shoff;
-				assert(e->e_shentsize == sizeof *sh && "Shdr size mismatch");
-				shlen = shoff + e->e_shnum * sizeof *sh;
-				if((fd = open(h->path, O_RDONLY)) < 0)
-					return ERROR_OPEN;
-				intptr_t obj = (intptr_t)
-					mmap(NULL, shlen, PROT_READ, MAP_SHARED, fd, 0);
-				if(obj == (intptr_t) MAP_FAILED) {
-					close(fd);
-					return ERROR_MMAP;
-				}
-				sh = (ElfW(Shdr) *) (obj + shoff);
-			}
-
-			if(sh[st->st_shndx].sh_flags & SHF_WRITE) {
-				munmap((void *) ((uintptr_t) sh - shoff), shlen);
-				close(fd);
+			if(sh[st->st_shndx].sh_flags & SHF_WRITE)
 				return ERROR_UNSUPPORTED_RELOCS;
-			}
 			break;
 		}
 		}
-	if(sh) {
-		munmap((void *) ((uintptr_t) sh - shoff), shlen);
-		close(fd);
-	}
 	h->got_start = (const void **) (l->l_addr + first) - h->got->e;
 	h->sgot_start = GOT_GAP - count;
 
