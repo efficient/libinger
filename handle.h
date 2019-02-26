@@ -42,6 +42,8 @@ struct handle {
 	const ElfW(Rela) *pltrel_end; // Not always present.
 	const ElfW(Rela) *miscrel;
 	const ElfW(Rela) *miscrel_end;
+	int pltprot;
+	int miscprot;
 	const ElfW(Sym) *symtab;
 	const ElfW(Sym) *symtab_end;
 	const struct sym_hash *symhash; // Not always present.

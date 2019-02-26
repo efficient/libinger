@@ -70,6 +70,11 @@ static inline bool handle_got_has_glob_dat(const struct handle *handle) {
 	return handle->got_start != GOT_GAP;
 }
 
+static inline int phdr_to_mprot(const ElfW(Phdr) *ph) {
+	return ((ph->p_flags & PF_R) ? PROT_READ : 0) | ((ph->p_flags & PF_W) ? PROT_WRITE : 0) |
+		((ph->p_flags & PF_X) ? PROT_EXEC : 0);
+}
+
 // Returns NULL on error.
 static const char *progname(void) {
 	extern const char *__progname_full;
@@ -192,12 +197,16 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		// overwrite its corresponding GOT entry to memoize the result, thereby disabling
 		// our multiplexer trampoline!  We need it to rewrite the *shadow* GOT entry
 		// instead, so rewrite the dynamic relocation entry to target that location.
-		ElfW(Rela) *page = (ElfW(Rela) *) ((uintptr_t) pltrel & ~(pagesize() - 1));
-		size_t pgsz = (uintptr_t) epltrel - (uintptr_t) page;
-		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
-			if(n)
-				dlclose(l);
-			return ERROR_MPROTECT;
+		void *page = NULL;
+		size_t pgsz;
+		if(!(h->pltprot & PROT_WRITE)) {
+			page = (void *) ((uintptr_t) pltrel & ~(pagesize() - 1));
+			pgsz = (uintptr_t) epltrel - (uintptr_t) page;
+			if(mprotect(page, pgsz, h->pltprot | PROT_WRITE)) {
+				if(n)
+					dlclose(l);
+				return ERROR_MPROTECT;
+			}
 		}
 
 		for(ElfW(Rela) *r = (ElfW(Rela) *) pltrel; r != epltrel; ++r) {
@@ -216,7 +225,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 			r->r_offset = (uintptr_t) (sgot->e + lazy) - l->l_addr;
 		}
 
-		if(mprotect(page, pgsz, PROT_READ)) {
+		if(page && mprotect(page, pgsz, h->pltprot)) {
 			if(n)
 				dlclose(l);
 			return ERROR_MPROTECT;
@@ -224,13 +233,17 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	}
 
 	if(handle_got_has_glob_dat(h)) {
-		void *page = (void *) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
-		size_t pgsz = (uintptr_t) got - (uintptr_t) page;
-		assert(!(pgsz % pagesize()));
-		if(mprotect(page, pgsz, PROT_READ | PROT_WRITE)) {
-			if(n)
-				dlclose(l);
-			return ERROR_MPROTECT;
+		void *page = NULL;
+		size_t pgsz;
+		if(!(h->miscprot & PROT_WRITE)) {
+			page = (void *) ((uintptr_t) (got->e + h->got_start) & ~(pagesize() - 1));
+			pgsz = (uintptr_t) got - (uintptr_t) page;
+			assert(!(pgsz % pagesize()) && "End of immutable GOT not page aligned");
+			if(mprotect(page, pgsz, h->miscprot | PROT_WRITE)) {
+				if(n)
+					dlclose(l);
+				return ERROR_MPROTECT;
+			}
 		}
 
 		if(!n) {
@@ -255,7 +268,7 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 				if(plot_contains_entry(plot, h->got->e[index]))
 					got->e[index] = h->got->e[index];
 
-		if(page && mprotect(page, pgsz, PROT_READ)) {
+		if(page && mprotect(page, pgsz, h->miscprot)) {
 			if(n)
 				dlclose(l);
 			return ERROR_MPROTECT;
@@ -348,9 +361,29 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 
 	const ElfW(Shdr) *sh = NULL;
 	const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
+	const ElfW(Phdr) *p = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
+	const ElfW(Phdr) *p_end = p + e->e_phnum;
 	assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "ELF header not loaded into process image?");
 	if(e->e_shoff)
 		sh = (ElfW(Shdr) *) (l->l_addr + e->e_shoff);
+
+	if(h->pltrel) {
+		for(const ElfW(Phdr) *ph = p; ph != p_end; ++ph)
+			if(ph->p_type == PT_LOAD && l->l_addr + ph->p_vaddr <= (uintptr_t) h->pltrel &&
+				(uintptr_t) h->pltrel_end <= l->l_addr + ph->p_vaddr + ph->p_memsz) {
+				h->pltprot = phdr_to_mprot(ph);
+				break;
+			}
+		assert(h->pltprot && "JUMP_SLOT relocations not within a single loadable segment");
+	}
+	for(const ElfW(Phdr) *ph = p; ph != p_end; ++ph) {
+		if(ph->p_type == PT_LOAD && l->l_addr + ph->p_vaddr <= (uintptr_t) h->miscrel &&
+			(uintptr_t) h->miscrel_end <= l->l_addr + ph->p_vaddr + ph->p_memsz) {
+			h->miscprot = phdr_to_mprot(ph);
+			break;
+		}
+	}
+	assert(h->miscprot && "GLOB_DAT relocations not within a single loadable segment");
 
 	// Dynamic relocation types enumerated in the switch statement in ld.so's dl-machine.h
 	uintptr_t first = (uintptr_t) h->got - l->l_addr;
