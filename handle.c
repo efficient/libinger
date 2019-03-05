@@ -420,7 +420,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			if(whitelisted_obj || whitelist_copy_contains(h->strtab + st->st_name))
 				continue;
-			if(sh[st->st_shndx].sh_flags & SHF_WRITE)
+			if(!sh || sh[st->st_shndx].sh_flags & SHF_WRITE)
 				return ERROR_UNSUPPORTED_RELOCS;
 			break;
 		}
