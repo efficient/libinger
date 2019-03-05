@@ -13,7 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define PLT_ENTRY_LEN 16
+#define DATA ((const void *) 0x1)
 
 struct sym_hash {
 	uint32_t nbucket;
@@ -165,10 +165,26 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	ssize_t index = h->sgot_start;
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
+			size_t sect;
 			if(n && whitelist_shared_contains(h->strtab +
 				h->symtab[ELF64_R_SYM(r->r_info)].st_name))
+				// This symbol is shared among all namespaces.  Populate the
+				// corresponding entry in the ancillary namespace's shadow GOT with
+				// a NULL sentinel to indicate to the main trampoline that it should
+				// load the address from the base shadow GOT instead.
 				sgot->e[index++] = NULL;
+			else if(h->sechdr && (sect = h->symtab[ELF64_R_SYM(r->r_info)].st_shndx) &&
+				!(h->sechdr[sect].sh_flags & SHF_EXECINSTR))
+				// This is a replaceable *data* symbol rather than a function.
+				// Mark the corresponding entry in the shadow GOT so that we won't
+				// install a corresponding trampoline in the real GOT; this is safe
+				// because, if any other object file tries to override the symbol,
+				// it will generate a banned COPY relocation and be rejected.
+				sgot->e[index++] = (const void *)
+					~(*(uintptr_t *) (l->l_addr + r->r_offset));
 			else
+				// Back up the real GOT entry into the shadow GOT for this namespace
+				// so we're ready to replace the GOT entry with a PLOT trampoline.
 				sgot->e[index++] = *(const void **) (l->l_addr + r->r_offset);
 		}
 	assert(index <= GOT_GAP);
@@ -252,13 +268,21 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 				const void **entry = got->e + index;
 				const void **sentry = sgot->e + sindex;
 				if(*entry == *sentry) {
-					// Only install a PLOT trampoline if the existing GOT entry
-					// is non-NULL: code might NULL-check an address to decide
-					// whether to call it, and we don't want anyone invoking
-					// trampolines that will always lead to NULL!
+					// Only install a PLOT trampoline if:
+					//   * the existing GOT entry is non-NULL (since code might
+					//     NULL-check an address to decide whether to call it)
+					// (and)
+					//   * the entry corresponds to code rather than data (since
+					//     attempting to read a trampoline would be misleading
+					//     and attempting to write to it would be disastrous)
 					if(*sentry)
 						*entry = plot->code + plot_entries_offset + plot_entry_size *
 							(sindex - h->sgot_start + h->shadow->first_entry);
+					++sindex;
+				} else if((uintptr_t) *entry == ~(uintptr_t) *sentry) {
+					// Install a DATA sentinel in the shadow GOT to cause a
+					// crash in case it is somehow ever invoked.
+					*sentry = DATA;
 					++sindex;
 				}
 			}
@@ -359,13 +383,12 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 	else
 		h->symtab_end = (ElfW(Sym) *) h->strtab;
 
-	const ElfW(Shdr) *sh = NULL;
 	const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
 	const ElfW(Phdr) *p = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
 	const ElfW(Phdr) *p_end = p + e->e_phnum;
 	assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "ELF header not loaded into process image?");
 	if(e->e_shoff)
-		sh = (ElfW(Shdr) *) (l->l_addr + e->e_shoff);
+		h->sechdr = (ElfW(Shdr) *) (l->l_addr + e->e_shoff);
 
 	if(h->pltrel) {
 		for(const ElfW(Phdr) *ph = p; ph != p_end; ++ph)
@@ -420,7 +443,7 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			if(whitelisted_obj || whitelist_copy_contains(h->strtab + st->st_name))
 				continue;
-			if(!sh || sh[st->st_shndx].sh_flags & SHF_WRITE)
+			if(!h->sechdr || h->sechdr[st->st_shndx].sh_flags & SHF_WRITE)
 				return ERROR_UNSUPPORTED_RELOCS;
 			break;
 		}
