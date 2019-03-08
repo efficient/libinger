@@ -3,7 +3,7 @@ LN := ln -s
 override CFLAGS  := -std=c99 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override LDFLAGS := -Wl,-R\$$ORIGIN $(LDFLAGS)
          LDLIBS_ := $(LDLIBS)
-override LDLIBS   = $(if $(filter %_interpose %_interpose.so load_%,$@),,decls.c) $(LDLIBS_)
+override LDLIBS   = $(if $(filter %_interpose %_interpose.so load_%,$@),,decls.c -ldl) $(LDLIBS_)
 
 override GREPFLAGS := '\<[a-z]\+_[a-z]\+\>\S*$$' $(GREPFLAGS)
 override SORTFLAGS := -k2 $(SORTFLAGS)
