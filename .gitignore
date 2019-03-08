@@ -4,4 +4,6 @@
 *_other.s
 *_self.c
 *.o
+*.R
 *.so
+*.T
