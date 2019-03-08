@@ -1,6 +1,8 @@
+/*_interpose
 /*_other
 /*_self
 
+*_interpose.c
 *_other.s
 *_self.c
 *.o
