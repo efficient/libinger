@@ -7,7 +7,7 @@ override LDLIBS  := decls.c $(LDLIBS)
 override GREPFLAGS := '\<[a-z]\+_[a-z]\+\>\S*$$' $(GREPFLAGS)
 override SORTFLAGS := -k2 $(SORTFLAGS)
 
-ALL := bin_other bin_self lib_other.so lib_self.so
+ALL := bin_other pic_other bin_self lib_other.so lib_self.so
 
 .PHONY: all
 all: $(ALL)
@@ -20,6 +20,9 @@ t: $(ALL:=.T)
 
 bin_other: lib_self.so
 lib_other.so: lib_self.so
+
+pic_other: lib_self.so
+pic_other: private LDFLAGS += -fpic
 
 %_other.s:
 	$(LN) /dev/null $@
