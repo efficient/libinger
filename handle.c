@@ -13,7 +13,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#define DATA ((const void *) 0x1)
+bool statics_insert(const void *);
+bool statics_contains(const void *);
+bool statics_remove(const void *);
 
 struct sym_hash {
 	uint32_t nbucket;
@@ -73,6 +75,16 @@ static inline bool handle_got_has_glob_dat(const struct handle *handle) {
 static inline int phdr_to_mprot(const ElfW(Phdr) *ph) {
 	return ((ph->p_flags & PF_R) ? PROT_READ : 0) | ((ph->p_flags & PF_W) ? PROT_WRITE : 0) |
 		((ph->p_flags & PF_X) ? PROT_EXEC : 0);
+}
+
+static inline void statics_foreach_nonexec_symbol(struct handle *library,
+	struct link_map *namespace,
+	bool (*function)(const void *)) {
+	if(library->sechdr)
+		for(const ElfW(Sym) *st = library->symtab; st != library->symtab_end; ++st)
+			if(st->st_value && st->st_shndx &&
+				!(library->sechdr[st->st_shndx].sh_flags & SHF_EXECINSTR))
+				function((const void *) (namespace->l_addr + st->st_value));
 }
 
 // Returns NULL on error.
@@ -153,6 +165,16 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 		got = (struct got *) d->d_un.d_ptr;
 	}
 
+	// Record symbols pointing to non-executable *data* so we know not to install trampolines
+	// Record non-executable *data* symbols defined in the address so we know not to install
+	// trampolines over GOT entries corresponding to them in this and future object files.
+	//
+	// Note that we don't create such a record for data symbols defined in unmirrored object
+	// files: this is safe because such symbols cannot possibly be referenced from an ancillary
+	// namespace, since any attempt to load a library requiring them would fail with an
+	// undefined symbol error during dynamic linking.
+	statics_foreach_nonexec_symbol(h, l, statics_insert);
+
 	size_t len = handle_got_num_entries(h);
 	memcpy(sgot, got, sizeof *got + h->got_len * sizeof *h->got->e);
 
@@ -165,7 +187,6 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 	ssize_t index = h->sgot_start;
 	for(const ElfW(Rela) *r = h->miscrel; r != h->miscrel_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
-			size_t sect;
 			if(n && whitelist_shared_contains(h->strtab +
 				h->symtab[ELF64_R_SYM(r->r_info)].st_name))
 				// This symbol is shared among all namespaces.  Populate the
@@ -173,15 +194,6 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 				// a NULL sentinel to indicate to the main trampoline that it should
 				// load the address from the base shadow GOT instead.
 				sgot->e[index++] = NULL;
-			else if(h->sechdr && (sect = h->symtab[ELF64_R_SYM(r->r_info)].st_shndx) &&
-				!(h->sechdr[sect].sh_flags & SHF_EXECINSTR))
-				// This is a replaceable *data* symbol rather than a function.
-				// Mark the corresponding entry in the shadow GOT so that we won't
-				// install a corresponding trampoline in the real GOT; this is safe
-				// because, if any other object file tries to override the symbol,
-				// it will generate a banned COPY relocation and be rejected.
-				sgot->e[index++] = (const void *)
-					~(*(uintptr_t *) (l->l_addr + r->r_offset));
 			else
 				// Back up the real GOT entry into the shadow GOT for this namespace
 				// so we're ready to replace the GOT entry with a PLOT trampoline.
@@ -275,14 +287,9 @@ static enum error load_shadow(struct handle *h, Lmid_t n) {
 					//   * the entry corresponds to code rather than data (since
 					//     attempting to read a trampoline would be misleading
 					//     and attempting to write to it would be disastrous)
-					if(*sentry)
+					if(*sentry && !statics_contains(*sentry))
 						*entry = plot->code + plot_entries_offset + plot_entry_size *
 							(sindex - h->sgot_start + h->shadow->first_entry);
-					++sindex;
-				} else if((uintptr_t) *entry == ~(uintptr_t) *sentry) {
-					// Install a DATA sentinel in the shadow GOT to cause a
-					// crash in case it is somehow ever invoked.
-					*sentry = DATA;
 					++sindex;
 				}
 			}
@@ -465,16 +472,23 @@ enum error handle_init(struct handle *h, const struct link_map *l) {
 }
 
 void handle_cleanup(struct handle *h) {
-	if(h && h->shadow) {
+	if(!h)
+		return;
+
+	if(h->shadow) {
 		for(struct got **it = h->shadow->gots + 1,
 			**end = h->shadow->gots + NUM_SHADOW_NAMESPACES + 1;
 			it != end;
-			++it)
+			++it) {
+			statics_foreach_nonexec_symbol(h, (*it)->l, statics_remove);
 			if(*it)
 				dlclose((*it)->l);
+		}
 		free(h->shadow->gots[0]->e + h->sgot_start);
 		free(h->shadow);
 	}
+	if(h->got->l)
+		statics_foreach_nonexec_symbol(h, h->got->l, statics_remove);
 }
 
 enum error handle_got_shadow(struct handle *h) {

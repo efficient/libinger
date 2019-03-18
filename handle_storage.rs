@@ -2,13 +2,13 @@ use crate::handle::error;
 use crate::handle::handle;
 use crate::handle::link_map;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::sync::ONCE_INIT;
 use std::sync::Mutex;
+use std::sync::Once;
 use std::sync::RwLock;
 
 fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
-	use std::sync::ONCE_INIT;
-	use std::sync::Once;
-
 	unsafe impl Send for HandleId {}
 	unsafe impl Sync for HandleId {}
 	unsafe impl Send for handle {}
@@ -21,6 +21,17 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 	});
 	unsafe {
 		HANDLES.as_ref()
+	}.unwrap()
+}
+
+fn statics() -> &'static RwLock<HashSet<usize>> {
+	static mut STATICS: Option<RwLock<HashSet<usize>>> = None;
+	static INIT: Once = ONCE_INIT;
+	INIT.call_once(|| unsafe {
+		STATICS.get_or_insert(RwLock::default());
+	});
+	unsafe {
+		STATICS.as_ref()
 	}.unwrap()
 }
 
@@ -85,6 +96,21 @@ pub extern "C" fn handle_get(
 			null()
 		}
 	}
+}
+
+#[no_mangle]
+pub extern "C" fn statics_insert(addr: usize) -> bool {
+	statics().write().unwrap().insert(addr)
+}
+
+#[no_mangle]
+pub extern "C" fn statics_contains(addr: usize) -> bool {
+	statics().read().unwrap().contains(&addr)
+}
+
+#[no_mangle]
+pub extern "C" fn statics_remove(addr: usize) -> bool {
+	statics().write().unwrap().remove(&addr)
 }
 
 #[derive(Eq, Hash, PartialEq)]
