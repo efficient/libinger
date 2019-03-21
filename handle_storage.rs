@@ -2,11 +2,11 @@ use crate::handle::error;
 use crate::handle::handle;
 use crate::handle::link_map;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::sync::ONCE_INIT;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::sync::RwLock;
+use std::sync::RwLockWriteGuard;
 
 fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 	unsafe impl Send for HandleId {}
@@ -24,8 +24,8 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 	}.unwrap()
 }
 
-fn statics() -> &'static RwLock<HashSet<usize>> {
-	static mut STATICS: Option<RwLock<HashSet<usize>>> = None;
+fn globals() -> &'static RwLock<HashMap<usize, usize>> {
+	static mut STATICS: Option<RwLock<HashMap<usize, usize>>> = None;
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| unsafe {
 		STATICS.get_or_insert(RwLock::default());
@@ -43,6 +43,8 @@ pub extern "C" fn handle_get(
 ) -> *const handle {
 	use std::mem::uninitialized;
 	use std::ptr::null;
+	use std::sync::atomic::AtomicBool;
+	use std::sync::atomic::Ordering;
 
 	let lock = handles().read().unwrap();
 	if let Some(entry) = lock.get(&HandleId (obj)) {
@@ -61,56 +63,96 @@ pub extern "C" fn handle_get(
 	} else {
 		drop(lock);
 		if let Some(setup) = setup {
-			let mut lock = handles().write().unwrap();
-			let mut new = false;
-			let entry = lock.entry(HandleId (obj)).or_insert_with(|| {;
-				new = true;
-				Box::new((
-					unsafe {
-						uninitialized()
-					},
-					Mutex::new(()),
-				))
-			});
-			let (handle, init) = &mut **entry;
-			let handle: *mut _ = handle;
-			let init: *const _ = init;
-			if let Ok(init) = unsafe {
-				(*init).lock()
-			} {
-				drop(lock);
-				if new {
-					let res = unsafe {
+			let mut res = null();
+			let new = AtomicBool::new(false);
+			handle_helper(
+				|lock| lock.entry(HandleId (obj)).or_insert_with(|| {
+					new.store(true, Ordering::Relaxed);
+					Box::new((
+						unsafe {
+							uninitialized()
+						},
+						Mutex::new(()),
+					))
+				}),
+				|handle| if new.load(Ordering::Relaxed) {
+					let status = unsafe {
 						setup(handle, obj)
 					};
 					if let Some(code) = code {
-						*code = res;
+						*code = status;
 					}
-				}
-				drop(init);
-				handle
-			} else {
-				null()
-			}
+					res = handle;
+				},
+			);
+			res
 		} else {
 			null()
 		}
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn statics_insert(addr: usize) -> bool {
-	statics().write().unwrap().insert(addr)
+fn handle_helper<
+	G: for<'a> FnOnce(&'a mut RwLockWriteGuard<HashMap<HandleId, Box<(handle, Mutex<()>)>>>) ->
+		&'a mut (handle, Mutex<()>),
+	O: FnOnce(*mut handle),
+>(
+	get: G,
+	oper: O,
+) {
+	let mut lock = handles().write().unwrap();
+	let (handle, init) = get(&mut lock);
+	let handle: *mut _ = handle;
+	let init: *const _ = init;
+	if let Ok(init) = unsafe {
+		(*init).lock()
+	} {
+		drop(lock);
+		oper(handle);
+		drop(init);
+	}
 }
 
 #[no_mangle]
-pub extern "C" fn statics_contains(addr: usize) -> bool {
-	statics().read().unwrap().contains(&addr)
+pub extern "C" fn handle_update(obj: *const link_map, oper: unsafe extern "C" fn(*mut handle) -> error) -> error {
+	let mut err = error::SUCCESS;
+	handle_helper(|lock| lock.get_mut(&HandleId (obj)).unwrap(), |handle| unsafe {
+		err = oper(handle);
+	});
+	err
 }
 
 #[no_mangle]
-pub extern "C" fn statics_remove(addr: usize) -> bool {
-	statics().write().unwrap().remove(&addr)
+pub extern "C" fn globals_insert(addr: usize, trampoline: usize) -> bool {
+	use std::collections::hash_map::Entry;
+
+	globals().write().unwrap().entry(addr).or_insert(trampoline);
+	if let Entry::Vacant(spot) = globals().write().unwrap().entry(addr) {
+		spot.insert(trampoline);
+		true
+	} else {
+		false
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn globals_contains(addr: usize) -> bool {
+	globals().read().unwrap().get(&addr).is_some()
+}
+
+#[no_mangle]
+pub extern "C" fn globals_get(addr: usize) -> usize {
+	*globals().read().unwrap().get(&addr).unwrap_or(&0)
+}
+
+#[no_mangle]
+pub extern "C" fn globals_set(addr: usize, trampoline: usize) {
+	globals().write().unwrap().insert(addr, trampoline);
+}
+
+#[no_mangle]
+pub extern "C" fn globals_remove(addr: usize) -> bool {
+	globals().write().unwrap().remove(&addr).is_some()
 }
 
 #[derive(Eq, Hash, PartialEq)]

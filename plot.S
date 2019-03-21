@@ -1,7 +1,5 @@
 #include "plot.h"
 
-#include "handle.h"
-
 // Stack at entry:
 //  offset contents
 //  ===============
@@ -27,16 +25,10 @@ procedure_linkage_override:
 	mov  24(%rsp), %rcx          // GOOT address
 	mov  32(%rsp), %rdx          // trampoline index
 	mov   8(%rcx, %rdx, 8), %rcx // handle address
-	add  24(%rcx), %rdx          // index += sgot_start
-	mov  40(%rcx), %rcx          // shadow address
+	mov  24(%rcx), %rcx          // shadow address
 	sub   8(%rcx), %edx          // index -= first_entry
 	movsx %edx, %rdx
 	add  $16, %rcx               // gots address
-
-	cmp  $GOT_GAP, %rdx
-	jl   .Lfixed_index
-	sub  $GOT_GAP, %rdx
-.Lfixed_index:
 	mov  %rcx, 24(%rsp)
 	mov  %rdx, 32(%rsp)
 
@@ -44,13 +36,13 @@ procedure_linkage_override:
 	mov  (%rax), %rdx            // namespace
 	mov  (%rcx, %rdx, 8), %rcx   // got address: gots[namespace]
 	mov  32(%rsp), %rdx          // GOT index
-	mov  24(%rcx, %rdx, 8), %rcx // symbol address
+	mov  (%rcx, %rdx, 8), %rcx   // symbol address
 
 	test %rcx, %rcx
 	jnz  .Lfound_symbol
 	mov  24(%rsp), %rcx          // gots address
 	mov  (%rcx), %rcx            // got address: gots[BASE]
-	mov  24(%rcx, %rdx, 8), %rcx // symbol address
+	mov  (%rcx, %rdx, 8), %rcx   // symbol address
 	mov  (%rax), %rdx            // namespace
 	mov  %rdx,  32(%rsp)         // save namespace
 	lea  hook_trampoline(%rip), %rdx

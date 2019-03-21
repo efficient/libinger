@@ -12,4 +12,9 @@ struct link_map;
 Lmid_t *namespace_thread(void);
 struct link_map *namespace_load(Lmid_t lmid, const char *filename, int flags);
 
+// This function MUST NOT be called on the dynamic linker itself: the reference counting of its
+// link_map works differently than that of other object files', and it reacts VERY poorly to being
+// dlclose()'d!
+const struct link_map *namespace_get(Lmid_t lmid, const char *filename, int flags);
+
 #endif

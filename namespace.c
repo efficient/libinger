@@ -11,6 +11,8 @@ Lmid_t *namespace_thread(void) {
 }
 
 struct link_map *namespace_load(Lmid_t lmid, const char *filename, int flags) {
+	assert(!(flags & RTLD_NOLOAD));
+
 	static Lmid_t fast = LM_ID_BASE;
 	static pthread_mutex_t slow = PTHREAD_MUTEX_INITIALIZER;
 
@@ -29,5 +31,12 @@ struct link_map *namespace_load(Lmid_t lmid, const char *filename, int flags) {
 	}
 
 	pthread_mutex_unlock(&slow);
+	return l;
+}
+
+const struct link_map *namespace_get(Lmid_t lmid, const char *filename, int flags) {
+	struct link_map *l = dlmopen(lmid, filename, flags | RTLD_NOLOAD);
+	if(l)
+		dlclose(l);
 	return l;
 }

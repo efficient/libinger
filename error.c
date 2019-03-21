@@ -17,8 +17,8 @@ const char *error_message(enum error error) {
 	case ERROR_FNAME_MISMATCH:
 		res = "Given invalid path to object file (consider not passing this optional arg)";
 		break;
-	case ERROR_FNAME_REALPATH:
-		res = "Determining path to program executable (consider passing as optional arg)";
+	case ERROR_FNAME_PATH:
+		res = "Determining path to program executable (check PATH environment variable)";
 		break;
 	case ERROR_OPEN:
 		res = "Unable to open object file for reading";
@@ -51,7 +51,6 @@ const char *error_message(enum error error) {
 const char *error_explanation(enum error error) {
 	const char *res = NULL;
 	switch(error) {
-	case ERROR_FNAME_REALPATH:
 	case ERROR_OPEN:
 	case ERROR_MMAP:
 	case ERROR_MALLOC:

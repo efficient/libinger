@@ -2,8 +2,11 @@
 
 #include "handle.h"
 
+#include <assert.h>
 #include <dlfcn.h>
 #include <string.h>
+
+struct whitelist;
 
 static const char *WHITELIST[] = {
 	// [Runtime] dynamic linker:
@@ -33,18 +36,16 @@ static const char *WHITELIST[] = {
 	"/librrpreload.so",
 };
 
-struct whitelist;
 
 void whitelist_shared_insert(struct whitelist *, const char *);
 
-void whitelist_shared_init(struct whitelist *out) {
-	for(const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY); l; l = l->l_next)
-		if(whitelist_so_contains(l->l_name)) {
-			const struct handle *h = handle_get(l, handle_init, NULL);
-			for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
-				if(st->st_shndx != SHN_UNDEF && st->st_shndx != SHN_ABS)
-					whitelist_shared_insert(out, h->strtab + st->st_name);
-		}
+void whitelist_so_insert_with(const struct handle *h, struct whitelist *out) {
+	assert(h);
+	assert(out);
+
+	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
+		if(st->st_shndx != SHN_UNDEF)
+			whitelist_shared_insert(out, h->strtab + st->st_name);
 }
 
 bool whitelist_so_contains(const char *path) {
@@ -54,4 +55,10 @@ bool whitelist_so_contains(const char *path) {
 		if(strstr(path, *it))
 			return true;
 	return false;
+}
+
+void whitelist_shared_init(struct whitelist *out) {
+	for(const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY); l; l = l->l_next)
+		if(whitelist_so_contains(l->l_name))
+			whitelist_so_insert_with(handle_get(l, NULL, NULL), out);
 }
