@@ -63,16 +63,16 @@ static bool passed;
 
 static void executable_handle_init(void) {
 	struct handle h;
-	const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
-	assert_success(handle_init(&h, l));
+	struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
+	assert_success(handle_init(&h, l, l));
 }
 
 static void library_handle_init(void) {
 	struct handle h;
-	const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
+	struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY);
 	while(!strstr(l->l_name, "/libctestfuns.so"))
 		l = l->l_next;
-	assert_success(handle_init(&h, l));
+	assert_success(handle_init(&h, l, l));
 }
 
 static void goot_abuse(void) {
@@ -82,20 +82,19 @@ static void goot_abuse(void) {
 	struct handle mock;
 	struct shadow_gots stables = {};
 	memset(&mock, 0, sizeof mock);
-	mock.sgot_start = GOT_GAP;
 	mock.shadow = &stables;
 
-	for(mock.got_len = 1; mock.got_len <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.got_len) {
+	for(mock.ntramps = 1; mock.ntramps <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.ntramps) {
 		size_t entries;
 		stables.first_entry = -1;
 		for(entries = 0; goot_insert_lib(&table, &mock); ++entries)
 			stables.first_entry = -1;
-		assert(entries == PLOT_ENTRIES_PER_PAGE / mock.got_len);
+		assert(entries == PLOT_ENTRIES_PER_PAGE / mock.ntramps);
 
 		for(unsigned index = stables.first_entry = 0; index < PLOT_ENTRIES_PER_PAGE;
 			stables.first_entry = ++index)
-			assert(goot_remove_lib(&table, index) == (!(index % mock.got_len) &&
-				PLOT_ENTRIES_PER_PAGE - index >= mock.got_len));
+			assert(goot_remove_lib(&table, index) == (!(index % mock.ntramps) &&
+				PLOT_ENTRIES_PER_PAGE - index >= mock.ntramps));
 	}
 }
 
