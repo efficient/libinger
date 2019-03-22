@@ -4,7 +4,7 @@ RUSTC := rustc
 override BINDFLAGS := --default-enum-style rust $(BINDFLAGS)
 override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
-override RUSTFLAGS := --edition 2018 -O $(RUSTFLAGS)
+override RUSTFLAGS := --edition 2018 -Copt-level=2 $(RUSTFLAGS)
 
 REVISION := HEAD
 
