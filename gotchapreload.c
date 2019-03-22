@@ -1,7 +1,7 @@
 #include "mirror_object.h"
 
 #include <assert.h>
-#include <link.h>
+#include <dlfcn.h>
 #include <stdbool.h>
 #include <stdio.h>
 
@@ -10,8 +10,6 @@ static const char *(*const explainers[])(enum error) = {
 	error_explanation,
 	NULL,
 };
-
-static bool ready;
 
 static void __attribute__((constructor)) ctor(void) {
 	enum error fail = mirror_object(dlopen(NULL, RTLD_LAZY), "");
@@ -25,7 +23,6 @@ static void __attribute__((constructor)) ctor(void) {
 		fputc('\n', stderr);
 		assert(false);
 	}
-	ready = true;
 }
 
 #define WRAPPER(ret, fun, ...) \
@@ -38,13 +35,3 @@ static void __attribute__((constructor)) ctor(void) {
 		} \
 		return fun; \
 	}
-
-WRAPPER(void *, dlopen, const char *filename, int flags)
-void *dlopen(const char *filename, int flags) {
-	struct link_map *res = dlopen_location()(filename, flags);
-	if(ready) {
-		enum error fail = mirror_object(res, res->l_name);
-		assert(!fail);
-	}
-	return res;
-}
