@@ -332,7 +332,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	h->shadow.override_table = -1;
 	h->shadow.first_entry = -1;
 	if((h->tramps = realloc(h->tramps, h->ntramps * sizeof *h->tramps))) {
-		if(!(h->shadow.plot = plot_insert_lib(h))) {
+		if(!(h->plot = plot_insert_lib(h))) {
 			free(h->tramps);
 			return ERROR_LIB_SIZE;
 		}
@@ -349,7 +349,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
 		uintptr_t *sgot = *h->shadow.gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
-		uintptr_t repl = (uintptr_t) h->shadow.plot->code + plot_entries_offset +
+		uintptr_t repl = (uintptr_t) h->plot->code + plot_entries_offset +
 			(h->shadow.first_entry + tramp) * plot_entry_size;
 		*sgot = defn;
 
@@ -457,7 +457,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
 		// Install the corresponding PLOT trampoline over the GOT entry.
-		*got = (uintptr_t) h->shadow.plot->code + plot_entries_offset +
+		*got = (uintptr_t) h->plot->code + plot_entries_offset +
 			(h->shadow.first_entry + tramp) * plot_entry_size;
 	}
 	prot_segment(base, h->lazygot_seg, 0);

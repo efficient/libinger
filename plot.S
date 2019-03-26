@@ -24,8 +24,7 @@ procedure_linkage_override:
 
 	mov  24(%rsp), %rcx          // GOOT address
 	mov  32(%rsp), %rdx          // trampoline index
-	mov   8(%rcx, %rdx, 8), %rcx // handle address
-	lea  24(%rcx), %rcx          // shadow address
+	mov   8(%rcx, %rdx, 8), %rcx // handle/shadow address
 	sub   8(%rcx), %edx          // index -= first_entry
 	movsx %edx, %rdx
 	add  $16, %rcx               // gots address

@@ -17,17 +17,15 @@ struct shadow_gots {
 
 	// When present, pointers into a single owned buffer.
 	uintptr_t *gots[NUM_SHADOW_NAMESPACES + 1];
-
-	// Owned.
-	const struct plot *plot;
 };
 
 struct handle {
+	struct shadow_gots shadow; // Must be the first member so the trampoline can find it.
+
 	const char *path;
 	uintptr_t baseaddr;
 	bool owned;
 	bool eager;
-	struct shadow_gots shadow;
 
 	const ElfW(Sym) *symtab;
 	const ElfW(Sym) *symtab_end;
@@ -45,6 +43,8 @@ struct handle {
 	size_t ntramps;
 	size_t ntramps_symtab;
 	size_t *tramps; // Only present if ntramps is nonzero.  Owned.
+
+	const struct plot *plot; // Only present when tramps is.  Owned.
 };
 
 enum error handle_init(struct handle *, const struct link_map *, struct link_map *);
