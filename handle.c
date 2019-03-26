@@ -366,8 +366,18 @@ void handle_cleanup(struct handle *h) {
 	if(h->owned)
 		dlclose(h);
 
+	for(const size_t *tramp = h->tramps; tramp != h->tramps + h->ntramps_symtab; ++tramp) {
+		const ElfW(Sym) *st = h->symtab + *tramp;
+		globals_remove(h->baseaddr + st->st_value);
+	}
 	free(h->tramps);
 	h->tramps = NULL;
+
+	plot_remove_lib(h);
+	h->plot = NULL;
+
+	free(*h->shadow.gots);
+	memset(h->shadow.gots, 0, sizeof h->shadow.gots);
 }
 
 // Setup "stubbed" shadow GOTs for the ancillary namespaces.  For use only on object files for which
