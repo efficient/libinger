@@ -27,7 +27,7 @@ struct handle {
 	uintptr_t baseaddr;
 	bool owned;
 	bool eager;
-	struct shadow_gots *shadow; // Not always present, but owned when it is.
+	struct shadow_gots shadow;
 
 	const ElfW(Sym) *symtab;
 	const ElfW(Sym) *symtab_end;
@@ -44,7 +44,7 @@ struct handle {
 
 	size_t ntramps;
 	size_t ntramps_symtab;
-	size_t *tramps; // Owned.
+	size_t *tramps; // Only present if ntramps is nonzero.  Owned.
 };
 
 enum error handle_init(struct handle *, const struct link_map *, struct link_map *);

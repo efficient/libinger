@@ -329,24 +329,17 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		h->tramps[h->ntramps++] = r - h->jmpslots;
 	}
 
+	h->shadow.override_table = -1;
+	h->shadow.first_entry = -1;
 	if((h->tramps = realloc(h->tramps, h->ntramps * sizeof *h->tramps))) {
-		if(!(h->shadow = calloc(1, sizeof *h->shadow))) {
-			free(h->tramps);
-			return ERROR_MALLOC;
-		}
-		h->shadow->override_table = -1;
-		h->shadow->first_entry = -1;
-
-		if(!(h->shadow->plot = plot_insert_lib(h))) {
-			free(h->shadow);
+		if(!(h->shadow.plot = plot_insert_lib(h))) {
 			free(h->tramps);
 			return ERROR_LIB_SIZE;
 		}
 
 		if(h->ntramps_symtab &&
-			!(*h->shadow->gots = malloc(h->ntramps_symtab * sizeof **h->shadow->gots))) {
+			!(*h->shadow.gots = malloc(h->ntramps_symtab * sizeof **h->shadow.gots))) {
 			plot_remove_lib(h);
-			free(h->shadow);
 			free(h->tramps);
 			return ERROR_MALLOC;
 		}
@@ -354,10 +347,10 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
 		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-		uintptr_t *sgot = *h->shadow->gots + tramp;
+		uintptr_t *sgot = *h->shadow.gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
-		uintptr_t repl = (uintptr_t) h->shadow->plot->code + plot_entries_offset +
-			(h->shadow->first_entry + tramp) * plot_entry_size;
+		uintptr_t repl = (uintptr_t) h->shadow.plot->code + plot_entries_offset +
+			(h->shadow.first_entry + tramp) * plot_entry_size;
 		*sgot = defn;
 
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
@@ -381,14 +374,14 @@ void handle_cleanup(struct handle *h) {
 // *all* defined symbols are whitelisted and we will therefore never execute the copies in ancillary
 // namespaces, if they even exist at all.
 static inline void handle_got_whitelist_all(struct handle *h) {
-	if(!h->shadow)
+	if(!*h->shadow.gots)
 		return;
 
 	size_t len = handle_got_num_entries(h);
-	uintptr_t *proxy = *h->shadow->gots + len;
+	uintptr_t *proxy = *h->shadow.gots + len;
 	memset(proxy, 0, len);
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
-		h->shadow->gots[namespace] = proxy;
+		h->shadow.gots[namespace] = proxy;
 
 	// We must add this to the whitelist so that any lazily-resolved
 	// calls from other object files also proxy to the base namespace.
@@ -415,13 +408,13 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		}
 	prot_segment(base, h->eagergot_seg, 0);
 
-	if(!h->shadow)
+	if(!*h->shadow.gots)
 		return;
 
 	if(n)
 		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
 			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-			uintptr_t *sgot = h->shadow->gots[n] + tramp;
+			uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
 			if(whitelist_shared_contains(h->strtab + st->st_name))
 				// This symbol is shared among all namespaces.  Populate the corresponding
@@ -448,7 +441,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		const ElfW(Rela) *r = jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-		uintptr_t *sgot = h->shadow->gots[n] + tramp;
+		uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
 		if(n && whitelist_shared_contains(h->strtab + st->st_name))
 			// Place a NULL sentinel in the shadow GOT.
@@ -464,8 +457,8 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
 		// Install the corresponding PLOT trampoline over the GOT entry.
-		*got = (uintptr_t) h->shadow->plot->code + plot_entries_offset +
-			(h->shadow->first_entry + tramp) * plot_entry_size;
+		*got = (uintptr_t) h->shadow.plot->code + plot_entries_offset +
+			(h->shadow.first_entry + tramp) * plot_entry_size;
 	}
 	prot_segment(base, h->lazygot_seg, 0);
 	if(!h->eager)
@@ -481,9 +474,9 @@ enum error handle_got_shadow(struct handle *h) {
 
 	size_t len = handle_got_num_entries(h);
 	if(len) {
-		*h->shadow->gots = realloc(*h->shadow->gots,
-			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow->gots);
-		if(!*h->shadow->gots)
+		*h->shadow.gots = realloc(*h->shadow.gots,
+			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow.gots);
+		if(!*h->shadow.gots)
 			return ERROR_MALLOC;
 	}
 
@@ -511,8 +504,8 @@ enum error handle_got_shadow(struct handle *h) {
 			return SUCCESS;
 		}
 
-		if(h->shadow)
-			h->shadow->gots[namespace] = *h->shadow->gots + len * namespace;
+		if(len)
+			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
 		handle_got_shadow_init(h, namespace, l->l_addr);
 	}
 	return SUCCESS;

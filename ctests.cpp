@@ -80,19 +80,17 @@ static void goot_abuse(void) {
 	goot_init(&table);
 
 	struct handle mock;
-	struct shadow_gots stables = {};
 	memset(&mock, 0, sizeof mock);
-	mock.shadow = &stables;
 
 	for(mock.ntramps = 1; mock.ntramps <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.ntramps) {
 		size_t entries;
-		stables.first_entry = -1;
+		mock.shadow.first_entry = -1;
 		for(entries = 0; goot_insert_lib(&table, &mock); ++entries)
-			stables.first_entry = -1;
+			mock.shadow.first_entry = -1;
 		assert(entries == PLOT_ENTRIES_PER_PAGE / mock.ntramps);
 
-		for(unsigned index = stables.first_entry = 0; index < PLOT_ENTRIES_PER_PAGE;
-			stables.first_entry = ++index)
+		for(unsigned index = mock.shadow.first_entry = 0; index < PLOT_ENTRIES_PER_PAGE;
+			mock.shadow.first_entry = ++index)
 			assert(goot_remove_lib(&table, index) == (!(index % mock.ntramps) &&
 				PLOT_ENTRIES_PER_PAGE - index >= mock.ntramps));
 	}

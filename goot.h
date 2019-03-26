@@ -6,7 +6,7 @@
 #include <stdbool.h>
 
 union goot_entry {
-	const struct handle *lib;
+	struct handle *lib;
 	struct {
 		unsigned odd_tag;
 		unsigned next_free;

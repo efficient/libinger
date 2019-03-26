@@ -26,22 +26,21 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) -> *const plot {
 		fn plot_alloc() -> Option<&'static mut plot>;
 	}
 
-	let h = h.unwrap();
-	assert!(! h.shadow.is_null());
+	fn t(h: &mut handle) -> &mut usize {
+		&mut h.shadow.override_table
+	}
 
-	let t = unsafe {
-		&mut (*h.shadow).override_table
-	};
+	let mut h = h.unwrap();
 	let lock = tables().read().unwrap();
-	if *t != usize::max_value() {
-		lock[*t]
+	if *t(&mut h) != usize::max_value() {
+		lock[*t(&mut h)]
 	} else {
 		let mut fits = true;
 		for table in 0..lock.len() {
 			if unsafe {
 				goot_insert_lib(lock[table].goot, h as *mut _ as _)
 			} {
-				*t = table;
+				*t(&mut h) = table;
 				break;
 			} else if unsafe {
 				goot_empty(lock[table].goot)
@@ -52,7 +51,7 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) -> *const plot {
 		}
 
 		if fits {
-			if *t == usize::max_value() {
+			if *t(&mut h) == usize::max_value() {
 				drop(lock);
 
 				let mut lock = tables().write().unwrap();
@@ -63,16 +62,16 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) -> *const plot {
 					goot_insert_lib(plot.goot, h as *mut _ as _)
 				};
 				if fits {
-					*t = lock.len();
+					*t(&mut h) = lock.len();
 				}
 				lock.push(plot);
 				if fits {
-					lock[*t]
+					lock[*t(&mut h)]
 				} else {
 					null()
 				}
 			} else {
-				lock[*t]
+				lock[*t(&mut h)]
 			}
 		} else {
 			null()
@@ -86,18 +85,12 @@ pub extern "C" fn plot_remove_lib(h: Option<&mut handle>) {
 	use std::os::raw::c_uint;
 
 	let h = h.unwrap();
-	if ! h.shadow.is_null() {
-		let table = unsafe {
-			&mut (*h.shadow).override_table
-		};
-		let index = unsafe {
-			&mut (*h.shadow).first_entry
-		};
-		let tables = tables().read().unwrap();
-		assert!(unsafe {
-			goot_remove_lib(tables[*table].goot, *index)
-		});
-		*table = usize::max_value();
-		debug_assert!(*index == c_uint::max_value());
-	}
+	let table = &mut h.shadow.override_table;
+	let index = &mut h.shadow.first_entry;
+	let tables = tables().read().unwrap();
+	assert!(unsafe {
+		goot_remove_lib(tables[*table].goot, *index)
+	});
+	*table = usize::max_value();
+	debug_assert!(*index == c_uint::max_value());
 }
