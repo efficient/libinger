@@ -40,33 +40,48 @@ void goot_init(struct goot *table) {
 	table->entries[PLOT_ENTRIES_PER_PAGE - 1].free.next_free = -1;
 }
 
-bool goot_insert_lib(struct goot *table, struct handle *object) {
+bool goot_insert_lib(struct goot *table, struct handle *object, size_t tablenum) {
 	if(object->shadow.first_entry != -1u)
 		return true;
 
+	bool complete = true;
 	unsigned start;
 	unsigned prev = -1;
 	unsigned next = 0;
 	unsigned entries = handle_got_num_entries(object);
-	for(start = table->first_free; start != -1u && table->entries[start].free.odd_tag & 0x1;) {
-		union goot_entry *entry = table->entries + start;
-		assert(entry->free.odd_tag & 0x1);
-		if((entry->free.next_free != -1u || entries == 1) &&
-			entry->free.next_free - start + 1 >= entries) {
-			entry += entries - 1;
-			assert(entry->free.odd_tag & 0x1);
-			if(entry->free.next_free == -1u || !(entry[1].free.odd_tag & 0x1))
-				next = entry->free.next_free;
-			else
-				next = start + entries;
-			entry[1 - (signed) entries].free.odd_tag = 0x0;
-		} else if(entry->free.next_free != -1u) {
-			prev = entry->free.next_free;
-			entry = table->entries + prev;
-			assert(entry->free.odd_tag & 0x1);
-			start = entry->free.next_free;
+	assert(entries);
+	if(tablenum < (entries - 1) / PLOT_ENTRIES_PER_PAGE) {
+		if(goot_empty(table)) {
+			start = 0;
+			next = -1;
+			entries = PLOT_ENTRIES_PER_PAGE;
+			complete = false;
 		} else
 			start = -1;
+	} else {
+		entries %= PLOT_ENTRIES_PER_PAGE;
+		for(start = table->first_free;
+			start != -1u && table->entries[start].free.odd_tag & 0x1;) {
+			union goot_entry *entry = table->entries + start;
+			assert(entry->free.odd_tag & 0x1);
+			if((entry->free.next_free != -1u || entries == 1) &&
+				entry->free.next_free - start + 1 >= entries) {
+				entry += entries - 1;
+				assert(entry->free.odd_tag & 0x1);
+				if(entry->free.next_free == -1u || !(entry[1].free.odd_tag & 0x1))
+					next = entry->free.next_free;
+				else
+					next = start + entries;
+				entry[1 - (signed) entries].free.odd_tag = 0x0;
+			} else if(entry->free.next_free != -1u) {
+				prev = entry->free.next_free;
+				entry = table->entries + prev;
+				assert(entry->free.odd_tag & 0x1);
+				start = entry->free.next_free;
+			} else
+				start = -1;
+		}
+		object->shadow.first_entry = start;
 	}
 	if(start == -1u)
 		return false;
@@ -81,8 +96,7 @@ bool goot_insert_lib(struct goot *table, struct handle *object) {
 		for(union goot_entry *free = table->entries + prev; free->free.odd_tag & 0x1; ++free)
 			free->free.next_free = next;
 
-	object->shadow.first_entry = start;
-	return true;
+	return complete;
 }
 
 bool goot_remove_lib(struct goot *table, unsigned first_index) {
@@ -90,13 +104,15 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 		return false;
 
 	struct handle *object = table->entries[first_index].lib;
+	if(first_index)
+		assert(object->shadow.first_entry == first_index);
+
 	unsigned entries = handle_got_num_entries(object);
 	unsigned end = first_index + entries - 1;
 	if(end + 1 < PLOT_ENTRIES_PER_PAGE && table->entries[end + 1].free.odd_tag & 0x1)
 		++end;
 	if(end + 1 < PLOT_ENTRIES_PER_PAGE && table->entries[end + 1].free.odd_tag & 0x1)
 		end = table->entries[end].free.next_free;
-	assert(object->shadow.first_entry == first_index);
 	for(unsigned index = first_index; index < first_index + entries; ++index) {
 		union goot_entry *entry = table->entries + index;
 		assert(!(entry->free.odd_tag & 0x1));
@@ -124,7 +140,8 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 			free != table->entries + first_index; ++free)
 			free->free.next_free = end;
 
-	object->shadow.first_entry = -1;
+	if(object->shadow.first_entry == first_index)
+		object->shadow.first_entry = -1;
 	return true;
 }
 

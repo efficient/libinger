@@ -85,14 +85,15 @@ static void goot_abuse(void) {
 	for(mock.ntramps = 1; mock.ntramps <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.ntramps) {
 		size_t entries;
 		mock.shadow.first_entry = -1;
-		for(entries = 0; goot_insert_lib(&table, &mock); ++entries)
+		for(entries = 0; goot_insert_lib(&table, &mock, 0); ++entries)
 			mock.shadow.first_entry = -1;
 		assert(entries == PLOT_ENTRIES_PER_PAGE / mock.ntramps);
 
 		for(unsigned index = mock.shadow.first_entry = 0; index < PLOT_ENTRIES_PER_PAGE;
 			mock.shadow.first_entry = ++index)
-			assert(goot_remove_lib(&table, index) == (!(index % mock.ntramps) &&
-				PLOT_ENTRIES_PER_PAGE - index >= mock.ntramps));
+			assert(goot_remove_lib(&table, index) ==
+				(!index || (!(index % mock.ntramps) &&
+				PLOT_ENTRIES_PER_PAGE - index >= mock.ntramps)));
 	}
 }
 

@@ -38,7 +38,7 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) -> *const plot {
 		let mut fits = true;
 		for table in 0..lock.len() {
 			if unsafe {
-				goot_insert_lib(lock[table].goot, h as *mut _ as _)
+				goot_insert_lib(lock[table].goot, h as *mut _ as _, 0)
 			} {
 				*t(&mut h) = table;
 				break;
@@ -59,7 +59,7 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) -> *const plot {
 					plot_alloc()
 				}.unwrap();
 				fits = unsafe {
-					goot_insert_lib(plot.goot, h as *mut _ as _)
+					goot_insert_lib(plot.goot, h as *mut _ as _, 0)
 				};
 				if fits {
 					*t(&mut h) = lock.len();
