@@ -57,7 +57,7 @@ gotchapreload.o: private CFLAGS += -fpic
 gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
-handle.o: handle.h error.h namespace.h plot.h
+handle.o: handle.h error.h goot.h namespace.h plot.h
 mirror_object.o: private CFLAGS += -fpic
 mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object.o: mirror_object.h error.h handle.h namespace.h whitelist.h

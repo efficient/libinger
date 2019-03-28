@@ -32,6 +32,8 @@
 //     PLOT codepage; in practice, this forces each PLOT to comprise multiple contiguous pages.
 
 void goot_init(struct goot *table) {
+	table->identifier = -1;
+	table->adjustment = 0;
 	table->first_free = 0;
 	for(unsigned index = 0; index < PLOT_ENTRIES_PER_PAGE; ++index) {
 		table->entries[index].free.odd_tag = 0x1;
@@ -133,6 +135,7 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 	if(end == first_index + entries - 1)
 		table->entries[end].free.next_free = next;
 
+	table->adjustment = 0;
 	if(prev == -1u)
 		table->first_free = first_index;
 	else

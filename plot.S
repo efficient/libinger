@@ -24,10 +24,19 @@ procedure_linkage_override:
 
 	mov  24(%rsp), %rcx          // GOOT address
 	mov  32(%rsp), %rdx          // trampoline index
-	mov   8(%rcx, %rdx, 8), %rcx // handle/shadow address
+	mov  %rcx, %rax
+	mov  24(%rcx, %rdx, 8), %rcx // handle/shadow address
+	add   8(%rax), %rdx          // index += adjustment
+	mov   0(%rax), %rax          // identifier
+
+	cmp   0(%rcx), %rax          // override_table == identifier
+	jne  .Lpreceding_page
 	sub   8(%rcx), %edx          // index -= first_entry
 	movsx %edx, %rdx
-	add  $16, %rcx               // gots address
+	add  16(%rcx), %rdx          // index += last_adjustment
+.Lpreceding_page:
+
+	add  $24, %rcx               // gots address
 	mov  %rcx, 24(%rsp)
 	mov  %rdx, 32(%rsp)
 

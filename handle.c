@@ -1,5 +1,6 @@
 #include "handle.h"
 
+#include "goot.h"
 #include "plot.h"
 #include "whitelist.h"
 
@@ -24,6 +25,15 @@ struct sym_hash {
 	uint32_t nchain;
 	uint32_t indices[];
 };
+
+static inline uintptr_t plot_trampoline(const struct handle *h, size_t index) {
+	size_t page = index / PLOT_ENTRIES_PER_PAGE;
+	size_t entry = index % PLOT_ENTRIES_PER_PAGE;
+	if(h->plots[page]->goot->identifier == h->shadow.override_table)
+		entry += h->shadow.first_entry;
+
+	return (uintptr_t) h->plots[page]->code + plot_entries_offset + entry * plot_entry_size;
+}
 
 static inline const ElfW(Phdr) *segment(uintptr_t offset,
 	const ElfW(Phdr) *phdr, const ElfW(Phdr) *phdr_end) {
@@ -332,25 +342,30 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	h->shadow.override_table = -1;
 	h->shadow.first_entry = -1;
 	if((h->tramps = realloc(h->tramps, h->ntramps * sizeof *h->tramps))) {
-		if(!(h->plot = plot_insert_lib(h))) {
-			free(h->tramps);
-			return ERROR_LIB_SIZE;
-		}
-
 		if(h->ntramps_symtab &&
 			!(*h->shadow.gots = malloc(h->ntramps_symtab * sizeof **h->shadow.gots))) {
-			plot_remove_lib(h);
 			free(h->tramps);
 			return ERROR_MALLOC;
 		}
+
+		plot_insert_lib(h);
+		assert(h->plots);
+
+		size_t adjustment = 0;
+		for(struct plot *const *plot = h->plots;
+			(*plot)->goot->identifier != h->shadow.override_table;
+			++plot) {
+			(*plot)->goot->adjustment = adjustment;
+			adjustment += PLOT_ENTRIES_PER_PAGE;
+		}
+		h->shadow.last_adjustment = adjustment;
 	}
 
 	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
 		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
 		uintptr_t *sgot = *h->shadow.gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
-		uintptr_t repl = (uintptr_t) h->plot->code + plot_entries_offset +
-			(h->shadow.first_entry + tramp) * plot_entry_size;
+		uintptr_t repl = plot_trampoline(h, tramp);
 		*sgot = defn;
 
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
@@ -374,7 +389,7 @@ void handle_cleanup(struct handle *h) {
 	h->tramps = NULL;
 
 	plot_remove_lib(h);
-	h->plot = NULL;
+	assert(!h->plots);
 
 	free(*h->shadow.gots);
 	memset(h->shadow.gots, 0, sizeof h->shadow.gots);
@@ -467,8 +482,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
 		// Install the corresponding PLOT trampoline over the GOT entry.
-		*got = (uintptr_t) h->plot->code + plot_entries_offset +
-			(h->shadow.first_entry + tramp) * plot_entry_size;
+		*got = plot_trampoline(h, tramp);
 	}
 	prot_segment(base, h->lazygot_seg, 0);
 	if(!h->eager)

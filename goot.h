@@ -13,7 +13,11 @@ union goot_entry {
 	} free;
 };
 
+// NB: This structure is accessed from the main shadow trampoline, which is written in assembly; as
+//     such, its structure should not be changed without also updating that code!
 struct goot {
+	size_t identifier;
+	size_t adjustment;
 	unsigned first_free;
 	union goot_entry entries[PLOT_ENTRIES_PER_PAGE];
 };

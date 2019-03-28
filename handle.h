@@ -11,9 +11,12 @@ struct link_map;
 struct plot;
 struct sym_hash;
 
+// NB: This structure is accessed from the main shadow trampoline, which is written in assembly; as
+//     such, its structure should not be changed without also updating that code!
 struct shadow_gots {
 	size_t override_table;
 	unsigned first_entry;
+	size_t last_adjustment;
 
 	// When present, pointers into a single owned buffer.
 	uintptr_t *gots[NUM_SHADOW_NAMESPACES + 1];
@@ -44,7 +47,7 @@ struct handle {
 	size_t ntramps_symtab;
 	size_t *tramps; // Only present if ntramps is nonzero.  Owned.
 
-	const struct plot *plot; // Only present when tramps is.  Owned.
+	struct plot **plots; // Only present when tramps is.  Owned.
 };
 
 enum error handle_init(struct handle *, const struct link_map *, struct link_map *);
