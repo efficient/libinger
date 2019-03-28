@@ -236,7 +236,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			h->eagergot_seg = segment_unwritable(globdat->r_offset, p, p_end);
 	}
 
-	if(h->jmpslots_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
+	if(h->lazygot_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
 		h->eager = true;
 
 	h->tramps = malloc(((h->jmpslots_end - h->jmpslots) + (h->symtab_end - h->symtab)) *
