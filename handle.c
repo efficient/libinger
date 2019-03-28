@@ -426,6 +426,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			*sgot = base + st->st_value;
 	}
 
+	const ElfW(Rela) *jmpslots = (ElfW(Rela) *) ((uintptr_t) h->jmpslots - h->baseaddr + base);
 	prot_segment(base, h->lazygot_seg, PROT_WRITE);
 	if(!h->eager)
 		// Some bindings might be resolved lazily.  Ordinarily this would cause the dynamic
@@ -434,7 +435,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		// relocation table to convince it to update shadow GOT entries instead.
 		prot_segment(base, h->jmpslots_seg, PROT_WRITE);
 	for(unsigned tramp = h->ntramps_symtab; tramp < h->ntramps; ++tramp) {
-		const ElfW(Rela) *r = h->jmpslots + h->tramps[tramp];
+		const ElfW(Rela) *r = jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 		uintptr_t *sgot = h->shadow->gots[n] + tramp;
