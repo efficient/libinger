@@ -343,13 +343,22 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			free(h->tramps);
 			return ERROR_LIB_SIZE;
 		}
+
+		if(!(*h->shadow->gots = malloc(h->ntramps_symtab * sizeof **h->shadow->gots))) {
+			plot_remove_lib(h);
+			free(h->shadow);
+			free(h->tramps);
+			return ERROR_MALLOC;
+		}
 	}
 
 	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
 		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
+		uintptr_t *sgot = *h->shadow->gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
 		uintptr_t repl = (uintptr_t) h->shadow->plot->code + plot_entries_offset +
 			(h->shadow->first_entry + tramp) * plot_entry_size;
+		*sgot = defn;
 
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
 		// this definition, we'll want to retarget it at this PLOT trampoline.
@@ -409,22 +418,23 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	if(!h->shadow)
 		return;
 
-	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
-		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-		uintptr_t *sgot = h->shadow->gots[n] + tramp;
+	if(n)
+		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
+			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
+			uintptr_t *sgot = h->shadow->gots[n] + tramp;
 
-		if(n && whitelist_shared_contains(h->strtab + st->st_name))
-			// This symbol is shared among all namespaces.  Populate the corresponding
-			// entry in the ancillary namespace's shadow GOT with a NULL sentinel to
-			// indicate to the main PLOT trampoline that it should load the address from
-			// the base shadow GOT instead.
-			*sgot = 0;
-		else
-			// There exists a separate definition for each namespace.  Copy the current
-			// GOT entry (which contains the address of the eagerly resolved definition)
-			// into the shadow GOT.
-			*sgot = base + st->st_value;
-	}
+			if(whitelist_shared_contains(h->strtab + st->st_name))
+				// This symbol is shared among all namespaces.  Populate the corresponding
+				// entry in the ancillary namespace's shadow GOT with a NULL sentinel to
+				// indicate to the main PLOT trampoline that it should load the address from
+				// the base shadow GOT instead.
+				*sgot = 0;
+			else
+				// There exists a separate definition for each namespace.  Copy the current
+				// GOT entry (which contains the address of the eagerly resolved definition)
+				// into the shadow GOT.
+				*sgot = base + st->st_value;
+		}
 
 	const ElfW(Rela) *jmpslots = (ElfW(Rela) *) ((uintptr_t) h->jmpslots - h->baseaddr + base);
 	prot_segment(base, h->lazygot_seg, PROT_WRITE);
@@ -471,7 +481,8 @@ enum error handle_got_shadow(struct handle *h) {
 
 	size_t len = handle_got_num_entries(h);
 	if(h->shadow) {
-		*h->shadow->gots = malloc((NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow->gots);
+		*h->shadow->gots = realloc(*h->shadow->gots,
+			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow->gots);
 		if(!*h->shadow->gots)
 			return ERROR_MALLOC;
 	}
