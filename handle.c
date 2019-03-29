@@ -239,9 +239,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	if(h->lazygot_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
 		h->eager = true;
 
-	h->tramps = malloc(((h->jmpslots_end - h->jmpslots) + (h->symtab_end - h->symtab)) *
-		sizeof *h->tramps);
-	if(!h->tramps)
+	size_t ntramps_guess = (h->symtab_end - h->symtab) + (h->jmpslots_end - h->jmpslots);
+	if(ntramps_guess && !(h->tramps = malloc(ntramps_guess * sizeof *h->tramps)))
 		return ERROR_MALLOC;
 
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
@@ -344,7 +343,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			return ERROR_LIB_SIZE;
 		}
 
-		if(!(*h->shadow->gots = malloc(h->ntramps_symtab * sizeof **h->shadow->gots))) {
+		if(h->ntramps_symtab &&
+			!(*h->shadow->gots = malloc(h->ntramps_symtab * sizeof **h->shadow->gots))) {
 			plot_remove_lib(h);
 			free(h->shadow);
 			free(h->tramps);
@@ -480,7 +480,7 @@ enum error handle_got_shadow(struct handle *h) {
 		return SUCCESS;
 
 	size_t len = handle_got_num_entries(h);
-	if(h->shadow) {
+	if(len) {
 		*h->shadow->gots = realloc(*h->shadow->gots,
 			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow->gots);
 		if(!*h->shadow->gots)
