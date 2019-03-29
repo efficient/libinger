@@ -126,7 +126,6 @@ pub extern "C" fn handle_update(obj: *const link_map, oper: unsafe extern "C" fn
 pub extern "C" fn globals_insert(addr: usize, trampoline: usize) -> bool {
 	use std::collections::hash_map::Entry;
 
-	globals().write().unwrap().entry(addr).or_insert(trampoline);
 	if let Entry::Vacant(spot) = globals().write().unwrap().entry(addr) {
 		spot.insert(trampoline);
 		true
