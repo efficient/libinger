@@ -84,6 +84,8 @@ static void goot_abuse(void) {
 
 	for(mock.ntramps = 1; mock.ntramps <= PLOT_ENTRIES_PER_PAGE + 1; ++mock.ntramps) {
 		size_t entries;
+		mock.shadow.override_table = mock.ntramps <= PLOT_ENTRIES_PER_PAGE ?
+			table.identifier : 0;
 		mock.shadow.first_entry = -1;
 		for(entries = 0; goot_insert_lib(&table, &mock, 0); ++entries)
 			mock.shadow.first_entry = -1;

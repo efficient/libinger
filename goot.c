@@ -62,6 +62,8 @@ bool goot_insert_lib(struct goot *table, struct handle *object, size_t tablenum)
 			start = -1;
 	} else {
 		entries %= PLOT_ENTRIES_PER_PAGE;
+		if(!entries)
+			entries = PLOT_ENTRIES_PER_PAGE;
 		for(start = table->first_free;
 			start != -1u && table->entries[start].free.odd_tag & 0x1;) {
 			union goot_entry *entry = table->entries + start;
@@ -109,7 +111,14 @@ bool goot_remove_lib(struct goot *table, unsigned first_index) {
 	if(first_index)
 		assert(object->shadow.first_entry == first_index);
 
+	bool last = table->identifier == object->shadow.override_table;
 	unsigned entries = handle_got_num_entries(object);
+	assert(entries);
+	if(last)
+		entries %= PLOT_ENTRIES_PER_PAGE;
+	if(!last || !entries)
+		entries = PLOT_ENTRIES_PER_PAGE;
+
 	unsigned end = first_index + entries - 1;
 	if(end + 1 < PLOT_ENTRIES_PER_PAGE && table->entries[end + 1].free.odd_tag & 0x1)
 		++end;
