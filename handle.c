@@ -366,11 +366,21 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		uintptr_t *sgot = *h->shadow.gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
 		uintptr_t repl = plot_trampoline(h, tramp);
+
 		*sgot = defn;
+		if(ELF64_ST_TYPE(st->st_info) == STT_GNU_IFUNC) {
+			uintptr_t (*resolver)(void) = (uintptr_t (*)(void)) defn;
+			*sgot = resolver();
+		}
 
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
 		// this definition, we'll want to retarget it at this PLOT trampoline.
-		globals_set(defn, repl);
+		if(*sgot == defn)
+			globals_set(defn, repl);
+		else {
+			globals_remove(defn);
+			globals_insert(*sgot, repl);
+		}
 	}
 	assert(!globals_contains(0));
 
