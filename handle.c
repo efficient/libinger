@@ -417,16 +417,21 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 }
 
 // Setup full shadow GOTs for the ancillary namespaces.
-static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base) {
+static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
 	prot_segment(base, h->eagergot_seg, PROT_WRITE);
 	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
-			// Notice we *always* compute this address relative to the base namespace.
-			uintptr_t *defn = (uintptr_t *) (h->baseaddr + r->r_offset);
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-			uintptr_t tramp = globals_get(*defn);
+			uintptr_t tramp;
+			if(!n) {
+				tramp = globals_get(*got);
+				globdats[r - h->miscrels] = tramp;
+			} else {
+				tramp = globdats[r - h->miscrels];
+			}
+
 			if(tramp)
 				// Install the corresponding PLOT trampoline over the GOT entry.
 				*got = tramp;
@@ -505,7 +510,10 @@ enum error handle_got_shadow(struct handle *h) {
 	}
 
 	dlm_t open = h->owned ? (dlm_t) namespace_load : namespace_get;
-	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr);
+	uintptr_t *globdats = malloc((h->miscrels_end - h->miscrels) * sizeof *globdats);
+	if(!globdats)
+		return ERROR_MALLOC;
+	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr, globdats);
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
 		const struct link_map *l = open(namespace, h->path, RTLD_LAZY);
 		if(!l) {
@@ -525,12 +533,14 @@ enum error handle_got_shadow(struct handle *h) {
 			//    in said namespaces' search scopes.
 			assert(getenv("LD_PRELOAD") && "Phantom dependency not from LD_PRELOAD");
 			handle_got_whitelist_all(h);
+			free(globdats);
 			return SUCCESS;
 		}
 
 		if(len)
 			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
-		handle_got_shadow_init(h, namespace, l->l_addr);
+		handle_got_shadow_init(h, namespace, l->l_addr, globdats);
 	}
+	free(globdats);
 	return SUCCESS;
 }
