@@ -14,11 +14,11 @@
 
 typedef const struct link_map *(*dlm_t)(Lmid_t, const char *, int);
 
-bool globals_insert(uintptr_t, uintptr_t);
-bool globals_contains(uintptr_t);
-uintptr_t globals_get(uintptr_t);
-void globals_set(uintptr_t, uintptr_t);
-bool globals_remove(uintptr_t);
+bool trampolines_insert(uintptr_t, uintptr_t);
+bool trampolines_contains(uintptr_t);
+uintptr_t trampolines_get(uintptr_t);
+void trampolines_set(uintptr_t, uintptr_t);
+bool trampolines_remove(uintptr_t);
 
 struct sym_hash {
 	uint32_t nbucket;
@@ -260,7 +260,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		//  * Non-duplicate.
 		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) != STT_OBJECT &&
 			h->baseaddr + st->st_value &&
-			globals_insert(h->baseaddr + st->st_value, 0))
+			trampolines_insert(h->baseaddr + st->st_value, 0))
 			// Record our intention to install a trampoline over the eager GOT entry.
 			h->tramps[h->ntramps++] = st - h->symtab;
 	h->ntramps_symtab = h->ntramps;
@@ -374,13 +374,13 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
 		// this definition, we'll want to retarget it at this PLOT trampoline.
 		if(*sgot == defn)
-			globals_set(defn, repl);
+			trampolines_set(defn, repl);
 		else {
-			globals_remove(defn);
-			globals_insert(*sgot, repl);
+			trampolines_remove(defn);
+			trampolines_insert(*sgot, repl);
 		}
 	}
-	assert(!globals_contains(0));
+	assert(!trampolines_contains(0));
 
 	return SUCCESS;
 }
@@ -391,7 +391,7 @@ void handle_cleanup(struct handle *h) {
 
 	for(const size_t *tramp = h->tramps; tramp != h->tramps + h->ntramps_symtab; ++tramp) {
 		const ElfW(Sym) *st = h->symtab + *tramp;
-		globals_remove(h->baseaddr + st->st_value);
+		trampolines_remove(h->baseaddr + st->st_value);
 	}
 	free(h->tramps);
 	h->tramps = NULL;
@@ -438,7 +438,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 				// of its program-wide trampoline function...
 				uintptr_t tramp;
 				if(!n) {
-					tramp = globals_get(*got);
+					tramp = trampolines_get(*got);
 					globdats[r - h->miscrels] = tramp;
 				} else {
 					tramp = globdats[r - h->miscrels];

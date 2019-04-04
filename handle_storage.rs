@@ -24,14 +24,14 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 	}.unwrap()
 }
 
-fn globals() -> &'static RwLock<HashMap<usize, usize>> {
-	static mut STATICS: Option<RwLock<HashMap<usize, usize>>> = None;
+fn trampolines() -> &'static RwLock<HashMap<usize, usize>> {
+	static mut TRAMPOLINES: Option<RwLock<HashMap<usize, usize>>> = None;
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| unsafe {
-		STATICS.get_or_insert(RwLock::default());
+		TRAMPOLINES.get_or_insert(RwLock::default());
 	});
 	unsafe {
-		STATICS.as_ref()
+		TRAMPOLINES.as_ref()
 	}.unwrap()
 }
 
@@ -123,10 +123,10 @@ pub extern "C" fn handle_update(obj: *const link_map, oper: unsafe extern "C" fn
 }
 
 #[no_mangle]
-pub extern "C" fn globals_insert(addr: usize, trampoline: usize) -> bool {
+pub extern "C" fn trampolines_insert(addr: usize, trampoline: usize) -> bool {
 	use std::collections::hash_map::Entry;
 
-	if let Entry::Vacant(spot) = globals().write().unwrap().entry(addr) {
+	if let Entry::Vacant(spot) = trampolines().write().unwrap().entry(addr) {
 		spot.insert(trampoline);
 		true
 	} else {
@@ -135,23 +135,23 @@ pub extern "C" fn globals_insert(addr: usize, trampoline: usize) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn globals_contains(addr: usize) -> bool {
-	globals().read().unwrap().get(&addr).is_some()
+pub extern "C" fn trampolines_contains(addr: usize) -> bool {
+	trampolines().read().unwrap().get(&addr).is_some()
 }
 
 #[no_mangle]
-pub extern "C" fn globals_get(addr: usize) -> usize {
-	*globals().read().unwrap().get(&addr).unwrap_or(&0)
+pub extern "C" fn trampolines_get(addr: usize) -> usize {
+	*trampolines().read().unwrap().get(&addr).unwrap_or(&0)
 }
 
 #[no_mangle]
-pub extern "C" fn globals_set(addr: usize, trampoline: usize) {
-	globals().write().unwrap().insert(addr, trampoline);
+pub extern "C" fn trampolines_set(addr: usize, trampoline: usize) {
+	trampolines().write().unwrap().insert(addr, trampoline);
 }
 
 #[no_mangle]
-pub extern "C" fn globals_remove(addr: usize) -> bool {
-	globals().write().unwrap().remove(&addr).is_some()
+pub extern "C" fn trampolines_remove(addr: usize) -> bool {
+	trampolines().write().unwrap().remove(&addr).is_some()
 }
 
 #[derive(Eq, Hash, PartialEq)]
