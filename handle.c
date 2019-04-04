@@ -135,16 +135,6 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	h->path = l->l_name;
 	if((!h->path || !*h->path) && !(h->path = progname()))
 		return ERROR_FNAME_PATH;
-	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
-		// Do not attempt to operate on the vdso, whose dynamic section doesn't contain
-		// valid pointers.  Skipping it is safe because it doesn't contain any whitelisted
-		// symbols or any dynamic relocations (i.e., accesses to a different object file).
-		//
-		// Also do not attempt to operate on the dynamic linker itself, whose process image
-		// copy is the subject of special mprotects() not recorded in its program header.
-		// mprotect()s on itself that are not recorded in its program header.  Skipping it
-		// is safe because it internally ensures there is only one copy of itself.
-		return SUCCESS;
 
 	h->baseaddr = l->l_addr;
 	if(owner == l) {
@@ -193,6 +183,14 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	assert(!(flags_1 & DF_1_NOOPEN) && "Dynamic section with unsupported NOOPEN flag");
 	assert(h->symtab && "Dynamic section without SYMTAB entry");
 	assert(h->strtab && "Dynamic section without STRTAB entry");
+
+	if(!strchr(h->path, '/')) {
+		// The vdso's dynamic section doesn't get relocated like other object files', so do
+		// that manually here.
+		*(uintptr_t *) &h->symtab += h->baseaddr;
+		*(uintptr_t *) &symhash += h->baseaddr;
+		*(uintptr_t *) &h->strtab += h->baseaddr;
+	}
 
 	// Use the symbol hash table to determine the size of the symbol table, if the former is
 	// present.  Otherwise, employ the same heuristic used by GNU ld.so's dl-addr.c
@@ -513,9 +511,18 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 enum error handle_got_shadow(struct handle *h) {
 	assert(h);
 
-	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
-		// Do not attempt to operate on the vdso or the dynamic linker itself.
+	if(!strchr(h->path, '/')) {
+		// Do not attempt to operate on the vdso, which isn't recognized by dlopen() and
+		// shouldn't be multiplexed anyway.  This is safe because all its functions are
+		// reentrant and it does not contain any dynamic relocations.  We must, however,
+		// "install" the base namespace's shadow GOT into every ancillary namespace so that
+		// the trampoline doesn't crash and knows not to switch namespaces on inbound calls.
+		assert(!h->jmpslots);
+		assert(!h->miscrels);
+		for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
+			h->shadow.gots[namespace] = h->shadow.gots[LM_ID_BASE];
 		return SUCCESS;
+	}
 
 	size_t len = handle_got_num_entries(h);
 	if(len) {
@@ -523,6 +530,16 @@ enum error handle_got_shadow(struct handle *h) {
 			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow.gots);
 		if(!*h->shadow.gots)
 			return ERROR_MALLOC;
+	}
+
+	if(!strcmp(h->path, interp_path())) {
+		// Do not attempt to operate on the dynamic linker itself, which is subjected to
+		// special mprotect()s not recorded in its program header.  There is really only one
+		// copy of it loaded, so skipping it is safe---provided we trampoline all inbound
+		// calls to the base namespace---because its outbound calls will always be invoked
+		// from the base namespace, and therefore serviced in it as well.
+		handle_got_whitelist_all(h);
+		return SUCCESS;
 	}
 
 	dlm_t open = h->owned ? (dlm_t) namespace_load : namespace_get;
@@ -547,6 +564,13 @@ enum error handle_got_shadow(struct handle *h) {
 			//  * Code executing on a page located in an ancillary namespace is not
 			//    interposed by the preloaded object(s) because they don't even appear
 			//    in said namespaces' search scopes.
+			//
+			// Note that, although such object files cannot possibly be in ancillary
+			// namespaces' search scopes, it's still important that we zero-fill their
+			// ancillary shadow tables in case the program passes the addresses of their
+			// symbols (thanks to us, really their trampolines) to said namespaces:
+			// without doing this, calls would result in undefined behavior, but after
+			// this step, they instead result in a normal namespace switch.
 			assert(getenv("LD_PRELOAD") && "Phantom dependency not from LD_PRELOAD");
 			handle_got_whitelist_all(h);
 			free(globdats);
