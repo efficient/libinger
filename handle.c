@@ -434,17 +434,23 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-			uintptr_t tramp;
-			if(!n) {
-				tramp = globals_get(*got);
-				globdats[r - h->miscrels] = tramp;
-			} else {
-				tramp = globdats[r - h->miscrels];
-			}
+			if(*got && *got != base + h->symtab[ELF64_R_SYM(r->r_info)].st_value) {
+				// This is not an undefined weak symbol, and the reference didn't
+				// resolve back to our own object file.  Let's look up the address
+				// of its program-wide trampoline function...
+				uintptr_t tramp;
+				if(!n) {
+					tramp = globals_get(*got);
+					globdats[r - h->miscrels] = tramp;
+				} else {
+					tramp = globdats[r - h->miscrels];
+				}
 
-			if(tramp)
-				// Install the corresponding PLOT trampoline over the GOT entry.
-				*got = tramp;
+				// ...which will exist as long as it's code and not data...
+				if(tramp)
+					// ...and install said PLOT trampoline over the GOT entry.
+					*got = tramp;
+			}
 		}
 	prot_segment(base, h->eagergot_seg, 0);
 
