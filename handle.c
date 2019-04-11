@@ -252,17 +252,32 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		return ERROR_MALLOC;
 
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
+		// For each symbol describing sommething that meets all these criteria:
 		//  * Present in this object file.
-		//  * Non-object data.  We don't want to hand a trampoline codepage to anyone who
-		//    expects a global storage area.
+		//  * Non-object data.  Object data takes precedence, so we wait to process it until
+		//    the loop subsequent to this one.
 		//  * Non-NULL.  Client code might NULL-check a function pointer before attempting
 		//    to invoke it.
 		//  * Non-duplicate.
 		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) != STT_OBJECT &&
 			h->baseaddr + st->st_value &&
-			trampolines_insert(h->baseaddr + st->st_value, 0))
+			trampolines_insert(h->baseaddr + st->st_value, h->ntramps))
 			// Record our intention to install a trampoline over the eager GOT entry.
 			h->tramps[h->ntramps++] = st - h->symtab;
+	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
+		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
+			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
+			const ElfW(Sym) *ol = &h->symtab[h->tramps[tramp]];
+			if(ol->st_value == st->st_value &&
+				ELF64_ST_TYPE(ol->st_info) != STT_OBJECT) {
+				// The non-object symbol clashes with an *object* symbol.  Forget
+				// about the original symbol, annulling the request to allocate a
+				// corresponding trampoline: we don't want to hand a trampoline
+				// codepage to anyone who expects a global storage area.
+				h->tramps[tramp] = h->tramps[--h->ntramps];
+				trampolines_remove(h->baseaddr + st->st_value);
+			}
+		}
 	h->ntramps_symtab = h->ntramps;
 
 	for(const ElfW(Rela) *r = h->jmpslots; r != h->jmpslots_end; ++r) {
