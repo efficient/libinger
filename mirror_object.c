@@ -1,5 +1,6 @@
 #include "mirror_object.h"
 
+#include "globals.h"
 #include "handle.h"
 #include "threads.h"
 #include "whitelist.h"
@@ -58,6 +59,11 @@ enum error mirror_object(const struct link_map *lib, const char *fname) {
 
 	// Populate the symbol whitelist.
 	whitelist_shared_contains(NULL);
+
+	// Enable interception of cross--object file accesses to global storage.
+	enum error code = globals_init();
+	if(code)
+		return code;
 
 	// Now multiplex everything and set up shadowing!
 	for(const struct link_map *l = lib; l; l = l->l_next) {

@@ -26,13 +26,30 @@ struct sym_hash {
 	uint32_t indices[];
 };
 
-static inline uintptr_t plot_trampoline(const struct handle *h, size_t index) {
-	size_t page = index / PLOT_ENTRIES_PER_PAGE;
-	size_t entry = index % PLOT_ENTRIES_PER_PAGE;
-	if(h->plots[page]->goot->identifier == h->shadow.override_table)
-		entry += h->shadow.first_entry;
+static inline void plot(const struct plot **page, size_t *entry,
+	const struct handle *h, size_t index) {
+	size_t p = index / PLOT_ENTRIES_PER_PAGE;
+	size_t e = index % PLOT_ENTRIES_PER_PAGE;
+	*page = h->plots[p];
+	*entry = e;
+	if((*page)->goot->identifier == h->shadow.override_table)
+		*entry += h->shadow.first_entry;
+}
 
-	return (uintptr_t) h->plots[page]->code + plot_entries_offset + entry * plot_entry_size;
+static inline uintptr_t plot_trampoline(const struct handle *h, size_t index) {
+	const struct plot *page;
+	size_t entry;
+	plot(&page, &entry, h, index);
+
+	return (uintptr_t) page->code + plot_entries_offset + entry * plot_entry_size;
+}
+
+static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
+	const struct plot *page;
+	size_t entry;
+	plot(&page, &entry, h, index);
+
+	return (uintptr_t) page + plot_pagesize() + entry;
 }
 
 static inline const ElfW(Phdr) *segment(uintptr_t offset,
@@ -67,16 +84,12 @@ static inline int prot(const ElfW(Phdr) *p) {
 		((pf & PF_X) ? PROT_EXEC : 0);
 }
 
-static int prot_segment(uintptr_t base, const ElfW(Phdr) *p, int grants) {
+static inline int prot_segment(uintptr_t base, const ElfW(Phdr) *p, int grants) {
 	if(!p)
 		return 0;
 
-	static uintptr_t pagemask;
-	if(!pagemask)
-		pagemask = sysconf(_SC_PAGESIZE) - 1;
-
 	uintptr_t addr = base + p->p_vaddr;
-	size_t offset = addr & pagemask;
+	size_t offset = addr & (plot_pagesize() - 1);
 	return mprotect((void *) (addr - offset), p->p_memsz + offset, prot(p) | grants);
 }
 
@@ -378,7 +391,6 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
 		uintptr_t *sgot = *h->shadow.gots + tramp;
 		uintptr_t defn = h->baseaddr + st->st_value;
-		uintptr_t repl = plot_trampoline(h, tramp);
 
 		*sgot = defn;
 		if(ELF64_ST_TYPE(st->st_info) == STT_GNU_IFUNC) {
@@ -386,8 +398,17 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			*sgot = resolver();
 		}
 
+		// If this is code, we'll be replacing it with an executable PLOT trampoline;
+		// otherwise, we'll instead use an inaccessible memory location to raise a fault.
+		uintptr_t repl;
+		if(ELF64_ST_TYPE(st->st_info) != STT_OBJECT)
+			repl = plot_trampoline(h, tramp);
+		else
+			repl = plot_trap(h, tramp);
+		assert(repl);
+
 		// Any time we see a GLOB_DAT relocation from another object file targeted against
-		// this definition, we'll want to retarget it at this PLOT trampoline.
+		// this definition, we'll want to retarget it at the chosen replacement.
 		if(*sgot == defn)
 			trampolines_set(defn, repl);
 		else {
@@ -443,6 +464,10 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
+	// Note that symbols that are the subject of COPY relocations are considered to be in the
+	// executable rather than the object file in which they are logically/programmatically
+	// defined.  These unexpected semantics may be difficult to reason about.  We output a
+	// warning whenever we encounter such a relocation, though, so the user has been warned.
 	prot_segment(base, h->eagergot_seg, PROT_WRITE);
 	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {

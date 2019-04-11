@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // Each Global Offset Override Table (GOOT) is associated with a particular Procedure Linkage
 // Override Table (PLOT) codepage.  For each trampoline function entry in the latter, we store a
@@ -170,7 +171,12 @@ const struct plot *plot_alloc(void) {
 	if(!goot)
 		return NULL;
 
-	struct plot *plot = mmap(NULL, plot_size, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	size_t pagesize = plot_pagesize();
+	assert(plot_size <= pagesize);
+
+	// Each PLOT is followed by an inaccessible page, offsets into which can be used to indicate
+	// GOOT indices (for data) in lieu of PLOT trampolines (for code).
+	struct plot *plot = mmap(NULL, pagesize * 2, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if(plot == MAP_FAILED) {
 		free(goot);
 		return NULL;
@@ -180,7 +186,8 @@ const struct plot *plot_alloc(void) {
 	plot->goot = goot;
 	plot->resolver = procedure_linkage_override;
 
-	if(mprotect(plot, plot_size, PROT_READ | PROT_EXEC)) {
+	if(mprotect(plot, pagesize, PROT_READ | PROT_EXEC) ||
+		mprotect((void *) ((uintptr_t) plot + pagesize), pagesize, 0)) {
 		munmap(plot, plot_size);
 		free(goot);
 		return NULL;
@@ -194,4 +201,11 @@ void plot_free(const struct plot *plot) {
 	assert(plot != &plot_template && "Attempt to free template PLOT");
 	free(plot->goot);
 	munmap((struct plot *) plot, plot_size);
+}
+
+size_t plot_pagesize(void) {
+	static size_t pagesize;
+	if(!pagesize)
+		pagesize = sysconf(_SC_PAGESIZE);
+	return pagesize;
 }

@@ -9,6 +9,9 @@ override RUSTFLAGS := --edition 2018 -Copt-level=2 $(RUSTFLAGS)
 REVISION := HEAD
 
 DEPS := libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
+ELFLIBS := -lasm -lebl_x86_64
+ELFUTILS := /usr/lib/x86_64-linux-gnu/elfutils
+LINKRPATH := -L$(ELFUTILS) -Wl,-R$(ELFUTILS)
 
 libgotcha.rlib: private LDFLAGS += -L.
 libgotcha.rlib: private LDLIBS += -lmirror_object
@@ -16,25 +19,25 @@ libgotcha.rlib: $(DEPS)
 
 libgotcha.a: $(DEPS)
 
-libgotcha.so: private LDFLAGS += -L.
-libgotcha.so: private LDLIBS += -lmirror_object
+libgotcha.so: private LDFLAGS += -L. $(LINKRPATH)
+libgotcha.so: private LDLIBS += -lmirror_object $(ELFLIBS)
 libgotcha.so: $(DEPS)
 
-libgotchapreload.so: private LDFLAGS += -Wl,--exclude-libs,ALL
-libgotchapreload.so: private LDLIBS += -ldl -lpthread
+libgotchapreload.so: private LDFLAGS += -Wl,--exclude-libs,ALL $(LINKRPATH)
+libgotchapreload.so: private LDLIBS += -ldl -lpthread $(ELFLIBS)
 libgotchapreload.so: libgotcha.a
 
 ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
-ctests: private LDFLAGS += -Wl,-R\$$ORIGIN
-ctests: private LDLIBS += -ldl -lpthread
+ctests: private LDFLAGS += -Wl,-R\$$ORIGIN $(LINKRPATH)
+ctests: private LDLIBS += -ldl -lpthread $(ELFLIBS)
 ctests: libgotcha.a libctestfuns.so
 
-bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN -Wl,-zlazy
-bench: private LDLIBS += -lbenchmark -lgotcha
+bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN -Wl,-zlazy $(LINKPATH)
+bench: private LDLIBS += -lbenchmark -lgotcha $(ELFLIBS)
 bench: private RUSTFLAGS += --test
 bench: libgotcha.a libbenchmark.so
 
-libmirror_object.a: error.o goot.o handle.o mirror_object_containing.o namespace.o plot.o shared.o whitelist.o
+libmirror_object.a: error.o globals.o goot.o handle.o mirror_object_containing.o namespace.o plot.o shared.o whitelist.o
 
 libctestfuns.so: private CC := c++
 
@@ -49,7 +52,11 @@ mirror.rs: mirror_object.h mirror_object_containing.h error.h
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
 ctestfuns.o: ctestfuns.h
+error.o: private CPPFLAGS += -isystem .
 error.o: error.h
+globals.o: private CFLAGS += -fpic
+globals.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
+globals.o: globals.h error.h goot.h handle.h namespace.h plot.h
 goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
@@ -60,7 +67,7 @@ handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h goot.h namespace.h plot.h
 mirror_object.o: private CFLAGS += -fpic
 mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
-mirror_object.o: mirror_object.h error.h handle.h namespace.h whitelist.h
+mirror_object.o: mirror_object.h error.h globals.h handle.h namespace.h threads.h whitelist.h
 mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec

@@ -14,6 +14,8 @@ enum error {
 	ERROR_LIB_SIZE,
 	ERROR_DLOPEN,
 	ERROR_MPROTECT,
+	ERROR_SIGACTION,
+	ERROR_LIBASM,
 };
 
 // Returns a statically-allocated string literal broadly describing the error, or NULL on SUCCESS.

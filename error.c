@@ -1,5 +1,6 @@
 #include "error.h"
 
+#include <elfutils/libasm.h>
 #include <dlfcn.h>
 #include <errno.h>
 #include <stddef.h>
@@ -41,6 +42,12 @@ const char *error_message(enum error error) {
 	case ERROR_MPROTECT:
 		res = "Unable to alter memory page protection";
 		break;
+	case ERROR_SIGACTION:
+		res = "Unable to install intermediate signal handler";
+		break;
+	case ERROR_LIBASM:
+		res = "Unable to initialize libasm";
+		break;
 	default:
 		break;
 	}
@@ -55,10 +62,14 @@ const char *error_explanation(enum error error) {
 	case ERROR_MMAP:
 	case ERROR_MALLOC:
 	case ERROR_MPROTECT:
+	case ERROR_SIGACTION:
 		res = strerror(errno);
 		break;
 	case ERROR_DLOPEN:
 		res = dlerror();
+		break;
+	case ERROR_LIBASM:
+		res = asm_errmsg(asm_errno());
 		break;
 	default:
 		break;

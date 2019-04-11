@@ -29,6 +29,8 @@ extern const size_t plot_entry_size;
 const struct plot *plot_insert_lib(struct handle *);
 
 void plot_remove_lib(struct handle *);
+
+size_t plot_pagesize(void);
 #endif
 
 #endif
