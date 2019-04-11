@@ -4,6 +4,7 @@
 #include "handle.h"
 #include "namespace.h"
 #include "plot.h"
+#include "threads.h"
 
 #include <elfutils/libasm.h>
 #include <assert.h>
@@ -122,6 +123,10 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 }
 
 static void segv(int no, siginfo_t *si, void *co) {
+	static thread_local size_t last_reg;
+	static thread_local uintptr_t last_old;
+	static thread_local uintptr_t last_new;
+
 	ucontext_t *uc = co;
 	mcontext_t *mc = &uc->uc_mcontext;
 	size_t greg;
@@ -138,7 +143,11 @@ static void segv(int no, siginfo_t *si, void *co) {
 	size_t index = addr & (pagesize - 1);
 	const struct plot *plot = (struct plot *) (addr - index - pagesize);
 	if(index >= PLOT_ENTRIES_PER_PAGE || plot->resolver != procedure_linkage_override) {
-		handler(no, si, co);
+		if(last_old && (greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new)) {
+			ptrdiff_t offset = addr - last_old;
+			mc->gregs[greg] = last_new + offset;
+		} else
+			handler(no, si, co);
 		return;
 	}
 
@@ -174,6 +183,9 @@ static void segv(int no, siginfo_t *si, void *co) {
 	}
 
 	mc->gregs[greg] = dest;
+	last_reg = greg;
+	last_old = addr;
+	last_new = dest;
 }
 
 enum error globals_init(void) {
