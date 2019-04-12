@@ -189,9 +189,14 @@ static void segv(int no, siginfo_t *si, void *co) {
 }
 
 enum error globals_init(void) {
+	sigset_t mask;
+	sigfillset(&mask);
+	sigdelset(&mask, SIGSEGV);
+
 	struct sigaction old;
 	struct sigaction new = {
 		.sa_flags = SA_SIGINFO,
+		.sa_mask = mask,
 		.sa_sigaction = segv,
 	};
 	if(sigaction(SIGSEGV, &new, &old))
