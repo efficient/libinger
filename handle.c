@@ -287,7 +287,12 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 				// about the original symbol, annulling the request to allocate a
 				// corresponding trampoline: we don't want to hand a trampoline
 				// codepage to anyone who expects a global storage area.
-				h->tramps[tramp] = h->tramps[--h->ntramps];
+				if(--h->ntramps) {
+					size_t last = h->tramps[h->ntramps];
+					h->tramps[tramp] = last;
+					trampolines_set(h->baseaddr + h->symtab[last].st_value,
+						tramp);
+				}
 				trampolines_remove(h->baseaddr + st->st_value);
 			}
 		}
