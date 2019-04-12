@@ -10,32 +10,23 @@ struct whitelist;
 
 static const char *WHITELIST[] = {
 	// [Runtime] dynamic linker:
+	// Although the dynmaic linker internally enforces that there is only a single instance of
+	// itself, we need to whitelist it so our trampolines are aware of the namespace switch;
+	// otherwise, our namespace accounting could become incorrect upon calls into it (in which
+	// case we would also fail to invoke any client-provided hook function on the way back out).
 	"/ld-linux-x86-64.so.",
-	"/libdl.so.",
 
 	// Standard OS/language facilities:
+	// The primary issue here is the dynamic allocator: we can't have multiple versions hanging
+	// around with different free lists!
 	"/libc.so.",
+
+	// POSIX threading:
+	// According to https://sourceware.org/glibc/wiki/LinkerNamespaces, calling into multiple
+	// copies of this library can cause observable state inconsistencies between the threads of
+	// a single process.
 	"/libpthread.so.",
-	"/libstdc++.so.",
-
-	// Debugging facilities:
-	//
-	// As of writing, the rr runtime ships with a PT_GNU_RELRO program header entry that
-	// describes a segment to be made read only at load time that includes the GOT.  While this
-	// wouldn't ordinarily be a problem because the shared library is also tagged as BIND_NOW
-	// via both DT_FLAGS and DT_FLAGS_1 dynamic section entries to prevent lazy dynamic symbol
-	// resolution, it means we unexpectedly fail to install the trampoline entries into the GOT.
-	//
-	// Some other options for actually detecting libraries with this setup:
-	//  * Check whether .got.plt is aligned to a page and, if so, assume it might be protected.
-	//  * Map the program header in from disk and check for an overlapping PT_GNU_RELRO entry.
-	//  * Temporarily catch segfaults and use them to conclude that the page is protected.
-	"/rr",
-	"/libcapnp-",
-	"/libkj-",
-	"/librrpreload.so",
 };
-
 
 void whitelist_shared_insert(struct whitelist *, const char *);
 
