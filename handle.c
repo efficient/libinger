@@ -200,9 +200,9 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	if(!strchr(h->path, '/')) {
 		// The vdso's dynamic section doesn't get relocated like other object files', so do
 		// that manually here.
-		*(uintptr_t *) &h->symtab += h->baseaddr;
-		*(uintptr_t *) &symhash += h->baseaddr;
-		*(uintptr_t *) &h->strtab += h->baseaddr;
+		h->symtab = (ElfW(Sym) *) (h->baseaddr + (uintptr_t) h->symtab);
+		symhash = (struct sym_hash *) (h->baseaddr + (uintptr_t) symhash);
+		h->strtab = (char *) (h->baseaddr + (uintptr_t) h->strtab);
 	}
 
 	// Use the symbol hash table to determine the size of the symbol table, if the former is
