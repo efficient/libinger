@@ -5,7 +5,6 @@
 #define PLOT_ENTRIES_PER_PAGE 406
 
 #ifndef _asm
-#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
