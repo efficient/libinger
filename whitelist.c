@@ -15,6 +15,7 @@ static const char *WHITELIST[] = {
 	// otherwise, our namespace accounting could become incorrect upon calls into it (in which
 	// case we would also fail to invoke any client-provided hook function on the way back out).
 	"/ld-linux-x86-64.so.",
+	"/libdl.so.",
 
 	// Standard OS/language facilities:
 	// The primary issue here is the dynamic allocator: we can't have multiple versions hanging

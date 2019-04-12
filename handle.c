@@ -162,6 +162,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	const struct sym_hash *symhash = NULL;
 	size_t njmpslots = 0;
 	size_t nmiscrels = 0;
+	uintptr_t init = 0;
 	for(const ElfW(Dyn) *d = l->l_ld; d->d_tag != DT_NULL; ++d)
 		switch(d->d_tag) {
 		case DT_FLAGS:
@@ -190,6 +191,9 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			break;
 		case DT_STRTAB:
 			h->strtab = (char *) d->d_un.d_ptr;
+			break;
+		case DT_INIT:
+			init = d->d_un.d_val;
 			break;
 		}
 	assert(!(flags_1 & DF_1_NOOPEN) && "Dynamic section with unsupported NOOPEN flag");
@@ -263,15 +267,31 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	if(ntramps_guess && !(h->tramps = malloc(ntramps_guess * sizeof *h->tramps)))
 		return ERROR_MALLOC;
 
-	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
+	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st) {
 		// For each symbol describing sommething that meets all these criteria:
 		//  * Present in this object file.
-		//  * Non-NULL.  Client code might NULL-check a pointer before attempting to use it.
+		//  * Non-NULL.  Client code might NULL-check a pointer before attempting to
+		//    use it.
 		//  * Non-duplicate.
 		if(st->st_shndx != SHN_UNDEF && h->baseaddr + st->st_value &&
 			trampolines_insert(h->baseaddr + st->st_value, h->ntramps))
 			// Record our intention to multiplex accesses through the eager GOT entry.
 			h->tramps[h->ntramps++] = st - h->symtab;
+
+		if(!h->ldaccess && !strcmp(h->strtab + st->st_name, "_rtld_global")) {
+			// This object file accesses the dynamic linker's mutable global storage.
+			if(!whitelist_so_contains(h->path))
+				fprintf(stderr,
+					"%s: libgotcha warning: %s: unwhitelisted GL() access\n",
+					progname(), h->path);
+			if(init && st->st_shndx == SHN_UNDEF && flags_1 & DF_1_NODELETE)
+				// This object is flagged to prevent it from ever being destructed.
+				// We'll assume its constructor might modify the linker's mutable
+				// global storage, causing ancillary namespace state to leak into
+				// the base one.
+				h->ldaccess = (void (*)(void)) (h->baseaddr + init);
+		}
+	}
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
 		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
 			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
@@ -627,5 +647,16 @@ enum error handle_got_shadow(struct handle *h) {
 		handle_got_shadow_init(h, namespace, l->l_addr, globdats);
 	}
 	free(globdats);
+
+	if(h->ldaccess)
+		// We just loaded ancillary copies of this object file that satisfies all of:
+		//  * Accesses ld.so's mutable _rtld_global
+		//  * Is marked NODELETE, indicating it is unsafe to run its destructors
+		//  * Has a legacy constructor, a la _init()
+		// Such objects (e.g., libpthread.so) sometimes install function pointers into the
+		// dynamic linker itself.  Let's be cautious and rerun the constructor in the base
+		// namespace to prevent leaving unnecessary ancillary references around.
+		h->ldaccess();
+
 	return SUCCESS;
 }

@@ -29,6 +29,7 @@ struct handle {
 	uintptr_t baseaddr;
 	bool owned;
 	bool eager;
+	void (*ldaccess)(void);
 
 	const ElfW(Sym) *symtab;
 	const ElfW(Sym) *symtab_end;
