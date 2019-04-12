@@ -54,7 +54,6 @@ static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
 
 static inline const ElfW(Phdr) *segment(uintptr_t offset,
 	const ElfW(Phdr) *phdr, const ElfW(Phdr) *phdr_end) {
-	assert(offset);
 	assert(phdr);
 	assert(phdr_end);
 
@@ -277,12 +276,26 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
 			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
 			const ElfW(Sym) *ol = &h->symtab[h->tramps[tramp]];
-			if(ol->st_value == st->st_value &&
-				ELF64_ST_TYPE(ol->st_info) != STT_OBJECT)
-				// The non-object symbol clashes with an *object* symbol.  "Promote"
-				// the original symbol to this one so we'll install a global
-				// access placeholder rather than an executable trampoline.
-				h->tramps[tramp] = st - h->symtab;
+			if(ol->st_value == st->st_value) {
+				if(segment_unwritable(st->st_value, p, p_end)) {
+					// The symbol is read-only, so we'll assume it is going to
+					// match across copies of this object file.  Forget about
+					// it, annulling the request to multiplex accesses.
+					if(--h->ntramps) {
+						size_t last = h->tramps[h->ntramps];
+						h->tramps[tramp] = last;
+						trampolines_set(
+							h->baseaddr + h->symtab[last].st_value,
+							tramp);
+					}
+					trampolines_remove(h->baseaddr + st->st_value);
+				} else if(ELF64_ST_TYPE(ol->st_info) != STT_OBJECT)
+					// The non-object symbol clashes with an *object* symbol.
+					// "Promote" the original symbol to this one so we'll
+					// install a global access placeholder rather than an
+					// executable trampoline.
+					h->tramps[tramp] = st - h->symtab;
+			}
 		}
 	h->ntramps_symtab = h->ntramps;
 
