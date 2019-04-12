@@ -251,8 +251,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 				// For consistent semantics, compile the executable without COPY
 				// relocations (e.g., using the -fpic compiler switch).
 				fprintf(stderr,
-					"%s: libgotcha warning: %s: found copy relocation: %s\n",
-					progname(), h->path,
+					"%s: libgotcha warning: found copy relocation: %s\n",
+					progname(),
 					h->strtab + h->symtab[ELF64_R_SYM(r->r_info)].st_name);
 				break;
 			}
