@@ -58,7 +58,11 @@ enum error mirror_object(const struct link_map *lib, const char *fname) {
 		return fresh;
 
 	// Populate the symbol whitelist.
-	whitelist_shared_contains(NULL);
+	// TODO: Make whitelist_shared_init() detect and implicitly whitelist us using a generalized
+	//       version of in_ancillary_namespace(); this way, any client code calls to our public
+	//       API will be automagically proxied back to the base namespace and preemption will be
+	//       preempted while we're in here.
+	whitelist_shared_get(NULL);
 
 	// Enable interception of cross--object file accesses to global storage.
 	enum error code = globals_init();

@@ -29,7 +29,7 @@ static const char *WHITELIST[] = {
 	"/libpthread.so.",
 };
 
-void whitelist_shared_insert(struct whitelist *, const char *);
+void whitelist_shared_insert(struct whitelist *, const char *, uintptr_t);
 
 void whitelist_so_insert_with(const struct handle *h, struct whitelist *out) {
 	assert(h);
@@ -37,7 +37,7 @@ void whitelist_so_insert_with(const struct handle *h, struct whitelist *out) {
 
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
 		if(st->st_shndx != SHN_UNDEF)
-			whitelist_shared_insert(out, h->strtab + st->st_name);
+			whitelist_shared_insert(out, h->strtab + st->st_name, 0);
 }
 
 bool whitelist_so_contains(const char *path) {
