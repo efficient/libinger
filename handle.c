@@ -466,10 +466,10 @@ void handle_cleanup(struct handle *h) {
 }
 
 // If the provided symbol is one for which we force interposition, return the address of its
-// trampoline; otherwise, return NULL.
-static inline uintptr_t interposed_trampoline(const char *sym) {
+// trampoline; otherwise, return fallback.
+static inline uintptr_t got_trampoline(const char *sym, uintptr_t fallback) {
 	intptr_t interposed = whitelist_shared_get(sym);
-	return interposed != -1 && interposed ? trampolines_get(interposed) : 0;
+	return interposed != -1 && interposed ? trampolines_get(interposed) : fallback;
 }
 
 // Setup "stubbed" shadow GOTs for the ancillary namespaces.  For use only on object files for which
@@ -485,19 +485,15 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
 		h->shadow.gots[namespace] = proxy;
 
-	// Look for symbols in front of which we need to interpose our own.
-	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
-		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-		uintptr_t interposed = interposed_trampoline(h->strtab + st->st_name);
-		if(interposed)
-			h->shadow.gots[LM_ID_BASE][tramp] = interposed;
-	}
+	// Look for relocations against symbols in front of which we need to interpose our own.
 	for(unsigned tramp = h->ntramps_symtab; tramp < h->ntramps; ++tramp) {
 		const ElfW(Rela) *r = h->jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
-		uintptr_t interposed = interposed_trampoline(h->strtab + st->st_name);
-		if(interposed)
-			h->shadow.gots[LM_ID_BASE][tramp] = interposed;
+		uintptr_t interposed = got_trampoline(h->strtab + st->st_name, 0);
+		if(interposed) {
+			// Substitute our own trampoline over the GOT entry.
+			*(uintptr_t *) (h->baseaddr + r->r_offset) = interposed;
+		}
 	}
 
 	// We must add this to the whitelist so that any lazily-resolved
@@ -508,39 +504,11 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 	whitelist_so_insert(h);
 }
 
-// If the provided shadow GOT entry needs to be updated, do so according to the following truth table:
-//  override != -1 | !!override | !!n | action
-// ----------------+------------+-----+--------------------
-//         0       |      1     |  0  | (nop)
-//         0       |      1     |  1  | *sgot := ancillary
-//         1       |      0     |  0  | (nop)
-//         1       |      0     |  1  | *sgot := NULL
-//         1       |      1     |  0  | *sgot := override
-//         1       |      1     |  1  | *sgot := NULL
-static inline void update_sgot_entry(uintptr_t *sgot, const char *sym, Lmid_t n, uintptr_t ancillary) {
-	intptr_t override = whitelist_shared_get(sym);
-	if(override != -1) {
-		// This symbol is shared among all namespaces.
-		if(n)
-			// Populate this ancillary namespace's shadow GOT with a NULL sentinel to
-			// indicate to the main PLOT trampoline that it should perform a switch to
-			// the main namespace.
-			*sgot = 0;
-		else if(override)
-			// This is a symbol for which we force interposition.  Reject their reality
-			// and substite a trampoline for our own.  (It must be a trampoline rather
-			// than the real address so we switch namespaces.)
-			*sgot = trampolines_get(override);
-		// else
-			// Leave the base namespace's shadow GOT entry alone.
-	} else {
-		// There exists a separate definition for each namespace.
-		if(n)
-			// Copy the address of this namespace's own definition into its SGOT entry.
-			*sgot = ancillary;
-		// else
-			// Leave the base namespace's shadow GOT entry alone.
-	}
+// If we're processing an ancillary namespace and this symbol is shared among all namespaces, return
+// a NULL sentinel to indicate that the main PLOT trampoline should perform a switch to the main
+// namespace; otherwise, return defn.
+static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
+	return n && whitelist_shared_get(sym) != -1 ? 0 : defn;
 }
 
 // Setup full shadow GOTs for the ancillary namespaces.
@@ -554,14 +522,18 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	prot_segment(base, h->eagergot_seg, PROT_WRITE);
 	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
+			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-			if(*got && *got != base + h->symtab[ELF64_R_SYM(r->r_info)].st_value) {
+			if(*got && *got != base + st->st_value) {
 				// This is not an undefined weak symbol, and the reference didn't
 				// resolve back to our own object file.  Let's look up the address
 				// of its program-wide multiplexing address...
 				uintptr_t tramp;
 				if(!n) {
-					tramp = trampolines_get(*got);
+					// Retrieve the trampoline from the defining library,
+					// or from *this* library if it's an interposed symbol.
+					tramp = got_trampoline(h->strtab + st->st_name,
+						trampolines_get(*got));
 					globdats[r - h->miscrels] = tramp;
 				} else {
 					tramp = globdats[r - h->miscrels];
@@ -577,15 +549,15 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	if(!*h->shadow.gots)
 		return;
 
-	for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
-		const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-		uintptr_t *sgot = h->shadow.gots[n] + tramp;
+	if(n)
+		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
+			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
+			uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
-		// Update the shadow GOT entry if necessary.  If we're multiplexing this
-		// symbol, use the address of this ancillary namespace's own definition
-		// instead of a NULL sentinel.
-		update_sgot_entry(sgot, h->strtab + st->st_name, n, base + st->st_value);
-	}
+			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
+			// the address of this ancillary namespace's own definition.
+			*sgot = sgot_entry(h->strtab + st->st_name, n, base + st->st_value);
+		}
 
 	const ElfW(Rela) *jmpslots = (ElfW(Rela) *) ((uintptr_t) h->jmpslots - h->baseaddr + base);
 	prot_segment(base, h->lazygot_seg, PROT_WRITE);
@@ -598,22 +570,23 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	for(unsigned tramp = h->ntramps_symtab; tramp < h->ntramps; ++tramp) {
 		const ElfW(Rela) *r = jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
+		const char *sym = h->strtab + st->st_name;
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 		uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
-		// Populate the shadow GOT entry.  If we're multiplexing this symbol or operating on
-		// a non-interposed one in the base namespace, use the current GOT entry (which
-		// contains the address of either the resolved definition or a PLT trampoline).
-		*sgot = *got;
-		update_sgot_entry(sgot, h->strtab + st->st_name, n, *sgot);
+		// Populate the shadow GOT entry.  If we're multiplexing this symbol, use the
+		// current GOT entry (which contains the address of either the resolved definition
+		// or a PLT trampoline).
+		*sgot = sgot_entry(sym, n, *got);
 
 		if(!h->eager)
 			// Instruct the dynamic linker to update the *shadow* GOT entry if the PLT
 			// trampoline is later invoked.
 			((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
-		// Install the corresponding PLOT trampoline over the GOT entry.
-		*got = plot_trampoline(h, tramp);
+		// Install our corresponding PLOT trampoline over the GOT entry.  Or reject their
+		// reality and substitute the one from *this* library if it's an interposed symbol.
+		*got = got_trampoline(sym, plot_trampoline(h, tramp));
 	}
 	prot_segment(base, h->lazygot_seg, 0);
 	if(!h->eager)
