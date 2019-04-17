@@ -1,6 +1,7 @@
 #include "whitelist.h"
 
 #include "handle.h"
+#include "namespace.h"
 
 #include <assert.h>
 #include <dlfcn.h>
@@ -31,13 +32,14 @@ static const char *WHITELIST[] = {
 
 void whitelist_shared_insert(struct whitelist *, const char *, uintptr_t);
 
-void whitelist_so_insert_with(const struct handle *h, struct whitelist *out) {
+void whitelist_so_insert_with(const struct handle *h, struct whitelist *out, bool me) {
 	assert(h);
 	assert(out);
 
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
 		if(st->st_shndx != SHN_UNDEF)
-			whitelist_shared_insert(out, h->strtab + st->st_name, 0);
+			whitelist_shared_insert(out, h->strtab + st->st_name,
+				me ? h->baseaddr + st->st_value : 0);
 }
 
 bool whitelist_so_contains(const char *path) {
@@ -50,7 +52,9 @@ bool whitelist_so_contains(const char *path) {
 }
 
 void whitelist_shared_init(struct whitelist *out) {
-	for(const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY); l; l = l->l_next)
-		if(whitelist_so_contains(l->l_name))
-			whitelist_so_insert_with(handle_get(l, NULL, NULL), out);
+	for(const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY); l; l = l->l_next) {
+		bool myself = l == namespace_self();
+		if(whitelist_so_contains(l->l_name) || myself)
+			whitelist_so_insert_with(handle_get(l, NULL, NULL), out, myself);
+	}
 }

@@ -2,11 +2,11 @@
 
 #include "globals.h"
 #include "handle.h"
+#include "namespace.h"
 #include "threads.h"
 #include "whitelist.h"
 
 #include <assert.h>
-#include <link.h>
 #include <string.h>
 
 static thread_local const struct link_map *mirroring;
@@ -20,18 +20,8 @@ static enum error hook_object(struct handle *h, const struct link_map *l) {
 	return SUCCESS;
 }
 
-static bool in_ancillary_namespace(void) {
-	static bool ancillary;
-	static bool memoized;
-	if(!memoized) {
-		for(const struct link_map *l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
-			if(!l->l_next) {
-				ancillary = true;
-				break;
-			}
-		memoized = true;
-	}
-	return ancillary;
+static inline bool in_ancillary_namespace(void) {
+	return !namespace_self();
 }
 
 enum error mirror_object(const struct link_map *lib, const char *fname) {

@@ -57,12 +57,12 @@ pub extern "C" fn whitelist_shared_insert(
 #[no_mangle]
 pub extern "C" fn whitelist_so_insert(handle: *const handle) {
 	extern "C" {
-		fn whitelist_so_insert_with(_: *const handle, _: *mut HashMap<&CStr, usize>);
+		fn whitelist_so_insert_with(_: *const handle, _: *mut HashMap<&CStr, usize>, _: bool);
 	}
 
 	let mut whitelist = whitelist().write().unwrap();
 	unsafe {
-		whitelist_so_insert_with(handle, &mut *whitelist);
+		whitelist_so_insert_with(handle, &mut *whitelist, false);
 	}
 	drop(whitelist);
 }
