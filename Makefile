@@ -37,7 +37,7 @@ bench: private LDLIBS += -lbenchmark -lgotcha $(ELFLIBS)
 bench: private RUSTFLAGS += --test
 bench: libgotcha.a libbenchmark.so
 
-libmirror_object.a: error.o globals.o goot.o handle.o interpose.o mirror_object_containing.o namespace.o plot.o shared.o whitelist.o
+libmirror_object.a: error.o globals.o goot.o handle.o interpose.o mirror_object_containing.o namespace.o plot.o segprot.o shared.o whitelist.o
 
 libctestfuns.so: private CC := c++
 
@@ -64,8 +64,9 @@ gotchapreload.o: private CFLAGS += -fpic
 gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
-handle.o: handle.h error.h goot.h namespace.h plot.h
+handle.o: handle.h error.h goot.h namespace.h plot.h segprot.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
+interpose.o: interpose.h segprot.h
 mirror_object.o: private CFLAGS += -fpic
 mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror_object.o: mirror_object.h error.h globals.h handle.h namespace.h threads.h whitelist.h
@@ -76,6 +77,7 @@ namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: private CPPFLAGS += -D_asm
 plot.o: plot.h handle.h
+segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
 shared.o: shared.h namespace.h
