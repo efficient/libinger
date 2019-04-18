@@ -17,11 +17,11 @@ fn tables() -> &'static RwLock<Vec<&'static plot>> {
 }
 
 #[no_mangle]
-pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) {
+extern fn plot_insert_lib(h: Option<&mut handle>) {
 	use crate::goot::goot_empty;
 	use crate::goot::goot_insert_lib;
 
-	extern "C" {
+	extern {
 		fn plot_alloc() -> Option<&'static mut plot>;
 	}
 
@@ -95,7 +95,7 @@ pub extern "C" fn plot_insert_lib(h: Option<&mut handle>) {
 }
 
 #[no_mangle]
-pub extern "C" fn plot_remove_lib(h: Option<&mut handle>) {
+extern fn plot_remove_lib(h: Option<&mut handle>) {
 	use crate::goot::goot_remove_lib;
 	use std::os::raw::c_uint;
 	use std::ptr::null_mut;

@@ -14,13 +14,13 @@ unsafe fn nop() {
 fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	use std::mem::transmute;
 
-	extern "C" {
-		fn with_eager_nop(fun: extern "C" fn());
+	extern {
+		fn with_eager_nop(fun: extern fn());
 	}
 
 	static mut FUN: Option<*mut dyn FnMut()> = None;
 
-	extern "C" fn adapter() {
+	extern fn adapter() {
 		let fun = unsafe {
 			&mut *FUN.take().unwrap()
 		};
@@ -34,7 +34,7 @@ fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	}
 }
 
-extern "C" {
+extern {
 	fn mirror(fun: usize) -> bool;
 }
 

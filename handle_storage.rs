@@ -36,9 +36,9 @@ fn trampolines() -> &'static RwLock<HashMap<usize, usize>> {
 }
 
 #[no_mangle]
-pub extern "C" fn handle_get(
+extern fn handle_get(
 	obj: *const link_map,
-	setup: Option<unsafe extern "C" fn(*mut handle, *const link_map) -> error>,
+	setup: Option<unsafe extern fn(*mut handle, *const link_map) -> error>,
 	code: Option<&mut error>,
 ) -> *const handle {
 	use std::mem::uninitialized;
@@ -114,7 +114,7 @@ fn handle_helper<
 }
 
 #[no_mangle]
-pub extern "C" fn handle_update(obj: *const link_map, oper: unsafe extern "C" fn(*mut handle) -> error) -> error {
+extern fn handle_update(obj: *const link_map, oper: unsafe extern fn(*mut handle) -> error) -> error {
 	let mut err = error::SUCCESS;
 	handle_helper(|lock| lock.get_mut(&HandleId (obj)).unwrap(), |handle| unsafe {
 		err = oper(handle);
@@ -123,7 +123,7 @@ pub extern "C" fn handle_update(obj: *const link_map, oper: unsafe extern "C" fn
 }
 
 #[no_mangle]
-pub extern "C" fn trampolines_insert(addr: usize, trampoline: usize) -> bool {
+extern fn trampolines_insert(addr: usize, trampoline: usize) -> bool {
 	use std::collections::hash_map::Entry;
 
 	if let Entry::Vacant(spot) = trampolines().write().unwrap().entry(addr) {
@@ -135,22 +135,22 @@ pub extern "C" fn trampolines_insert(addr: usize, trampoline: usize) -> bool {
 }
 
 #[no_mangle]
-pub extern "C" fn trampolines_contains(addr: usize) -> bool {
+extern fn trampolines_contains(addr: usize) -> bool {
 	trampolines().read().unwrap().get(&addr).is_some()
 }
 
 #[no_mangle]
-pub extern "C" fn trampolines_get(addr: usize) -> usize {
+extern fn trampolines_get(addr: usize) -> usize {
 	*trampolines().read().unwrap().get(&addr).unwrap_or(&0)
 }
 
 #[no_mangle]
-pub extern "C" fn trampolines_set(addr: usize, trampoline: usize) {
+extern fn trampolines_set(addr: usize, trampoline: usize) {
 	trampolines().write().unwrap().insert(addr, trampoline);
 }
 
 #[no_mangle]
-pub extern "C" fn trampolines_remove(addr: usize) -> bool {
+extern fn trampolines_remove(addr: usize) -> bool {
 	trampolines().write().unwrap().remove(&addr).is_some()
 }
 

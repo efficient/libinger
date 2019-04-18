@@ -1,12 +1,6 @@
-#[doc(hidden)]
 pub mod goot;
-#[doc(hidden)]
 pub mod handle;
-#[doc(hidden)]
-pub mod handle_storage;
-#[doc(hidden)]
+mod handle_storage;
 pub mod mirror;
-#[doc(hidden)]
-pub mod plot_storage;
-#[doc(hidden)]
-pub mod whitelist_shared;
+mod plot_storage;
+mod whitelist_shared;

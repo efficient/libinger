@@ -10,7 +10,7 @@ fn whitelist() -> &'static RwLock<HashMap<&'static CStr, usize>> {
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
-	extern "C" {
+	extern {
 		fn whitelist_shared_init(_: *mut HashMap<&CStr, usize>);
 	}
 
@@ -32,7 +32,7 @@ fn whitelist() -> &'static RwLock<HashMap<&'static CStr, usize>> {
 }
 
 #[no_mangle]
-pub extern "C" fn whitelist_shared_get(symbol: *const c_char) -> usize {
+extern fn whitelist_shared_get(symbol: *const c_char) -> usize {
 	let whitelist = whitelist().read().unwrap();
 	if symbol.is_null() {
 		usize::max_value()
@@ -44,7 +44,7 @@ pub extern "C" fn whitelist_shared_get(symbol: *const c_char) -> usize {
 }
 
 #[no_mangle]
-pub extern "C" fn whitelist_shared_insert(
+extern fn whitelist_shared_insert(
 	whitelist: Option<&mut HashMap<&CStr, usize>>,
 	symbol: *const c_char,
 	replacement: usize,
@@ -55,8 +55,8 @@ pub extern "C" fn whitelist_shared_insert(
 }
 
 #[no_mangle]
-pub extern "C" fn whitelist_so_insert(handle: *const handle) {
-	extern "C" {
+extern fn whitelist_so_insert(handle: *const handle) {
+	extern {
 		fn whitelist_so_insert_with(_: *const handle, _: *mut HashMap<&CStr, usize>, _: bool);
 	}
 
