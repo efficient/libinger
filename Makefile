@@ -18,15 +18,13 @@ libgotchapreload.so: private LDLIBS += $(wildcard /usr/lib/x86_64-linux-gnu/libs
 libgotchapreload.so: libgotcha.o
 
 libgotcha.o: error.o globals.o goot.o handle.o interpose.o mirror.o namespace.o plot.o segprot.o shared.o whitelist.o
-gotcha.o: goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_shared.rs
+gotcha.o: goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 handle.rs: private CPPFLAGS += -D_GNU_SOURCE
 handle.rs: error.h namespace.h
-mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
-mirror.rs: error.h
 
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG

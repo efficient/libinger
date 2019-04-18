@@ -3,7 +3,6 @@
 /ctests
 /goot.rs
 /handle.rs
-/mirror.rs
 
 *.a
 *.o
