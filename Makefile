@@ -17,7 +17,7 @@ libgotchapreload.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfi
 libgotchapreload.so: private LDLIBS += $(wildcard /usr/lib/x86_64-linux-gnu/libstd-*.so) -lasm -ldl -lebl_x86_64 -pthread
 libgotchapreload.so: libgotcha.o
 
-libgotcha.o: error.o globals.o goot.o handle.o interpose.o mirror.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: libgotcha_api.o error.o globals.o goot.o handle.o interpose.o mirror.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
@@ -44,6 +44,8 @@ handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h goot.h namespace.h plot.h segprot.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
+libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
+libgotcha_api.o: libgotcha_api.h namespace.h shared.h
 mirror.o: private CFLAGS += -fpic
 mirror.o: private CPPFLAGS += -D_GNU_SOURCE
 mirror.o: mirror.h error.h globals.h handle.h namespace.h threads.h whitelist.h
