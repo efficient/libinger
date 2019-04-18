@@ -1,45 +1,24 @@
 BINDGEN := bindgen
+OBJCOPY := objcopy
 RUSTC := rustc
 
 override BINDFLAGS := --default-enum-style rust $(BINDFLAGS)
 override CFLAGS := -std=c11 -O2 -Wall -Wextra -Wpedantic $(CFLAGS)
 override CXXFLAGS := -std=c++11 -O2 -Wall -Wextra -Wpedantic $(CXXFLAGS)
+override LDFLAGS := $(LDFLAGS)
+override LDLIBS := $(LDLIBS)
 override RUSTFLAGS := --edition 2018 -Copt-level=2 $(RUSTFLAGS)
 
 REVISION := HEAD
 
-DEPS := libmirror_object.a goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
-ELFLIBS := -lasm -lebl_x86_64
 ELFUTILS := /usr/lib/x86_64-linux-gnu/elfutils
-LINKRPATH := -L$(ELFUTILS) -Wl,-R$(ELFUTILS)
 
-libgotcha.rlib: private LDFLAGS += -L.
-libgotcha.rlib: private LDLIBS += -lmirror_object
-libgotcha.rlib: $(DEPS)
+libgotchapreload.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -znodelete -znoexecstack
+libgotchapreload.so: private LDLIBS += $(wildcard /usr/lib/x86_64-linux-gnu/libstd-*.so) -lasm -ldl -lebl_x86_64 -pthread
+libgotchapreload.so: libgotcha.o
 
-libgotcha.a: $(DEPS)
-
-libgotcha.so: private LDFLAGS += -L. $(LINKRPATH)
-libgotcha.so: private LDLIBS += -lmirror_object $(ELFLIBS)
-libgotcha.so: $(DEPS)
-
-libgotchapreload.so: private LDFLAGS += -Wl,--exclude-libs,ALL $(LINKRPATH)
-libgotchapreload.so: private LDLIBS += -ldl -lpthread $(ELFLIBS)
-libgotchapreload.so: libgotcha.a
-
-ctests: private CXXFLAGS += -Wno-pedantic -Wno-cast-function-type
-ctests: private LDFLAGS += -Wl,-R\$$ORIGIN $(LINKRPATH)
-ctests: private LDLIBS += -ldl -lpthread $(ELFLIBS)
-ctests: libgotcha.a libctestfuns.so
-
-bench: private LDFLAGS += -L. -Wl,-R\$$ORIGIN -Wl,-zlazy $(LINKPATH)
-bench: private LDLIBS += -lbenchmark -lgotcha $(ELFLIBS)
-bench: private RUSTFLAGS += --test
-bench: libgotcha.a libbenchmark.so
-
-libmirror_object.a: error.o globals.o goot.o handle.o interpose.o mirror_object_containing.o namespace.o plot.o segprot.o shared.o whitelist.o
-
-libctestfuns.so: private CC := c++
+libgotcha.o: error.o globals.o goot.o handle.o interpose.o mirror_object.o mirror_object_containing.o namespace.o plot.o segprot.o shared.o whitelist.o
+gotcha.o: goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
@@ -97,7 +76,9 @@ clean:
 
 %: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) $< $(LDLIBS)
-	@if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
+
+%.o: lib%.rs
+	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type lib --emit obj -o $@ $< $(LDLIBS)
 
 %.rs: %.h
 	$(BINDGEN) $(BINDFLAGS) -o $@ $< -- $(CPPFLAGS)
@@ -107,15 +88,17 @@ lib%.a: %.o
 
 lib%.a: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type staticlib $< $(LDLIBS)
-	if [ -e $*.mri ]; then ar -M <$*.mri; fi
+	if [ -e $*.mri ]; then $(AR) -M <$*.mri; fi
+
+lib%.o: %.o
+	$(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)
+	if [ -e $*.abi ]; then $(OBJCOPY) --keep-global-symbols=$*.abi $@; fi
 
 lib%.rlib: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type rlib $< $(LDLIBS)
 
 lib%.so: %.o
-	$(CC) $(LDFLAGS) -shared -o $@ $^ $(LDLIBS)
-	@if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
+	$(CC) $(LDFLAGS) -shared -zdefs -ztext -o $@ $^ $(LDLIBS)
 
 lib%.so: %.rs
-	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)
-	@if objdump -p $@ | grep '\<TEXTREL\>' >/dev/null; then echo "WARNING: Generated object contains text relocations"; fi
+	$(RUSTC) -Clink-args="$(LDFLAGS) -zdefs -ztext" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)

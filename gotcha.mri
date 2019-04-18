@@ -1,4 +1,0 @@
-open libgotcha.a
-addlib libmirror_object.a
-save
-end
