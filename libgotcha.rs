@@ -9,6 +9,4 @@ pub mod mirror;
 #[doc(hidden)]
 pub mod plot_storage;
 #[doc(hidden)]
-pub mod whitelist_copy;
-#[doc(hidden)]
 pub mod whitelist_shared;
