@@ -1,4 +1,4 @@
-#include "mirror_object.h"
+#include "mirror.h"
 
 #include <assert.h>
 #include <dlfcn.h>

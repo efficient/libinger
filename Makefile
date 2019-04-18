@@ -17,7 +17,7 @@ libgotchapreload.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfi
 libgotchapreload.so: private LDLIBS += $(wildcard /usr/lib/x86_64-linux-gnu/libstd-*.so) -lasm -ldl -lebl_x86_64 -pthread
 libgotchapreload.so: libgotcha.o
 
-libgotcha.o: error.o globals.o goot.o handle.o interpose.o mirror_object.o mirror_object_containing.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: error.o globals.o goot.o handle.o interpose.o mirror.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: goot.rs handle.rs handle_storage.rs mirror.rs plot_storage.rs whitelist_copy.rs whitelist_shared.rs
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
@@ -26,7 +26,7 @@ handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_
 handle.rs: private CPPFLAGS += -D_GNU_SOURCE
 handle.rs: error.h namespace.h
 mirror.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types)]"
-mirror.rs: mirror_object.h mirror_object_containing.h error.h
+mirror.rs: error.h
 
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
@@ -46,11 +46,9 @@ handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h goot.h namespace.h plot.h segprot.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
-mirror_object.o: private CFLAGS += -fpic
-mirror_object.o: private CPPFLAGS += -D_GNU_SOURCE
-mirror_object.o: mirror_object.h error.h globals.h handle.h namespace.h threads.h whitelist.h
-mirror_object_containing.o: private CPPFLAGS += -D_GNU_SOURCE
-mirror_object_containing.o: mirror_object_containing.h mirror_object.h error.h
+mirror.o: private CFLAGS += -fpic
+mirror.o: private CPPFLAGS += -D_GNU_SOURCE
+mirror.o: mirror.h error.h globals.h handle.h namespace.h threads.h whitelist.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
