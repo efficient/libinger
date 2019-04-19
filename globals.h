@@ -8,6 +8,6 @@
 enum error globals_init(void);
 enum error globals_deinit(void);
 
-void globals_install_handler(void (*)(int, siginfo_t *, void *));
+struct sigaction *globals_handler(void);
 
 #endif

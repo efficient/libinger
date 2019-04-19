@@ -18,7 +18,7 @@ void procedure_linkage_override(void);
 
 static DisasmCtx_t *ctx;
 static Ebl ebl;
-static void (*handler)(int, siginfo_t *, void *);
+static struct sigaction handler;
 
 static void __attribute__((noinline)) libgotcha_traceglobal(uintptr_t before, uintptr_t after) {
 	FILE *err = config_traceglobals();
@@ -144,13 +144,13 @@ static void segv(int no, siginfo_t *si, void *co) {
 	disasm_cb(ctx, &inst, inst + X86_64_MAX_INSTR_LEN, 0, "%.1o,%.2o,%.3o",
 		addr_calc_base_gpr, &greg, NULL);
 	if((signed) greg == -1) {
-		handler(no, si, co);
+		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
 	uintptr_t addr = mc->gregs[greg];
 	if(!addr) {
-		handler(no, si, co);
+		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -162,7 +162,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 			ptrdiff_t offset = addr - last_old;
 			mc->gregs[greg] = last_new + offset;
 		} else
-			handler(no, si, co);
+			handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -173,7 +173,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 			"libgotcha error: access to global address backed by dangling GOOT entry\n",
 			stderr
 		);
-		handler(no, si, co);
+		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -187,13 +187,12 @@ static void segv(int no, siginfo_t *si, void *co) {
 
 	Lmid_t namespace = *namespace_thread();
 	uintptr_t dest = shadow->gots[namespace][index];
-	if(!dest) {
+	if(!dest)
 		dest = shadow->gots[LM_ID_BASE][index];
-	}
 	if(!dest) {
 		fputs_unlocked("libgotcha error: access to global backed by NULL pointer",
 			stderr);
-		handler(no, si, co);
+		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -226,7 +225,8 @@ enum error globals_init(void) {
 		return ERROR_SIGACTION;
 
 	assert((uintptr_t) old.sa_handler == (uintptr_t) old.sa_sigaction);
-	handler = old.sa_sigaction;
+	if(old.sa_handler)
+		memcpy(&handler, &old, sizeof handler);
 
 	if(!ctx) {
 		x86_64_init(NULL, 0, &ebl, sizeof ebl);
@@ -238,14 +238,10 @@ enum error globals_init(void) {
 }
 
 enum error globals_deinit(void) {
-	if(handler) {
-		struct sigaction restore = {
-			.sa_flags = SA_SIGINFO,
-			.sa_sigaction = handler,
-		};
-		if(sigaction(SIGSEGV, &restore, NULL))
+	if(handler.sa_handler) {
+		if(sigaction(SIGSEGV, &handler, NULL))
 			return ERROR_SIGACTION;
-		handler = NULL;
+		memset(&handler, 0, sizeof handler);
 	}
 
 	if(ctx)
@@ -254,6 +250,6 @@ enum error globals_deinit(void) {
 	return SUCCESS;
 }
 
-void globals_install_handler(void (*repl)(int, siginfo_t *, void *)) {
-	handler = repl;
+struct sigaction *globals_handler(void) {
+	return &handler;
 }
