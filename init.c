@@ -1,3 +1,4 @@
+#include "config.h"
 #include "globals.h"
 #include "handle.h"
 #include "interpose.h"
@@ -58,8 +59,8 @@ static inline enum error init(void) {
 	whitelist_shared_get(NULL);
 
 	// Enable interception of cros--object file accesses to global storage.
-	enum error code = globals_init();
-	if(code)
+	enum error code;
+	if(!config_noglobals() && (code = globals_init()))
 		return code;
 
 	// Now multiplex everything and set up shadowing!

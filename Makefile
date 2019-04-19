@@ -25,7 +25,7 @@ libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -zn
 libgotcha.so: private LDFLAGS += libgotcha.o -lasm -lc -ldl -lebl_x86_64 -lpthread -lunwind
 libgotcha.so: libgotcha.o libgotcha_api.rs
 
-libgotcha.o: libgotcha_api.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: libgotcha_api.o config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 libctestfuns.so: private CC := c++
@@ -43,6 +43,8 @@ libgotcha_api.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_came
 
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
+config.o: private CFLAGS += -fpic
+config.o: config.h
 ctestfuns.o: ctestfuns.h
 error.o: private CPPFLAGS += -isystem .
 error.o: error.h
@@ -56,10 +58,10 @@ gotchapreload.o: private CFLAGS += -fpic
 gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
-handle.o: handle.h error.h goot.h namespace.h plot.h segprot.h
+handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
 init.o: private CFLAGS += -fpic
 init.o: private CPPFLAGS += -D_GNU_SOURCE
-init.o: globals.h handle.h interpose.h namespace.h whitelist.h
+init.o: config.h globals.h handle.h interpose.h namespace.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE

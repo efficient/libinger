@@ -1,5 +1,6 @@
 #include "handle.h"
 
+#include "config.h"
 #include "goot.h"
 #include "plot.h"
 #include "segprot.h"
@@ -256,7 +257,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
 			const ElfW(Sym) *ol = &h->symtab[h->tramps[tramp]];
 			if(ol->st_value == st->st_value) {
-				if(segment_unwritable(st->st_value, p, p_end)) {
+				if(config_noglobals() ||
+					segment_unwritable(st->st_value, p, p_end)) {
 					// The symbol is read-only, so we'll assume it is going to
 					// match across copies of this object file.  Forget about
 					// it, annulling the request to multiplex accesses.
