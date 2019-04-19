@@ -1,4 +1,5 @@
 BINDGEN := bindgen
+NM := nm
 OBJCOPY := objcopy
 RUSTC := rustc
 
@@ -9,22 +10,36 @@ override LDFLAGS := $(LDFLAGS)
 override LDLIBS := $(LDLIBS)
 override RUSTFLAGS := --edition 2018 -Copt-level=2 $(RUSTFLAGS)
 
+ELFUTILS := /usr/lib/x86_64-linux-gnu/elfutils
 REVISION := HEAD
 
-ELFUTILS := /usr/lib/x86_64-linux-gnu/elfutils
+CGLOBALS := $(wildcard libgotcha_*.c)
 
-libgotchapreload.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -znodelete -znoexecstack
-libgotchapreload.so: private LDLIBS += $(wildcard /usr/lib/x86_64-linux-gnu/libstd-*.so) -lasm -ldl -lebl_x86_64 -pthread
-libgotchapreload.so: libgotcha.o
+.PHONY: all
+all: libgotcha.a libgotcha.rlib libgotcha.so
 
-libgotcha.o: libgotcha_api.o error.o globals.o goot.o handle.o interpose.o mirror.o namespace.o plot.o segprot.o shared.o whitelist.o
-gotcha.o: goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
+libgotcha.a: libgotcha.o libgotcha_api.rs
+libgotcha.rlib: libgotcha.o libgotcha_api.rs
+
+libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -znodelete -Wl,-zlazy
+libgotcha.so: private LDFLAGS += libgotcha.o -lasm -lc -ldl -lebl_x86_64 -lpthread -lunwind
+libgotcha.so: libgotcha.o libgotcha_api.rs
+
+libgotcha.o: libgotcha_api.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
+gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
+
+libctestfuns.so: private CC := c++
+libctestfuns.so: private LDLIBS += -ldl
+
+gotcha.abi: $(CGLOBALS:.c=.o)
+	$(NM) -gP --defined-only $^ | grep -v ':$$' | cut -d" " -f1 | sort >$@
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 handle.rs: private CPPFLAGS += -D_GNU_SOURCE
 handle.rs: error.h namespace.h
+libgotcha_api.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types, non_upper_case_globals)]"
 
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
@@ -33,7 +48,7 @@ error.o: private CPPFLAGS += -isystem .
 error.o: error.h
 globals.o: private CFLAGS += -fpic
 globals.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-globals.o: globals.h error.h goot.h handle.h namespace.h plot.h
+globals.o: globals.h error.h goot.h handle.h namespace.h plot.h threads.h
 goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h plot.h
@@ -42,13 +57,13 @@ gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h error.h goot.h namespace.h plot.h segprot.h
+init.o: private CFLAGS += -fpic
+init.o: private CPPFLAGS += -D_GNU_SOURCE
+init.o: globals.h handle.h interpose.h namespace.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h namespace.h shared.h
-mirror.o: private CFLAGS += -fpic
-mirror.o: private CPPFLAGS += -D_GNU_SOURCE
-mirror.o: mirror.h error.h globals.h handle.h namespace.h threads.h whitelist.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
@@ -81,12 +96,9 @@ clean:
 %.rs: %.h
 	$(BINDGEN) $(BINDFLAGS) -o $@ $< -- $(CPPFLAGS)
 
-lib%.a: %.o
-	$(AR) rs $@ $^
-
 lib%.a: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type staticlib $< $(LDLIBS)
-	if [ -e $*.mri ]; then $(AR) -M <$*.mri; fi
+	if [ -e lib$*.o ]; then $(AR) rs $@ lib$*.o; fi
 
 lib%.o: %.o
 	$(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)
@@ -94,9 +106,7 @@ lib%.o: %.o
 
 lib%.rlib: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type rlib $< $(LDLIBS)
-
-lib%.so: %.o
-	$(CC) $(LDFLAGS) -shared -zdefs -ztext -o $@ $^ $(LDLIBS)
+	if [ -e lib$*.o ]; then $(AR) rs $@ lib$*.o; fi
 
 lib%.so: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS) -zdefs -ztext" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)

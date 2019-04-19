@@ -3,8 +3,10 @@
 /ctests
 /goot.rs
 /handle.rs
+/libgotcha_api.rs
 
 *.a
+*.abi
 *.o
 *.rlib
 *.so

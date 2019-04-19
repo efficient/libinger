@@ -72,4 +72,7 @@ static inline size_t handle_got_num_entries(const struct handle *h) {
 	return h->ntramps;
 }
 
+// Get the name of the executing program.  Returns NULL on error.
+const char *handle_progname(void);
+
 #endif

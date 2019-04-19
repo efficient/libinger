@@ -52,8 +52,22 @@ static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
 	return (uintptr_t) page + plot_pagesize() + entry;
 }
 
-// Returns NULL on error.
-static const char *progname(void) {
+static const char *interp_path(void) {
+	static const char *interp;
+	if(!interp) {
+		const struct link_map *l = dlopen(NULL, RTLD_LAZY);
+		const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
+		const ElfW(Phdr) *ph = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
+		const ElfW(Phdr) *pe = ph + e->e_phnum;
+		const ElfW(Phdr) *p;
+		for(p = ph; p->p_type != PT_INTERP; ++p)
+			assert(p + 1 != pe);
+		interp = (char *) (l->l_addr + p->p_vaddr);
+	}
+	return interp;
+}
+
+const char *handle_progname(void) {
 	extern const char *__progname_full;
 	static const char *progname;
 	static char resolved[PATH_MAX];
@@ -83,21 +97,6 @@ static const char *progname(void) {
 	return progname;
 }
 
-static const char *interp_path(void) {
-	static const char *interp;
-	if(!interp) {
-		const struct link_map *l = dlopen(NULL, RTLD_LAZY);
-		const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
-		const ElfW(Phdr) *ph = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
-		const ElfW(Phdr) *pe = ph + e->e_phnum;
-		const ElfW(Phdr) *p;
-		for(p = ph; p->p_type != PT_INTERP; ++p)
-			assert(p + 1 != pe);
-		interp = (char *) (l->l_addr + p->p_vaddr);
-	}
-	return interp;
-}
-
 enum error handle_init(struct handle *h, const struct link_map *l, struct link_map *owner) {
 	assert(h);
 	assert(l);
@@ -105,7 +104,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	memset(h, 0, sizeof *h);
 
 	h->path = l->l_name;
-	if((!h->path || !*h->path) && !(h->path = progname()))
+	if((!h->path || !*h->path) && !(h->path = handle_progname()))
 		return ERROR_FNAME_PATH;
 
 	h->baseaddr = l->l_addr;
@@ -212,7 +211,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 				// relocations (e.g., using the -fpic compiler switch).
 				fprintf(stderr,
 					"%s: libgotcha warning: found copy relocation: %s\n",
-					progname(),
+					handle_progname(),
 					h->strtab + h->symtab[ELF64_R_SYM(r->r_info)].st_name);
 				break;
 			}
@@ -243,7 +242,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			if(!whitelist_so_contains(h->path))
 				fprintf(stderr,
 					"%s: libgotcha warning: %s: unwhitelisted GL() access\n",
-					progname(), h->path);
+					handle_progname(), h->path);
 			if(init && st->st_shndx == SHN_UNDEF && flags_1 & DF_1_NODELETE)
 				// This object is flagged to prevent it from ever being destructed.
 				// We'll assume its constructor might modify the linker's mutable
@@ -332,7 +331,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 						// Skip this relocation entry.
 						fprintf(stderr,
 							"%s: libgotcha warning: %s: unresolvable lazy call: %s\n",
-							progname(), h->path, sym);
+							handle_progname(), h->path, sym);
 						continue;
 					}
 				}
