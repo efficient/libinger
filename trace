@@ -1,0 +1,30 @@
+#!/bin/sh
+
+filter() {
+	sed -ne'/^0x[0-9a-f]\+:\s\+0x[0-9a-f]\+ <.*>$/p' -e's/^\$[0-9]\+ = \(0x[0-9a-f].* <.*>\)$/\1/p'
+}
+
+if [ "$1" = "-u" ]
+then
+	filter() {
+		cat
+	}
+	shift
+fi
+
+path="`dirname "$0"`"
+script="$path/trace_$1.gdb"
+if [ ! -e "$script" -o "$#" -le "1" ]
+then
+	cat <<-tac
+		USAGE: $0 [-u] <command> <gdb arg>...
+
+		-u, if present, means not to filter the output
+		<command> must be one of:
+	tac
+	ls "$path/trace_"*".gdb" | sed "s:^$path/trace_\(.*\)\.gdb:\t\1:" | sort
+	exit 1
+fi
+shift
+
+echo r | gdb -q -x "$script" "$@" | filter
