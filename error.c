@@ -9,6 +9,9 @@
 const char *error_message(enum error error) {
 	const char *res = NULL;
 	switch(error) {
+	case ERROR_STATICALLY_LINKED:
+		res = "Statically linking me into the program executable is unsupported";
+		break;
 	case ERROR_FNAME_PATH:
 		res = "Determining path to program executable (check PATH environment variable)";
 		break;

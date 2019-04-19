@@ -35,6 +35,12 @@ static inline enum error init(void) {
 	interpose_init();
 	root = dlopen(NULL, RTLD_LAZY);
 
+	if(namespace_self() == root)
+		// Eek!  Someone statically linked us into this executable.  Not cool: aside from
+		// confining their code to run in the base namespace, that means we just gave them
+		// an escape hatch from our interposed library functions!
+		return ERROR_STATICALLY_LINKED;
+
 	// Initialize a handle for each object in the chain.
 	// It's fine to do dependents before their dependencies here, so long as no thread that uses
 	// a dependent installs a nonzero namespace selector before so doing.  But they shouldn't
