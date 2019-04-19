@@ -25,7 +25,7 @@ libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -zn
 libgotcha.so: private LDFLAGS += libgotcha.o -lasm -lc -ldl -lebl_x86_64 -lpthread -lunwind
 libgotcha.so: libgotcha.o libgotcha_api.rs
 
-libgotcha.o: libgotcha_api.o config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: $(CGLOBALS:.c=.o) config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
@@ -70,6 +70,9 @@ interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h namespace.h shared.h
+libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls
+libgotcha_repl.o: private CPPFLAGS += -D_DEFAULT_SOURCE
+libgotcha_repl.o: config.h globals.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
