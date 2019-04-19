@@ -29,7 +29,7 @@ libgotcha.o: $(CGLOBALS:.c=.o) config.o error.o globals.o goot.o handle.o init.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
-	$(NM) -gP --defined-only $^ | grep -v ':$$' | cut -d" " -f1 | sort >$@
+	$(NM) -gP --defined-only $^ | grep -ve':$$' -e' \<W\>' | cut -d" " -f1 | sort >$@
 
 bench: private LDFLAGS += -Wl,-zlazy -Wl,-R\$$ORIGIN
 bench: private LDLIBS += -lbenchmark
@@ -70,7 +70,7 @@ interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h namespace.h shared.h
-libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls
+libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_DEFAULT_SOURCE
 libgotcha_repl.o: config.h globals.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
