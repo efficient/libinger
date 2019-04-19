@@ -138,8 +138,13 @@ static void segv(int no, siginfo_t *si, void *co) {
 		return;
 	}
 
-	uintptr_t pagesize = plot_pagesize();
 	uintptr_t addr = mc->gregs[greg];
+	if(!addr) {
+		handler(no, si, co);
+		return;
+	}
+
+	uintptr_t pagesize = plot_pagesize();
 	size_t index = addr & (pagesize - 1);
 	const struct plot *plot = (struct plot *) (addr - index - pagesize);
 	if(index >= PLOT_ENTRIES_PER_PAGE || plot->resolver != procedure_linkage_override) {
