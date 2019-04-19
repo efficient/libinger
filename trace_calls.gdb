@@ -1,7 +1,7 @@
 set br pend on
 set pr asm on
 han SIGSEGV noprint
-b ctor
+b procedure_linkage_override
 comm
 dis
 find/b1 procedure_linkage_override, +0x1000, 0xc3

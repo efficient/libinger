@@ -27,4 +27,10 @@ then
 fi
 shift
 
-echo r | gdb -q -x "$script" "$@" | filter
+start="r"
+if echo -- "$*" | grep -- '-\<p\>' >/dev/null
+then
+	start="c"
+fi
+
+echo "$start" | gdb -q -x "$script" "$@" | filter
