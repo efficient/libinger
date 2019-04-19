@@ -1,3 +1,4 @@
+#include "config.h"
 #include "globals.h"
 
 #include "goot.h"
@@ -17,6 +18,13 @@ void procedure_linkage_override(void);
 static DisasmCtx_t *ctx;
 static Ebl ebl;
 static void (*handler)(int, siginfo_t *, void *);
+
+static void __attribute__((noinline)) libgotcha_traceglobal(uintptr_t before, uintptr_t after) {
+	FILE *err = config_traceglobals();
+	if(err)
+		fprintf(err, "libgotcha trace: rerouted memory access from %#lx to %#lx\n",
+			before, after);
+}
 
 // If an instruction contains a memory access to an location computed from one or more
 // general-purpose registers, update reg to store the (64-bit) ucontext/mcontext index of the
@@ -187,6 +195,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 		return;
 	}
 
+	libgotcha_traceglobal(addr, dest);
 	mc->gregs[greg] = dest;
 	last_reg = greg;
 	last_old = addr;
@@ -194,6 +203,10 @@ static void segv(int no, siginfo_t *si, void *co) {
 }
 
 enum error globals_init(void) {
+	// Because we call this while rerouting each global variable access, and because it uses
+	// (and caches) stderr, we must bootstrap it before we begin intercepting such accesses.
+	config_traceglobals();
+
 	sigset_t mask;
 	sigfillset(&mask);
 	sigdelset(&mask, SIGSEGV);
