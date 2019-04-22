@@ -10,6 +10,7 @@
 #include <elfutils/libasm.h>
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -135,6 +136,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 	static thread_local uintptr_t last_old;
 	static thread_local uintptr_t last_new;
 
+	int erryes = errno;
 	ucontext_t *uc = co;
 	mcontext_t *mc = &uc->uc_mcontext;
 	size_t greg;
@@ -143,13 +145,13 @@ static void segv(int no, siginfo_t *si, void *co) {
 		addr_calc_base_gpr, &greg, NULL);
 	if((signed) greg == -1) {
 		handler(no, si, co);
-		return;
+		goto out;
 	}
 
 	uintptr_t addr = mc->gregs[greg];
 	if(!addr) {
 		handler(no, si, co);
-		return;
+		goto out;
 	}
 
 	uintptr_t pagesize = plot_pagesize();
@@ -161,7 +163,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 			mc->gregs[greg] = last_new + offset;
 		} else
 			handler(no, si, co);
-		return;
+		goto out;
 	}
 
 	const struct goot *goot = plot->goot;
@@ -172,7 +174,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 			stderr
 		);
 		handler(no, si, co);
-		return;
+		goto out;
 	}
 
 	const struct handle *handle = entry->lib;
@@ -192,7 +194,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 		fputs_unlocked("libgotcha error: access to global backed by NULL pointer",
 			stderr);
 		handler(no, si, co);
-		return;
+		goto out;
 	}
 
 	libgotcha_traceglobal(addr, dest);
@@ -200,6 +202,9 @@ static void segv(int no, siginfo_t *si, void *co) {
 	last_reg = greg;
 	last_old = addr;
 	last_new = dest;
+
+out:
+	errno = erryes;
 }
 
 enum error globals_init(void) {
