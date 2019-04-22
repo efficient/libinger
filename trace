@@ -33,4 +33,4 @@ then
 	start="c"
 fi
 
-echo "$start" | gdb -q -x "$script" "$@" | filter
+echo "$start" | gdb -q -x "$script" "$@" | tr -d '\000' | filter
