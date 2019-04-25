@@ -73,7 +73,7 @@ static inline enum error init(void) {
 	return SUCCESS;
 }
 
-static inline void __attribute__((constructor)) ctor(void) {
+static inline void __attribute__((constructor(101))) ctor(void) {
 	enum error fail = init();
 	if(fail) {
 		fprintf(stderr, "%s: libgotcha error: %s", handle_progname(), error_message(fail));
