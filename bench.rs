@@ -34,10 +34,6 @@ fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	}
 }
 
-extern {
-	fn mirror(fun: usize) -> bool;
-}
-
 #[bench]
 fn eager(lo: &mut Bencher) {
 	with_eager_nop(|| lo.iter(|| unsafe {
@@ -47,26 +43,6 @@ fn eager(lo: &mut Bencher) {
 
 #[bench]
 fn lazy(lo: &mut Bencher) {
-	lo.iter(|| unsafe {
-		nop()
-	});
-}
-
-#[bench]
-fn shadow(lo: &mut Bencher) {
-	assert!(unsafe {
-		mirror(shadow as _)
-	});
-	with_eager_nop(|| lo.iter(|| unsafe {
-		nop()
-	}));
-}
-
-#[bench]
-fn total(lo: &mut Bencher) {
-	assert!(unsafe {
-		mirror(shadow as _)
-	});
 	lo.iter(|| unsafe {
 		nop()
 	});

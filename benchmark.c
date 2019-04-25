@@ -1,10 +1,7 @@
-#include "handle.h"
-#include "mirror_object_containing.h"
-
 #include <sys/mman.h>
 #include <assert.h>
 #include <link.h>
-#include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
@@ -61,14 +58,13 @@ static void (**unmemoize(void (**mem)(void), const char *sym))(void) {
 }
 
 static void __attribute__((constructor)) ctor(void) {
-	assert(got = unmemoize(&nope, "nop"));
-}
+	// The loader initializes dependencies before LD_PRELOADs... unless the latter have
+	// INITFIRST set... unless *any* of the former has INITFIRST set.  Unfortunately, we're in
+	// the latter case thanks to libpthread.  However, dlopen()'ing libgotcha here appears to
+	// call its constructor immediately, even though it was already open.
+	dlopen("libgotcha.so", RTLD_LAZY | RTLD_NOLOAD);
 
-bool mirror(const void *function) {
-	assert(unmemoize(got, "nop"));
-	enum error res = mirror_object_containing(function);
-	assert(unmemoize(&nope, "nop"));
-	return !res;
+	assert(got = unmemoize(&nope, "nop"));
 }
 
 void nop(void) {}
@@ -82,17 +78,8 @@ static void (*nop_location(void))(void) {
 }
 
 void with_eager_nop(void (*fun)(void)) {
-	void (**entry)(void) = got;
-
-	const struct link_map *l = dlopen(NULL, RTLD_LAZY);
-	assert(l);
-
-	const struct handle *h = handle_get(l, NULL, NULL);
-	if(h && h->shadow)
-		entry = (void (**)(void)) (h->shadow->gots[0]->e + ((const void **) got - h->got->e));
-
-	void (*plt)(void) = *entry;
-	*entry = nop_location();
+	void (*plt)(void) = *got;
+	*got = nop_location();
 	fun();
-	*entry = plt;
+	*got = plt;
 }

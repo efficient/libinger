@@ -28,11 +28,15 @@ libgotcha.so: libgotcha.o libgotcha_api.rs
 libgotcha.o: libgotcha_api.o config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
-libctestfuns.so: private CC := c++
-libctestfuns.so: private LDLIBS += -ldl
-
 gotcha.abi: $(CGLOBALS:.c=.o)
 	$(NM) -gP --defined-only $^ | grep -v ':$$' | cut -d" " -f1 | sort >$@
+
+bench: private LDFLAGS += -Wl,-zlazy -Wl,-R\$$ORIGIN
+bench: private LDLIBS += -lbenchmark
+bench: private RUSTFLAGS += --test -L.
+bench: libbenchmark.so
+
+libbenchmark.so: private LDLIBS += -ldl
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
@@ -112,3 +116,6 @@ lib%.rlib: %.rs
 
 lib%.so: %.rs
 	$(RUSTC) -Clink-args="$(LDFLAGS) -zdefs -ztext" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)
+
+lib%.so: %.o
+	$(CC) $(LDFLAGS) -shared -zdefs -ztext -o $@ $^ $(LDLIBS)
