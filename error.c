@@ -12,6 +12,9 @@ const char *error_message(enum error error) {
 	case ERROR_STATICALLY_LINKED:
 		res = "Statically linking me into the program executable is unsupported";
 		break;
+	case ERROR_RUNTIME_LOADED:
+		res = "Loading me at runtime via dlopen() is unsupported";
+		break;
 	case ERROR_FNAME_PATH:
 		res = "Determining path to program executable (check PATH environment variable)";
 		break;

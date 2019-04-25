@@ -621,9 +621,11 @@ enum error handle_got_shadow(struct handle *h) {
 			// symbols (thanks to us, really their trampolines) to said namespaces:
 			// without doing this, calls would result in undefined behavior, but after
 			// this step, they instead result in a normal namespace switch.
-			assert(getenv("LD_PRELOAD") && "Phantom dependency not from LD_PRELOAD");
-			handle_got_whitelist_all(h);
 			free(globdats);
+			if(!getenv("LD_PRELOAD"))
+				return ERROR_RUNTIME_LOADED;
+
+			handle_got_whitelist_all(h);
 			return SUCCESS;
 		}
 
