@@ -476,6 +476,8 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
+	bool self = !strcmp(h->path, namespace_self()->l_name);
+
 	// Note that symbols that are the subject of COPY relocations are considered to be in the
 	// executable rather than the object file in which they are logically/programmatically
 	// defined.  These unexpected semantics may be difficult to reason about.  We output a
@@ -493,8 +495,9 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 				if(!n) {
 					// Retrieve the trampoline from the defining library,
 					// or from *this* library if it's an interposed symbol.
-					tramp = got_trampoline(h->strtab + st->st_name,
-						trampolines_get(*got));
+					uintptr_t uninterposed = trampolines_get(*got);
+					tramp = self ? uninterposed :
+						got_trampoline(h->strtab + st->st_name, uninterposed);
 					globdats[r - h->miscrels] = tramp;
 				} else {
 					tramp = globdats[r - h->miscrels];
@@ -547,7 +550,8 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 
 		// Install our corresponding PLOT trampoline over the GOT entry.  Or reject their
 		// reality and substitute the one from *this* library if it's an interposed symbol.
-		*got = got_trampoline(sym, plot_trampoline(h, tramp));
+		uintptr_t uninterposed = plot_trampoline(h, tramp);
+		*got = self ? uninterposed : got_trampoline(sym, uninterposed);
 	}
 	prot_segment(base, h->lazygot_seg, 0);
 	if(!h->eager)
