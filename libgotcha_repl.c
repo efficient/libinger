@@ -1,12 +1,25 @@
 #include "config.h"
 #include "globals.h"
+#include "namespace.h"
 
+#include <assert.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#pragma weak libgotcha_dlmopen = dlmopen
+void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
+	if(lmid == LM_ID_BASE)
+		return dlmopen(lmid, filename, flags);
+
+	// Trick dlerror() into reporting "invalid target namespace for dlmopen()."
+	void *null = dlmopen(NUM_SHADOW_NAMESPACES + 1, "", RTLD_LAZY);
+	assert(!null);
+	return null;
+}
 
 static bool segv_masked;
 static void (*segv_handler)(int, siginfo_t *, void *);
