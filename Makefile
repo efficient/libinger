@@ -68,7 +68,7 @@ init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 init.o: config.h globals.h handle.h interpose.h namespace.h threads.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
-libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
+libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h namespace.h shared.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE
