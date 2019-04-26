@@ -16,11 +16,19 @@ impl Deref for Group {
 	}
 }
 
-pub fn thread_group_getter() -> extern fn() -> Group {
-	use crate::libgotcha_api::libgotcha_thread_group_getter;
+#[macro_export]
+macro_rules! group_thread {
+	() => (crate::gotcha::_group_thread_getter()());
+}
+
+#[doc(hidden)]
+pub fn _group_thread_getter() -> extern fn() -> Group {
 	use std::mem::transmute;
+	extern {
+		fn libgotcha_group_thread_getter() -> extern fn() -> Group;
+	}
 	unsafe {
-		transmute(libgotcha_thread_group_getter().unwrap())
+		transmute(libgotcha_group_thread_getter())
 	}
 }
 
