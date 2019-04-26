@@ -4,7 +4,7 @@
 // Set this just small enough that the code doesn't outgrow a page.
 #define PLOT_ENTRIES_PER_PAGE 406
 
-#ifndef _asm
+#ifndef __ASSEMBLER__
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>

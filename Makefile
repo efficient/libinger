@@ -76,7 +76,6 @@ libgotcha_repl.o: config.h globals.h namespace.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
-plot.o: private CPPFLAGS += -D_asm
 plot.o: plot.h handle.h
 segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
