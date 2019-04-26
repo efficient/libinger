@@ -5,7 +5,6 @@
 #include "handle.h"
 #include "namespace.h"
 #include "plot.h"
-#include "threads.h"
 
 #include <elfutils/libasm.h>
 #include <assert.h>
@@ -13,6 +12,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <threads.h>
 
 void procedure_linkage_override(void);
 

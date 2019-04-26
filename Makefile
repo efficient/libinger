@@ -64,8 +64,8 @@ handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
 init.o: private CFLAGS += -fpic
-init.o: private CPPFLAGS += -D_GNU_SOURCE
-init.o: config.h globals.h handle.h interpose.h namespace.h whitelist.h
+init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
+init.o: config.h globals.h handle.h interpose.h namespace.h threads.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -D_GNU_SOURCE
@@ -74,7 +74,7 @@ libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE
 libgotcha_repl.o: config.h globals.h namespace.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
-namespace.o: private CPPFLAGS += -D_GNU_SOURCE
+namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h handle.h
 segprot.o: segprot.h plot.h

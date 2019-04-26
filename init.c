@@ -3,13 +3,13 @@
 #include "handle.h"
 #include "interpose.h"
 #include "namespace.h"
-#include "threads.h"
 #include "whitelist.h"
 
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <threads.h>
 
 static struct link_map *root;
 

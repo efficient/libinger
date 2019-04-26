@@ -1,10 +1,9 @@
 #include "namespace.h"
 
-#include "threads.h"
-
 #include <assert.h>
 #include <link.h>
 #include <pthread.h>
+#include <threads.h>
 
 Lmid_t *namespace_thread(void) {
 	static thread_local Lmid_t namespace = LM_ID_BASE;
