@@ -16,7 +16,7 @@ REVISION := HEAD
 CGLOBALS := $(wildcard libgotcha_*.c)
 
 .PHONY: all
-all: libgotcha.a libgotcha.rlib libgotcha.so
+all: libgotcha.a libgotcha.rlib libgotcha.so libgotcha.mk
 
 libgotcha.a: libgotcha.o libgotcha_api.rs
 libgotcha.rlib: libgotcha.o libgotcha_api.rs
@@ -24,6 +24,9 @@ libgotcha.rlib: libgotcha.o libgotcha_api.rs
 libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -znodelete -Wl,-zlazy
 libgotcha.so: private LDFLAGS += libgotcha.o -lasm -lc -ldl -lebl_x86_64 -lpthread -lunwind
 libgotcha.so: libgotcha.o libgotcha_api.rs
+
+libgotcha.mk: gotcha.mk libgotcha.so
+	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
 libgotcha.o: $(CGLOBALS:.c=.o) config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
@@ -104,9 +107,8 @@ clean:
 %.rs: %.h
 	$(BINDGEN) $(BINDFLAGS) -o $@ $< -- $(CPPFLAGS)
 
-lib%.a: %.rs
-	$(RUSTC) -Clink-args="$(LDFLAGS)" $(RUSTFLAGS) --crate-type staticlib $< $(LDLIBS)
-	if [ -e lib$*.o ]; then $(AR) rs $@ lib$*.o; fi
+lib%.a: lib%.rlib
+	$(AR) d $@ $(shell cp $< $@ && $(AR) t $@ | grep -v '\.o$$')
 
 lib%.o: %.o
 	$(LD) $(LDFLAGS) -r -o $@ $^ $(LDLIBS)

@@ -3,6 +3,7 @@
 /ctests
 /goot.rs
 /handle.rs
+/libgotcha.mk
 /libgotcha_api.rs
 
 *.a
