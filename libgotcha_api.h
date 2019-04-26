@@ -1,6 +1,10 @@
 #ifndef LIBGOTCHA_H_
 #define LIBGOTCHA_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include <stdint.h>
 
 #define LIBGOTCHA_GROUP_ERROR -1
@@ -24,5 +28,9 @@ static inline libgotcha_group_t libgotcha_group_thread_set(libgotcha_group_t gro
 libgotcha_group_t libgotcha_group_new(void);
 
 void libgotcha_shared_hook(void (*)(void));
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
