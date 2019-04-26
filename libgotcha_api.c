@@ -3,11 +3,11 @@
 #include "namespace.h"
 #include "shared.h"
 
-static uint8_t namespace_getter(void) {
+static libgotcha_group_t namespace_getter(void) {
 	return *namespace_thread();
 }
 
-uint8_t (*libgotcha_thread_group_getter(void))(void) {
+libgotcha_group_t (*libgotcha_thread_group_getter(void))(void) {
 	return namespace_getter;
 }
 

@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-uint8_t (*libgotcha_thread_group_getter(void))(void);
+typedef long libgotcha_group_t;
+
+libgotcha_group_t (*libgotcha_thread_group_getter(void))(void);
 
 void libgotcha_shared_hook(void (*)(void));
 
