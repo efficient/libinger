@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#pragma GCC visibility push(hidden)
+#include "libgotcha_repl.h"
+#pragma GCC visibility pop
+
 #pragma weak libgotcha_dlmopen = dlmopen
 void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
 	if(lmid == LM_ID_BASE)

@@ -75,7 +75,7 @@ libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h namespace.h shared.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE
-libgotcha_repl.o: config.h globals.h namespace.h
+libgotcha_repl.o: libgotcha_repl.h config.h globals.h namespace.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
