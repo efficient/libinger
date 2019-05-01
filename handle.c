@@ -427,7 +427,7 @@ void handle_cleanup(struct handle *h) {
 }
 
 static inline bool myself(const struct handle *h) {
-	return !strcmp(h->path, namespace_self()->l_name);
+	return h->baseaddr == namespace_self()->l_addr;
 }
 
 // If the provided symbol is one for which we force interposition, return the address of its
