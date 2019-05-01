@@ -442,7 +442,7 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 
 	size_t len = handle_got_num_entries(h);
 	uintptr_t *proxy = *h->shadow.gots + len;
-	memset(proxy, 0, len);
+	memset(proxy, 0, len * sizeof *proxy);
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
 		h->shadow.gots[namespace] = proxy;
 
