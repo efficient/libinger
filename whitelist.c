@@ -30,6 +30,7 @@ static const char *WHITELIST[] = {
 	"/libpthread.so.",
 };
 
+// Does not replace.
 void whitelist_shared_insert(struct whitelist *, const char *, uintptr_t);
 
 void whitelist_so_insert_with(const struct handle *h, struct whitelist *out, bool me) {
@@ -52,9 +53,10 @@ bool whitelist_so_contains(const char *path) {
 }
 
 void whitelist_shared_init(struct whitelist *out) {
+	const struct link_map *self = namespace_self();
+	whitelist_so_insert_with(handle_get(self, NULL, NULL), out, true);
 	for(const struct link_map *l = (struct link_map *) dlopen(NULL, RTLD_LAZY); l; l = l->l_next) {
-		bool myself = l == namespace_self();
-		if(whitelist_so_contains(l->l_name) || myself)
-			whitelist_so_insert_with(handle_get(l, NULL, NULL), out, myself);
+		if(l != self && whitelist_so_contains(l->l_name))
+			whitelist_so_insert_with(handle_get(l, NULL, NULL), out, false);
 	}
 }

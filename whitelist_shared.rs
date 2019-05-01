@@ -49,9 +49,9 @@ extern fn whitelist_shared_insert(
 	symbol: *const c_char,
 	replacement: usize,
 ) {
-	whitelist.unwrap().insert(unsafe {
+	whitelist.unwrap().entry(unsafe {
 		CStr::from_ptr(symbol)
-	}, replacement);
+	}).or_insert(replacement);
 }
 
 #[no_mangle]
