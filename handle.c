@@ -426,6 +426,10 @@ void handle_cleanup(struct handle *h) {
 	memset(h->shadow.gots, 0, sizeof h->shadow.gots);
 }
 
+static inline bool myself(const struct handle *h) {
+	return !strcmp(h->path, namespace_self()->l_name);
+}
+
 // If the provided symbol is one for which we force interposition, return the address of its
 // trampoline; otherwise, return fallback.
 static inline uintptr_t got_trampoline(const char *sym, uintptr_t fallback) {
@@ -446,15 +450,17 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
 		h->shadow.gots[namespace] = proxy;
 
-	// Look for relocations against symbols in front of which we need to interpose our own.
+	if(myself(h))
+		return;
+
+	// Look for JUMP_SLOT relocations against symbols we need to interpose with our own.
 	for(unsigned tramp = h->ntramps_symtab; tramp < h->ntramps; ++tramp) {
 		const ElfW(Rela) *r = h->jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 		uintptr_t interposed = got_trampoline(h->strtab + st->st_name, 0);
-		if(interposed) {
+		if(interposed)
 			// Substitute our own trampoline over the GOT entry.
 			*(uintptr_t *) (h->baseaddr + r->r_offset) = interposed;
-		}
 	}
 
 	// We must add this to the whitelist so that any lazily-resolved
@@ -476,7 +482,7 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
-	bool self = !strcmp(h->path, namespace_self()->l_name);
+	bool self = myself(h);
 
 	// Note that symbols that are the subject of COPY relocations are considered to be in the
 	// executable rather than the object file in which they are logically/programmatically
