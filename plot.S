@@ -83,22 +83,23 @@ procedure_linkage_override:
 //  offset contents
 //  ===============
 //     0   saved %rax
-//     8   alignment gap
-//    16   saved namespace
-//    32   preserved return address
+//     8   preserved return address
 hook_trampoline:
-	sub  $8, %rsp
-	push %rax
+	mov  (%rsp), %rcx            // namespace
+	mov  %rax, (%rsp)            // save %rax
 
 	call namespace_thread        // namespace address
-	mov  16(%rsp), %rcx          // namespace
 	mov  %rcx, (%rax)            // restore namespace
-	mov    (%rsp), %rcx          // saved %rax
-	mov  %rcx, 16(%rsp)          // save %rax
-	lea  hook_ret(%rip), %rcx
-	mov  %rcx,  8(%rsp)          // intermediate return address
 
-	add  $8, %rsp
+	call namespace_thread_tramp  // trampolining address
+	mov  (%rax), %cl             // trampolining
+	test %cl, %cl
+	jnz  .Lskip_hook
+	movb $1, (%rax)              // lock ourselves out of here
+
+	lea  hook_ret(%rip), %rcx
+	push %rcx                   // intermediate return address
+
 	mov  shared_trampoline@gotpcrel(%rip), %rcx
 	mov  (%rcx), %rcx
 	jmp  *%rcx
@@ -109,6 +110,10 @@ hook_trampoline:
 //     0   saved %rax
 //     8   return address
 hook_ret:
+	call namespace_thread_tramp  // trampolining address
+	movb $0, (%rax)              // "unlock," as John Bercow would say
+.Lskip_hook:
+
 	pop  %rax
 	ret                          // preserved return address
 

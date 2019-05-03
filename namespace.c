@@ -10,6 +10,11 @@ Lmid_t *namespace_thread(void) {
 	return &namespace;
 }
 
+bool *namespace_thread_tramp(void) {
+	static thread_local bool trampolining;
+	return &trampolining;
+}
+
 const struct link_map *namespace_self(void) {
 	static const struct link_map *memo;
 	if(!memo)
