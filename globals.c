@@ -136,6 +136,14 @@ static void segv(int no, siginfo_t *si, void *co) {
 	static thread_local uintptr_t last_old;
 	static thread_local uintptr_t last_new;
 
+	// Switch to the base namespace while we're in this function.  Note that
+	// procedure_linkage_override() isn't currently aware of register spill during argument
+	// passing, so without this the call to disasm_cb() below can fail.
+	Lmid_t *nsp = namespace_thread();
+	Lmid_t ns = *nsp;
+	*nsp = LM_ID_BASE;
+
+	bool next = true;
 	int erryes = errno;
 	ucontext_t *uc = co;
 	mcontext_t *mc = &uc->uc_mcontext;
@@ -143,16 +151,12 @@ static void segv(int no, siginfo_t *si, void *co) {
 	const uint8_t *inst = (uint8_t *) mc->gregs[REG_RIP];
 	disasm_cb(ctx, &inst, inst + X86_64_MAX_INSTR_LEN, 0, "%.1o,%.2o,%.3o",
 		addr_calc_base_gpr, &greg, NULL);
-	if((signed) greg == -1) {
-		handler.sa_sigaction(no, si, co);
+	if((signed) greg == -1)
 		goto out;
-	}
 
 	uintptr_t addr = mc->gregs[greg];
-	if(!addr) {
-		handler.sa_sigaction(no, si, co);
+	if(!addr)
 		goto out;
-	}
 
 	uintptr_t pagesize = plot_pagesize();
 	size_t index = addr & (pagesize - 1);
@@ -161,8 +165,8 @@ static void segv(int no, siginfo_t *si, void *co) {
 		if(last_old && (greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new)) {
 			ptrdiff_t offset = addr - last_old;
 			mc->gregs[greg] = last_new + offset;
-		} else
-			handler.sa_sigaction(no, si, co);
+			next = false;
+		}
 		goto out;
 	}
 
@@ -173,7 +177,6 @@ static void segv(int no, siginfo_t *si, void *co) {
 			"libgotcha error: access to global address backed by dangling GOOT entry\n",
 			stderr
 		);
-		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -192,7 +195,6 @@ static void segv(int no, siginfo_t *si, void *co) {
 	if(!dest) {
 		fputs_unlocked("libgotcha error: access to global backed by NULL pointer",
 			stderr);
-		handler.sa_sigaction(no, si, co);
 		goto out;
 	}
 
@@ -201,8 +203,12 @@ static void segv(int no, siginfo_t *si, void *co) {
 	last_reg = greg;
 	last_old = addr;
 	last_new = dest;
+	next = false;
 
 out:
+	*nsp = ns;
+	if(next)
+		handler.sa_sigaction(no, si, co);
 	errno = erryes;
 }
 
