@@ -40,6 +40,7 @@ void *libgotcha_dlmopen(Lmid_t, const char *, int);
 int libgotcha_sigaction(int, const struct sigaction *, struct sigaction *);
 
 int libgotcha_sigprocmask(int, const sigset_t *, sigset_t *);
+int libgotcha_pthread_sigmask(int, const sigset_t *, sigset_t *);
 #endif
 
 void (*libgotcha_signal(int, void (*)(int)))(int);

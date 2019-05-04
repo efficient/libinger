@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <threads.h>
 
 #pragma GCC visibility push(hidden)
 #include "libgotcha_repl.h"
@@ -25,7 +26,7 @@ void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
 	return null;
 }
 
-static bool segv_masked;
+static thread_local bool segv_masked;
 static void (*segv_handler)(int, siginfo_t *, void *);
 
 static void segv_trampoline(int no, siginfo_t *si, void *co) {
@@ -83,10 +84,10 @@ int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
 	return 0;
 }
 
-#pragma weak libgotcha_sigprocmask = sigprocmask
-int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
+static int mask(int how, const sigset_t *set, sigset_t *oldset,
+	int (*real)(int, const sigset_t *, sigset_t *)) {
 	if(config_noglobals())
-		return sigprocmask(how, set, oldset);
+		return real(how, set, oldset);
 
 	bool segv_was_masked = segv_masked;
 	sigset_t local;
@@ -98,8 +99,18 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 		segv_masked = true;
 	}
 
-	int res = sigprocmask(how, set, oldset);
+	int res = real(how, set, oldset);
 	if(oldset && segv_was_masked)
 		sigaddset(oldset, SIGSEGV);
 	return res;
+}
+
+#pragma weak libgotcha_sigprocmask = sigprocmask
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
+	return mask(how, set, oldset, sigprocmask);
+}
+
+#pragma weak libgotcha_pthread_sigmask = pthread_sigmask
+int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
+	return mask(how, set, oldset, pthread_sigmask);
 }
