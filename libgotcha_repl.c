@@ -91,12 +91,15 @@ static int mask(int how, const sigset_t *set, sigset_t *oldset,
 
 	bool segv_was_masked = segv_masked;
 	sigset_t local;
-	if(set && how != SIG_UNBLOCK && sigismember(set, SIGSEGV)) {
-		setup_segv_trampoline();
-		memcpy(&local, set, sizeof local);
-		sigdelset(&local, SIGSEGV);
-		set = &local;
-		segv_masked = true;
+	if(set && sigismember(set, SIGSEGV)) {
+		if(how != SIG_UNBLOCK) {
+			setup_segv_trampoline();
+			memcpy(&local, set, sizeof local);
+			sigdelset(&local, SIGSEGV);
+			set = &local;
+			segv_masked = true;
+		} else if(segv_was_masked)
+			segv_masked = false;
 	}
 
 	int res = real(how, set, oldset);
