@@ -66,8 +66,20 @@ void (*signal(int signum, void (*handler)(int)))(int) {
 
 #pragma weak libgotcha_sigaction = sigaction
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact) {
-	if(signum != SIGSEGV || config_noglobals())
+	bool noglobals = config_noglobals();
+	if(signum != SIGSEGV || noglobals) {
+		struct sigaction sa;
+		if(!noglobals && act && sigismember(&act->sa_mask, SIGSEGV)) {
+			if(segv_handler)
+				fputs("libgotcha warning: "
+					"sigaction() ignoring request to block SIGSEGV in handler\n",
+					stderr);
+			memcpy(&sa, act, sizeof sa);
+			sigdelset(&sa.sa_mask, SIGSEGV);
+			act = &sa;
+		}
 		return sigaction(signum, act, oldact);
+	}
 
 	struct sigaction *myact = setup_segv_trampoline();
 	if(oldact) {
