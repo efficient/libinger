@@ -188,8 +188,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 		index -= shadow->first_entry;
 	}
 
-	Lmid_t namespace = *namespace_thread();
-	uintptr_t dest = shadow->gots[namespace][index];
+	uintptr_t dest = shadow->gots[ns][index];
 	if(!dest)
 		dest = shadow->gots[LM_ID_BASE][index];
 	if(!dest) {
