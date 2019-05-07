@@ -24,20 +24,10 @@ static bool libc(const char *sym) {
 	if(config_sharedlibc())
 		return true;
 
-	return strcmp(sym, "fopen") && strcmp(sym, "fdopen") && strcmp(sym, "fclose") &&
-		strcmp(sym, "fmemopen") && strcmp(sym, "open_memstream") &&
-		!strstr(sym, "freopen") && !strstr(sym, "fflush") &&
-		!strstr(sym, "setbuf") && strcmp(sym, "setlinebuf") && strcmp(sym, "setvbuf") &&
-		!strstr(sym, "putc") && !strstr(sym, "puts") && !strstr(sym, "printf") &&
-		!strstr(sym, "getc") && !strstr(sym, "gets") && !strstr(sym, "scanf") &&
-		strcmp(sym, "getline") && strcmp(sym, "getdelim") &&
-		strcmp(sym, "putw") && strcmp(sym, "getw") &&
-		!strstr(sym, "fread") && !strstr(sym, "fwrite") &&
-		!strstr(sym, "fseek") && !strstr(sym, "ftell") && strcmp(sym, "rewind") &&
-		!strstr(sym, "fgetpos") && !strstr(sym, "fsetpos") &&
-		!strstr(sym, "clearerr") && !strstr(sym, "feof") && !strstr(sym, "ferror") &&
-		!strstr(sym, "stdin") && !strstr(sym, "stdout") && !strstr(sym, "stderr") &&
-		!strstr(sym, "fileno");
+	return strstr(sym, "malloc") || strstr(sym, "calloc") || strstr(sym, "realloc") ||
+		strstr(sym, "valloc") || !strcmp(sym, "aligned_alloc") || strstr(sym, "memalign") ||
+		!strcmp(sym, "free") || !strcmp(sym, "__libc_free") || !strcmp(sym, "__free_hook") ||
+		!strcmp(sym, "cfree");
 }
 
 static const struct patterns WHITELIST[] = {
