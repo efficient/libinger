@@ -1,5 +1,6 @@
 #include "whitelist.h"
 
+#include "config.h"
 #include "handle.h"
 #include "namespace.h"
 
@@ -19,6 +20,26 @@ static bool yes(const char *ign) {
 	return true;
 }
 
+static bool libc(const char *sym) {
+	if(config_sharedlibc())
+		return true;
+
+	return strcmp(sym, "fopen") && strcmp(sym, "fdopen") && strcmp(sym, "fclose") &&
+		strcmp(sym, "fmemopen") && strcmp(sym, "open_memstream") &&
+		!strstr(sym, "freopen") && !strstr(sym, "fflush") &&
+		!strstr(sym, "setbuf") && strcmp(sym, "setlinebuf") && strcmp(sym, "setvbuf") &&
+		!strstr(sym, "putc") && !strstr(sym, "puts") && !strstr(sym, "printf") &&
+		!strstr(sym, "getc") && !strstr(sym, "gets") && !strstr(sym, "scanf") &&
+		strcmp(sym, "getline") && strcmp(sym, "getdelim") &&
+		strcmp(sym, "putw") && strcmp(sym, "getw") &&
+		!strstr(sym, "fread") && !strstr(sym, "fwrite") &&
+		!strstr(sym, "fseek") && !strstr(sym, "ftell") && strcmp(sym, "rewind") &&
+		!strstr(sym, "fgetpos") && !strstr(sym, "fsetpos") &&
+		!strstr(sym, "clearerr") && !strstr(sym, "feof") && !strstr(sym, "ferror") &&
+		!strstr(sym, "stdin") && !strstr(sym, "stdout") && !strstr(sym, "stderr") &&
+		!strstr(sym, "fileno");
+}
+
 static const struct patterns WHITELIST[] = {
 	// [Runtime] dynamic linker:
 	// Although the dynmaic linker internally enforces that there is only a single instance of
@@ -31,7 +52,7 @@ static const struct patterns WHITELIST[] = {
 	// Standard OS/language facilities:
 	// The primary issue here is the dynamic allocator: we can't have multiple versions hanging
 	// around with different free lists!
-	{"/libc.so.", yes},
+	{"/libc.so.", libc},
 
 	// POSIX threading:
 	// According to https://sourceware.org/glibc/wiki/LinkerNamespaces, calling into multiple

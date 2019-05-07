@@ -3,6 +3,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+bool config_sharedlibc(void) {
+	static bool memo;
+	static bool res;
+	if(!memo) {
+		if((res = getenv("LIBGOTCHA_SHAREDLIBC")))
+			fputs("libgotcha notice: Treating entirety of libc as shared code\n",
+				stderr);
+		memo = true;
+	}
+	return res;
+}
+
 bool config_noglobals(void) {
 	static bool memo;
 	static bool res;

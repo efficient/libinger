@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+bool config_sharedlibc(void);
 bool config_noglobals(void);
 FILE *config_traceglobals(void);
 

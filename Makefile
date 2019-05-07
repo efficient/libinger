@@ -85,7 +85,7 @@ shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
 shared.o: shared.h namespace.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
-whitelist.o: whitelist.h handle.h namespace.h
+whitelist.o: whitelist.h config.h handle.h namespace.h
 
 libgotcha.tar:
 	git archive --prefix=libgotcha/ -o $@ $(REVISION)
