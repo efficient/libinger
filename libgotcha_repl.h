@@ -41,6 +41,9 @@ int libgotcha_sigaction(int, const struct sigaction *, struct sigaction *);
 
 int libgotcha_sigprocmask(int, const sigset_t *, sigset_t *);
 int libgotcha_pthread_sigmask(int, const sigset_t *, sigset_t *);
+
+int libgotcha_sigfillset(sigset_t *);
+int libgotcha_sigaddset(sigset_t *, int);
 #endif
 
 void (*libgotcha_signal(int, void (*)(int)))(int);

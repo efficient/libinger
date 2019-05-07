@@ -129,3 +129,18 @@ int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
 int pthread_sigmask(int how, const sigset_t *set, sigset_t *oldset) {
 	return mask(how, set, oldset, pthread_sigmask);
 }
+
+#pragma weak libgotcha_sigfillset = sigfillset
+int sigfillset(sigset_t *set) {
+	int res = sigfillset(set);
+	if(!config_noglobals())
+		sigdelset(set, SIGSEGV);
+	return res;
+}
+
+#pragma weak libgotcha_sigaddset = sigaddset
+int sigaddset(sigset_t *set, int signum) {
+	if(!config_noglobals() && signum == SIGSEGV)
+		return 0;
+	return sigaddset(set, signum);
+}
