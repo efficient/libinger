@@ -497,7 +497,9 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-			if(*got && (*got != base + st->st_value || (partial && n))) {
+
+			bool redirected = false;
+			if(*got && (*got != base + st->st_value || (redirected = partial))) {
 				// This is not an undefined weak symbol, and the reference didn't
 				// resolve back to our own object file.  Let's look up the address
 				// of its program-wide multiplexing address...
@@ -513,7 +515,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 					tramp = globdats[r - h->miscrels];
 				}
 
-				if(tramp)
+				if(tramp && (!redirected || n))
 					// ...and install it over the GOT entry.
 					*got = tramp;
 			}
