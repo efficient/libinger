@@ -505,10 +505,13 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 				// of its program-wide multiplexing address...
 				uintptr_t tramp;
 				if(!n) {
-					// Retrieve the trampoline from the defining library,
-					// or from *this* library if it's an interposed symbol.
+					// Retrieve the trampoline from the defining library, or
+					// from *this* library if it's an interposed symbol.  But
+					// never do the latter for a partially-whitelisted library's
+					// relocation unless we would have processed it were the
+					// library fully whitelisted.
 					uintptr_t uninterposed = trampolines_get(*got);
-					tramp = self ? uninterposed :
+					tramp = self || redirected ? uninterposed :
 						got_trampoline(h->strtab + st->st_name, uninterposed);
 					globdats[r - h->miscrels] = tramp;
 				} else {
@@ -550,7 +553,8 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 		uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
-		if(*got != base + st->st_value || (partial && n)) {
+		bool redirected = false;
+		if(*got != base + st->st_value || ((redirected = partial) && n)) {
 			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
 			// the current GOT entry (which contains the address of either the resolved
 			// definition or a PLT trampoline).
@@ -563,9 +567,11 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 
 			// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
 			// their reality and substitute the one from *this* library if it's an
-			// interposed symbol.
+			// interposed symbol.  But never do the latter for a partially-whitelisted
+			// library's relocation unless we would have processed it were the library
+			// fully whitelisted.
 			uintptr_t uninterposed = plot_trampoline(h, tramp);
-			*got = self ? uninterposed : got_trampoline(sym, uninterposed);
+			*got = self || redirected ? uninterposed : got_trampoline(sym, uninterposed);
 		}
 	}
 	prot_segment(base, h->lazygot_seg, 0);
