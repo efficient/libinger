@@ -67,6 +67,11 @@ void whitelist_so_insert_with(const struct handle *h, struct whitelist *out,
 	}
 }
 
+bool whitelist_so_partial(const char *path) {
+	bool (*res)(const char *) = whitelist_so_contains(path);
+	return res && res != yes;
+}
+
 bool (*whitelist_so_contains(const char *path))(const char *) {
 	for(const struct patterns *it = WHITELIST;
 		it != WHITELIST + sizeof WHITELIST / sizeof *WHITELIST;

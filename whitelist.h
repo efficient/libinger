@@ -8,6 +8,7 @@ struct handle;
 
 bool whitelist_copy_contains(const char *symbol);
 
+bool whitelist_so_partial(const char *);
 bool (*whitelist_so_contains(const char *path))(const char *);
 void whitelist_so_insert(const struct handle *h);
 

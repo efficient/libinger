@@ -223,6 +223,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	if(h->lazygot_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
 		h->eager = true;
 
+	bool partial = whitelist_so_partial(h->path);
+
 	size_t ntramps_guess = (h->symtab_end - h->symtab) + (h->jmpslots_end - h->jmpslots);
 	if(ntramps_guess && !(h->tramps = malloc(ntramps_guess * sizeof *h->tramps)))
 		return ERROR_MALLOC;
@@ -233,7 +235,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		//  * Non-NULL.  Client code might NULL-check a pointer before attempting to
 		//    use it.
 		//  * Non-duplicate.
-		if(st->st_shndx != SHN_UNDEF && h->baseaddr + st->st_value &&
+		if((partial || st->st_shndx != SHN_UNDEF) && h->baseaddr + st->st_value &&
 			trampolines_insert(h->baseaddr + st->st_value, h->ntramps))
 			// Record our intention to multiplex accesses through the eager GOT entry.
 			h->tramps[h->ntramps++] = st - h->symtab;
@@ -253,7 +255,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		}
 	}
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
-		if(st->st_shndx != SHN_UNDEF && ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
+		if((partial || st->st_shndx != SHN_UNDEF) &&
+			ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
 			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
 			const ElfW(Sym) *ol = &h->symtab[h->tramps[tramp]];
 			if(ol->st_value == st->st_value) {
@@ -288,7 +291,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		// semantics should be the same as if the definition weren't exported as a dynamic
 		// symbol.  In order to distinguish whether this is a call between two different
 		// object files, we need to force the call to resolve now.
-		if(st->st_shndx != SHN_UNDEF) {
+		if(partial || st->st_shndx != SHN_UNDEF) {
 			uintptr_t *gotent = (uintptr_t *) (h->baseaddr + r->r_offset);
 			if(*gotent == h->baseaddr + st->st_value)
 				// The call has already been resolved to the local definition.  Skip
@@ -483,6 +486,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
 	bool self = myself(h);
+	bool partial = whitelist_so_partial(h->path);
 
 	// Note that symbols that are the subject of COPY relocations are considered to be in the
 	// executable rather than the object file in which they are logically/programmatically
@@ -493,7 +497,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
-			if(*got && *got != base + st->st_value) {
+			if(*got && (*got != base + st->st_value || (partial && n))) {
 				// This is not an undefined weak symbol, and the reference didn't
 				// resolve back to our own object file.  Let's look up the address
 				// of its program-wide multiplexing address...
@@ -544,20 +548,23 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 		uintptr_t *sgot = h->shadow.gots[n] + tramp;
 
-		// Populate the shadow GOT entry.  If we're multiplexing this symbol, use the
-		// current GOT entry (which contains the address of either the resolved definition
-		// or a PLT trampoline).
-		*sgot = sgot_entry(sym, n, *got);
+		if(*got != base + st->st_value || (partial && n)) {
+			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
+			// the current GOT entry (which contains the address of either the resolved
+			// definition or a PLT trampoline).
+			*sgot = sgot_entry(sym, n, *got);
 
-		if(!h->eager)
-			// Instruct the dynamic linker to update the *shadow* GOT entry if the PLT
-			// trampoline is later invoked.
-			((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
+			if(!h->eager)
+				// Instruct the dynamic linker to update the *shadow* GOT entry if
+				// the PLT trampoline is later invoked.
+				((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
-		// Install our corresponding PLOT trampoline over the GOT entry.  Or reject their
-		// reality and substitute the one from *this* library if it's an interposed symbol.
-		uintptr_t uninterposed = plot_trampoline(h, tramp);
-		*got = self ? uninterposed : got_trampoline(sym, uninterposed);
+			// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
+			// their reality and substitute the one from *this* library if it's an
+			// interposed symbol.
+			uintptr_t uninterposed = plot_trampoline(h, tramp);
+			*got = self ? uninterposed : got_trampoline(sym, uninterposed);
+		}
 	}
 	prot_segment(base, h->lazygot_seg, 0);
 	if(!h->eager)
