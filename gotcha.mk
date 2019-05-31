@@ -6,6 +6,10 @@ ifndef ELFUTILS_PATH
 ELFUTILS_PATH := /usr/lib/x86_64-linux-gnu/elfutils
 endif
 
+ifndef CP
+CP := cp
+endif
+
 ifndef RUSTC
 RUSTC := rustc
 endif
@@ -22,4 +26,4 @@ lib%.so: %.rs libgotcha.rlib
 	$(RUSTC) $(RUSTFLAGS) --crate-type dylib -Clink-args="$(LDFLAGS) -zdefs -zinitfirst -znodelete -ztext -Wl,-zlazy -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -lasm -lebl_x86_64" -Cprefer-dynamic -L. $<
 
 libgotcha.%: $(LIBGOTCHA_PATH)/libgotcha.%
-	cp $< $@
+	$(CP) $< $@
