@@ -15,7 +15,7 @@ RUSTFLAGS := -O
 endif
 
 lib%.so: %.o libgotcha.a
-	$(CC) $(LDFLAGS) -shared -zdefs -zinitfirst -znodelete -znoexecstack -ztext -static-libgcc -L. -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -o $@ $< $(LDLIBS) -Wl,--whole-archive -lgotcha -Wl,--no-whole-archive -l$(LIBSTDRUST_SONAME) -lasm -lc -ldl -lebl_x86_64 -lpthread
+	$(CC) $(LDFLAGS) -shared -zdefs -zinitfirst -znodelete -znoexecstack -ztext -static-libgcc -L. -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -o $@ $< $(LDLIBS) -Wl,--whole-archive -lgotcha -Wl,--no-whole-archive -l$(LIBSTDRUST_SONAME) -ldl -lpthread -lc -lasm -lebl_x86_64
 
 lib%.so: %.rs libgotcha.rlib
 	$(RM) libgotcha.so
