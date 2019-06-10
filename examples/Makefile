@@ -1,4 +1,5 @@
-CFLAGS := -std=c99 -O2 -Wall -Wextra -Wpedantic
+CFLAGS    := -std=c99 -O2 -Wall -Wextra -Wpedantic
+RUSTFLAGS := --edition 2018 -O
 
 date:
 date.o: CFLAGS += -fpic
