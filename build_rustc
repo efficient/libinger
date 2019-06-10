@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -e
+outdir() {
+	while [ "$#" -gt 1 ]
+	do
+		if [ "$1" = "--out-dir" ]
+		then
+			printf '%s\n' "$2"
+			return 0
+		fi
+		shift
+	done
+
+	echo "."
+	return 1
+}
+
+export PATH="`echo "$PATH" | cut -d: -f2-`"
+rustc "$@"
+ar rs "`outdir "$@"`"/*.rlib libgotcha.o

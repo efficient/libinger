@@ -1,0 +1,7 @@
+[package]
+name = "gotcha"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+path = "gotcha.rs"
