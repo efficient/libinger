@@ -8,4 +8,6 @@ all: libctime.so librstime.so
 clean:
 	$(RM) *.a *.o *.rlib *.so
 
+# This is the only essential line.  Note that you must have already built at least libgotcha.mk and
+# libgotcha.rlib in the main source tree before using the client library's build system.
 include ../../libgotcha.mk

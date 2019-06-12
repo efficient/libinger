@@ -3,8 +3,13 @@ name = "rstime"
 version = "0.0.0"
 edition = "2018"
 
+# This is essential because it doesn't make sense to build static client libraries.  Note that you
+# must also symlink .cargo/config or it will fail to link.
 [lib]
 crate-type = ["dylib"]
 
+# If the client library doesn't make sense of the libgotcha API, merely adding this section is
+# insufficient because the compiler can decide not to link in the dependency at all.  In such a
+# case, add an 'extern crate gotcha' to the client library's crate root.
 [dependencies.gotcha]
 path = "../.."
