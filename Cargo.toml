@@ -8,5 +8,8 @@ crate-type = ["dylib"]
 [dependencies]
 libc = "0.2.36"
 
+[dependencies.gotcha]
+path = "external/libgotcha"
+
 [dependencies.timetravel]
 path = "external/libtimetravel"

@@ -1,3 +1,7 @@
+[submodule "libgotcha"]
+	path = external/libgotcha
+	url = ../libinger
+	branch = gotcha
 [submodule "libtimetravel"]
 	path = external/libtimetravel
 	url = ../libinger

@@ -1,5 +1,6 @@
 #![cfg_attr(bench, feature(test))]
 
+extern crate gotcha;
 extern crate libc;
 #[cfg(bench)]
 extern crate test;
