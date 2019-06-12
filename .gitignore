@@ -1,15 +1,15 @@
 /libgotcha/
 /bench
-/Cargo.lock
 /ctests
 /goot.rs
 /handle.rs
 /libgotcha.mk
 /libgotcha_api.rs
-/target/
 
+target/
 *.a
 *.abi
+*.lock
 *.o
 *.rlib
 *.so

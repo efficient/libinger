@@ -1,0 +1,10 @@
+[package]
+name = "rstime"
+version = "0.0.0"
+edition = "2018"
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies.gotcha]
+path = "../.."
