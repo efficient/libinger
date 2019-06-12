@@ -17,6 +17,11 @@ fn main() -> Result {
 
 	let out_dir = var("OUT_DIR")?;
 	let path = var("PATH")?;
+	Command::new("cp")
+		.arg("libgotcha.o")
+		.arg(&out_dir)
+		.status()
+	?;
 	Command::new("install")
 		.arg("-m+rx")
 		.arg("build_rustc")

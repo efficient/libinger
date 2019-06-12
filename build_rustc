@@ -18,4 +18,4 @@ outdir() {
 
 export PATH="`echo "$PATH" | cut -d: -f2-`"
 rustc "$@"
-ar rs "`outdir "$@"`"/libgotcha-*.rlib libgotcha.o
+ar rs "`outdir "$@"`"/libgotcha-*.rlib "$OUT_DIR/libgotcha.o"
