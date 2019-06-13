@@ -19,11 +19,5 @@ mod zeroable;
 
 pub use linger::*;
 
-#[doc(hidden)]
-pub use pthread::*;
-
-#[doc(hidden)]
-pub use stdlib::*;
-
 #[cfg(test)]
 mod tests {}

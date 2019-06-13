@@ -11,34 +11,34 @@ pub use self::tests::*;
 /// Wrapper allowing us to interpose on `malloc(3)`.
 #[cfg(not(test))]
 #[no_mangle]
-pub unsafe extern "C" fn malloc(size: size_t) -> *mut c_void {
+unsafe extern "C" fn malloc(size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.malloc)(size))
 }
 
 /// Wrapper allowing us to interpose on `calloc(3)`.
 #[cfg(not(test))]
 #[no_mangle]
-pub unsafe extern "C" fn calloc(nobj: size_t, size: size_t) -> *mut c_void {
+unsafe extern "C" fn calloc(nobj: size_t, size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.calloc)(nobj, size))
 }
 
 /// Wrapper allowing us to interpose on `realloc(3)`.
 #[no_mangle]
-pub unsafe extern "C" fn realloc(addr: *mut c_void, size: size_t) -> *mut c_void {
+unsafe extern "C" fn realloc(addr: *mut c_void, size: size_t) -> *mut c_void {
 	shallow_call(|funs| (funs.realloc)(addr, size))
 }
 
 /// Wrapper allowing us to interpose on `posix_memalign(3)`.
 #[cfg(not(test))]
 #[no_mangle]
-pub unsafe extern "C" fn posix_memalign(addr: *mut *mut c_void, align: size_t, size: size_t) -> c_int {
+unsafe extern "C" fn posix_memalign(addr: *mut *mut c_void, align: size_t, size: size_t) -> c_int {
 	shallow_call(|funs| (funs.posix_memalign)(addr, align, size))
 }
 
 /// Wrapper allowing us to interpose on `free(3)`.
 #[cfg(not(test))]
 #[no_mangle]
-pub unsafe extern "C" fn free(addr: *mut c_void) {
+unsafe extern "C" fn free(addr: *mut c_void) {
 	shallow_call(|funs| (funs.free)(addr));
 }
 

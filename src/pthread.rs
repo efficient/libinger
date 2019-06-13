@@ -36,7 +36,7 @@ pub fn pthread_self() -> PThread {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn pthread_create(thread: *mut pthread_t, attr: *const pthread_attr_t, routine: extern "C" fn(*mut c_void) -> *mut c_void, arg: *mut c_void) -> c_int {
+unsafe extern "C" fn pthread_create(thread: *mut pthread_t, attr: *const pthread_attr_t, routine: extern "C" fn(*mut c_void) -> *mut c_void, arg: *mut c_void) -> c_int {
 	let pthread_create: unsafe extern "C" fn(*mut pthread_t, *const pthread_attr_t, extern "C" fn(*mut c_void) -> *mut c_void, *mut c_void) -> i32 =
 		dlsym(Handle::next(), b"pthread_create\0").unwrap().unwrap();
 
