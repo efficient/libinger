@@ -23,10 +23,11 @@ const ElfW(Phdr) *segment(uintptr_t offset,
 
 const ElfW(Phdr) *segment_unwritable(uintptr_t offset,
 	const ElfW(Phdr) *phdr, const ElfW(Phdr) *phdr_end) {
-	const ElfW(Phdr) *p;
-	for(p = segment(offset, phdr, phdr_end); p && p->p_flags & PF_W;
-		p = segment(offset, p + 1, phdr_end));
-	return p;
+	const ElfW(Phdr) *max = NULL;
+	for(ElfW(Phdr) *p = segment(offset, phdr, phdr_end); p; p = segment(offset, p + 1, phdr_end))
+		if(!(p->p_flags & PF_W) && (!max || p->p_memsz > max->p_memsz))
+			max = p;
+	return max;
 }
 
 int prot(const ElfW(Phdr) *p) {
