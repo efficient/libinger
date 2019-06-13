@@ -6,7 +6,7 @@ version = "0.0.0"
 crate-type = ["dylib"]
 
 [dependencies]
-libc = "0.2.36"
+libc = "*"
 
 [dependencies.gotcha]
 path = "external/libgotcha"
