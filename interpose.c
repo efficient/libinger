@@ -16,7 +16,7 @@ static inline const void *dyn(unsigned tag) {
 	return NULL;
 }
 
-static const ElfW(Sym) *sym(const char *name, const ElfW(Sym) *symtab, const char *strtab) {
+static inline const ElfW(Sym) *sym(const char *name, const ElfW(Sym) *symtab, const char *strtab) {
 	const ElfW(Sym) *symtabe = (ElfW(Sym) *) strtab;
 	for(const ElfW(Sym) *st = symtab; st != symtabe; ++st)
 		if(st->st_shndx != SHN_UNDEF && !strcmp(strtab + st->st_name, name))
