@@ -36,7 +36,7 @@ static inline enum error init(void) {
 	interpose_init();
 	root = dlopen(NULL, RTLD_LAZY);
 
-	if(namespace_self() == root)
+	if(!config_staticlink() && namespace_self() == root)
 		// Eek!  Someone statically linked us into this executable.  Not cool: aside from
 		// confining their code to run in the base namespace, that means we just gave them
 		// an escape hatch from our interposed library functions!

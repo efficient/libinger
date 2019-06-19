@@ -27,6 +27,12 @@ extern "C" {
 #endif
 
 #include <features.h>
+#include <stdbool.h>
+
+// Special build-time configuration flag.  If a program defines this symbol and sets it to true,
+// statically linking its executable against libgotcha will be permitted.  Note that, in this case,
+// libgotcha's functionality will only be accessible to third-party shared libraries.
+extern const bool libgotcha_staticlink;
 
 #ifdef __USE_GNU
 #include <dlfcn.h>

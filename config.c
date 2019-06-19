@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+bool config_staticlink(void) {
+	#pragma weak libgotcha_staticlink
+	extern const bool libgotcha_staticlink;
+	return &libgotcha_staticlink && libgotcha_staticlink;
+}
+
 bool config_sharedlibc(void) {
 	static bool memo;
 	static bool res;
