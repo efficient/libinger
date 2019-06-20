@@ -46,9 +46,6 @@ mod tests {
 		use signal::Signal;
 		use signal::Sigset;
 		use signal::sigaction;
-		use signal::tests_sigalrm_lock;
-
-		let lock = tests_sigalrm_lock();
 
 		extern "C" fn handler(_: Signal, _: Option<&siginfo_t>, _: Option<&mut ucontext_t>) {}
 
@@ -70,7 +67,5 @@ mod tests {
 		unsafe {
 			sigsuspend(&mask);
 		}
-
-		drop(lock);
 	}
 }

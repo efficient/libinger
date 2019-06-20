@@ -11,5 +11,8 @@ libc = "*"
 [dependencies.gotcha]
 path = "external/libgotcha"
 
+[dependencies.signal]
+path = "internal/libsignal"
+
 [dependencies.timetravel]
 path = "external/libtimetravel"

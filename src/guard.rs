@@ -28,8 +28,8 @@ impl PreemptGuard {
 	}
 
 	pub fn unblock() -> Result<()> {
-		use pthread::pthread_kill;
-		use pthread::pthread_self;
+		use signal::pthread::pthread_kill;
+		use signal::pthread::pthread_self;
 		use std::thread::panicking;
 
 		let mut mask = Sigset::empty();

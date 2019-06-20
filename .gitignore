@@ -1,5 +1,4 @@
-/target/
-
+target/
 *.a
 *.lock
 *.rs.bk
