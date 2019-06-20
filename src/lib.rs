@@ -8,8 +8,6 @@ mod continuation;
 mod dlfcn;
 mod guard;
 mod linger;
-mod pthread;
-mod stdlib;
 mod time;
 mod zeroable;
 
