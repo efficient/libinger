@@ -12,3 +12,6 @@ mod time;
 mod zeroable;
 
 pub use linger::*;
+
+#[cfg(test)]
+fn main() {}
