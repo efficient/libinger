@@ -17,3 +17,5 @@ path = "internal/libsignal"
 
 [dependencies.timetravel]
 path = "external/libtimetravel"
+
+[workspace]
