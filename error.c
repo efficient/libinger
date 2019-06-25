@@ -27,6 +27,9 @@ const char *error_message(enum error error) {
 	case ERROR_LIBASM:
 		res = "Unable to initialize libasm";
 		break;
+	case ERROR_DLADDR:
+		res = "Unable to look up base address of ancillary libgotcha copy";
+		break;
 	case SUCCESS:
 		break;
 	}
@@ -43,6 +46,9 @@ const char *error_explanation(enum error error) {
 		break;
 	case ERROR_LIBASM:
 		res = asm_errmsg(asm_errno());
+		break;
+	case ERROR_DLADDR:
+		res = dlerror();
 		break;
 	default:
 		break;

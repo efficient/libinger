@@ -9,6 +9,7 @@ enum error {
 	ERROR_MALLOC,
 	ERROR_SIGACTION,
 	ERROR_LIBASM,
+	ERROR_DLADDR,
 };
 
 // Returns a statically-allocated string literal broadly describing the error, or NULL on SUCCESS.

@@ -1,3 +1,4 @@
+#include "ancillary.h"
 #include "config.h"
 #include "globals.h"
 #include "handle.h"
@@ -5,6 +6,7 @@
 #include "namespace.h"
 #include "whitelist.h"
 
+#include <sys/mman.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -29,7 +31,7 @@ static inline enum error init(void) {
 	// There can be only one!
 	if(in_ancillary_namespace())
 		// We don't want to initialize any copies of ourself that we may have loaded.
-		return SUCCESS;
+		return ancillary_disable_ctors_dtors();
 
 	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
 	// will be routed to their external definitions.

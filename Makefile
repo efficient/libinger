@@ -28,7 +28,7 @@ libgotcha.so: libgotcha.o libgotcha_api.rs
 libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
-libgotcha.o: $(CGLOBALS:.c=.o) config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
@@ -48,6 +48,8 @@ handle.rs: private CPPFLAGS += -D_GNU_SOURCE
 handle.rs: error.h namespace.h
 libgotcha_api.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types, non_upper_case_globals)]"
 
+ancillary.o: private CPPFLAGS += -D_GNU_SOURCE
+ancillary.o: ancillary.h error.h plot.h
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
 config.o: private CFLAGS += -fpic
@@ -68,7 +70,7 @@ handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
 init.o: private CFLAGS += -fpic
 init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-init.o: config.h globals.h handle.h interpose.h namespace.h threads.h whitelist.h
+init.o: config.h error.h globals.h handle.h interpose.h namespace.h threads.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
