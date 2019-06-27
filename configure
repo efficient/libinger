@@ -1,0 +1,41 @@
+#!/bin/sh
+
+version() {
+	echo -n "Looking for $1..."
+	echo " found `"$1" --version | grep -o '[[:digit:].]\+' | head -n1`"
+}
+
+set -e
+version cargo
+version rustc
+echo -n "Checking Rust 2018 support..."
+rustc --help -v | grep -- --edition >/dev/null && echo " present"
+version make
+echo -n "Checking GNU Make language support..."
+make --version | grep GNU >/dev/null && echo " present"
+version cc
+version bindgen
+version rustfmt
+version ld
+version nm
+version objcopy
+version git
+
+echo -n "Checking submodules..."
+if git submodule status | grep '^-' >/dev/null
+then
+	echo " initializing"
+	git submodule update --init --recursive
+elif git submodule status | grep '^+' >/dev/null
+then
+	echo " INCONSISTENT"
+else
+	echo " consistent"
+fi
+
+echo -n "Cleaning libinger build..."
+cargo clean && echo " done"
+echo -n "Cleaning libgotcha build..."
+make -Cexternal/libgotcha clean >/dev/null && echo " done"
+echo -n "Removing lockfile..."
+rm -f Cargo.lock && echo " done"
