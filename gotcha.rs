@@ -5,22 +5,22 @@ use crate::libgotcha_api::LIBGOTCHA_GROUP_SHARED;
 use crate::libgotcha_api::libgotcha_group_t;
 use std::ops::Deref;
 
-const GROUP_SHARED: Group = Group (LIBGOTCHA_GROUP_SHARED as _);
-
-#[doc(hidden)]
-pub const _GROUP_ERROR: Group = Group (LIBGOTCHA_GROUP_ERROR as _);
-
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Group (libgotcha_group_t);
 
 impl Group {
+	pub const SHARED: Self = Group (LIBGOTCHA_GROUP_SHARED as _);
+
+	#[doc(hidden)]
+	pub const _ERROR: Self = Group (LIBGOTCHA_GROUP_ERROR as _);
+
 	pub fn new() -> Option<Self> {
 		use crate::libgotcha_api::libgotcha_group_new;
 		let this = Group (unsafe {
 			libgotcha_group_new()
 		});
-		if this != _GROUP_ERROR {
+		if this != Self::_ERROR {
 			Some(this)
 		} else {
 			None
@@ -28,7 +28,7 @@ impl Group {
 	}
 
 	pub fn is_shared(&self) -> bool {
-		self == &GROUP_SHARED
+		self == &Self::SHARED
 	}
 }
 
@@ -43,7 +43,7 @@ impl Deref for Group {
 
 #[macro_export]
 macro_rules! group_thread_get {
-	() => (crate::gotcha::_group_thread_accessor()(crate::gotcha::_GROUP_ERROR));
+	() => (crate::gotcha::_group_thread_accessor()(crate::gotcha::Group::_ERROR));
 }
 
 #[macro_export]
