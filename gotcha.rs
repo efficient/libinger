@@ -5,7 +5,7 @@ use crate::libgotcha_api::LIBGOTCHA_GROUP_SHARED;
 use crate::libgotcha_api::libgotcha_group_t;
 use std::ops::Deref;
 
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Group (libgotcha_group_t);
 
