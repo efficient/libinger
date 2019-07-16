@@ -1,12 +1,30 @@
-use std::cell::Cell;
+use gotcha::Group;
+use gotcha::group_thread_get;
+use gotcha::group_thread_set;
 use std::cell::RefMut;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::sync::LockResult;
+use std::sync::MutexGuard;
 use std::thread::AccessError;
 use timetravel::Context;
 
-thread_local! {
-	static BLOCK: Cell<bool> = Cell::new(false);
+struct ReusableGroup (Group);
+
+impl Deref for ReusableGroup {
+	type Target = Group;
+
+	fn deref(&self) -> &Self::Target {
+		let ReusableGroup (this) = self;
+		this
+	}
+}
+
+impl Drop for ReusableGroup {
+	fn drop(&mut self) {
+		// Assert because we should never be finalizing a task during teardown.
+		free_groups_handle().unwrap().push(**self);
+	}
 }
 
 pub struct UntypedContinuation {
@@ -15,6 +33,7 @@ pub struct UntypedContinuation {
 	pub time_limit: u64,
 	pub time_out: u64,
 	pub pause_resume: Context<Box<[u8]>>,
+	group: ReusableGroup,
 }
 
 impl UntypedContinuation {
@@ -25,6 +44,10 @@ impl UntypedContinuation {
 			time_limit: timeout,
 			time_out: 0,
 			pause_resume: context,
+
+			// Assert because we should never be launch()'ing a task during teardown.
+			group: ReusableGroup (free_groups_handle().unwrap().pop().or_else(|| Group::new())
+				.expect("Number of libinger tasks exceeds libgotcha groups limit")),
 		}
 	}
 }
@@ -35,7 +58,7 @@ pub struct CallStack<'a> (Option<RefMut<'a, Vec<UntypedContinuation>>>);
 impl CallStack<'static> {
 	/// Returns a guard that holds preemption disabled throughout its lifetime.
 	pub fn lock() -> Self {
-		BLOCK.with(|block| block.set(true));
+		group_thread_set!(Group::SHARED);
 
 		// Assert because we should never find ourselves lock()'ing during teardown.
 		CallStack (Some(call_stack_handle().unwrap()))
@@ -47,7 +70,7 @@ impl CallStack<'static> {
 	/// On failure, returns a `Concurrency` error if the call stack is currently `lock()`'d, or
 	/// a `Teardown` error if invoked during thread teardown.
 	pub unsafe fn preempt() -> Result<RefMut<'static, Vec<UntypedContinuation>>, CallStackError> {
-		if BLOCK.with(|block| block.get()) {
+		if group_thread_get!().is_shared() {
 			Err(CallStackError::Concurrency)?;
 		}
 
@@ -71,8 +94,11 @@ impl<'a> DerefMut for CallStack<'a> {
 
 impl<'a> Drop for CallStack<'a> {
 	fn drop(&mut self) {
+		let group = self.last().map(|frame| *frame.group);
 		self.0.take();
-		BLOCK.with(|block| block.set(false));
+		if let Some(group) = group {
+			group_thread_set!(group);
+		}
 	}
 }
 
@@ -83,7 +109,7 @@ pub enum CallStackError {
 
 pub trait CallStackLock {
 	fn lock(&self) {
-		BLOCK.with(|block| block.set(true));
+		group_thread_set!(Group::SHARED);
 	}
 }
 
@@ -101,4 +127,20 @@ fn call_stack_handle() -> Result<RefMut<'static, Vec<UntypedContinuation>>, Acce
 		transmute(call_stack)
 	})?;
 	Ok(call_stack.borrow_mut())
+}
+
+fn free_groups_handle() -> LockResult<MutexGuard<'static, Vec<Group>>> {
+	use std::sync::ONCE_INIT;
+	use std::sync::Mutex;
+	use std::sync::Once;
+
+	static mut FREE_GROUPS: Option<Mutex<Vec<Group>>> = None;
+	static INIT: Once = ONCE_INIT;
+
+	INIT.call_once(|| unsafe {
+		FREE_GROUPS = Some(Mutex::new(vec![]))
+	});
+	unsafe {
+		FREE_GROUPS.as_ref().unwrap().lock()
+	}
 }
