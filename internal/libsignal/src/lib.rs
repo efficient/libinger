@@ -5,15 +5,36 @@ pub mod pthread;
 use libc::SIG_BLOCK;
 use libc::SIG_SETMASK;
 use libc::SIG_UNBLOCK;
+use libc::SIGABRT;
 use libc::SIGALRM;
+use libc::SIGBUS;
+use libc::SIGCHLD;
+use libc::SIGCONT;
+use libc::SIGFPE;
 use libc::SIGHUP;
+use libc::SIGILL;
 use libc::SIGINT;
+use libc::SIGKILL;
 use libc::SIGPIPE;
+use libc::SIGPROF;
+use libc::SIGPOLL;
+use libc::SIGPWR;
+use libc::SIGQUIT;
+use libc::SIGSEGV;
+use libc::SIGSTKFLT;
 use libc::SIGSYS;
 use libc::SIGTERM;
+use libc::SIGTRAP;
+use libc::SIGTSTP;
+use libc::SIGTTIN;
+use libc::SIGTTOU;
+use libc::SIGURG;
 use libc::SIGUSR1;
 use libc::SIGUSR2;
 use libc::SIGVTALRM;
+use libc::SIGWINCH;
+use libc::SIGXCPU;
+use libc::SIGXFSZ;
 use libc::c_int;
 use libc::ucontext_t;
 use std::io::Error;
@@ -36,15 +57,36 @@ pub enum Operation {
 #[derive(Clone)]
 #[derive(Copy)]
 pub enum Signal {
+	Abort = SIGABRT as _,
 	Alarm = SIGALRM as _,
+	Bus = SIGBUS as _,
+	Breakpoint = SIGTRAP as _,
+	Child = SIGCHLD as _,
+	Continue = SIGCONT as _,
+	Coprocessor = SIGSTKFLT as _,
+	FilesystemLimit = SIGXFSZ as _,
+	FloatingPoint = SIGFPE as _,
 	Hangup = SIGHUP as _,
+	Illegal = SIGILL as _,
 	Interrupt = SIGINT as _,
+	Kill = SIGKILL as _,
 	Pipe = SIGPIPE as _,
+	Pollable = SIGPOLL as _,
+	ProfilingTimer = SIGPROF as _,
+	Quit = SIGQUIT as _,
+	Segfault = SIGSEGV as _,
 	Syscall = SIGSYS as _,
-	Term = SIGTERM as _,
+	TerminalInput = SIGTTIN as _,
+	TerminalOutput = SIGTTOU as _,
+	TerminalStop = SIGTSTP as _,
+	Terminate = SIGTERM as _,
+	PowerFailure = SIGPWR as _,
+	ProcessorLimit = SIGXCPU as _,
+	UrgentSocket = SIGURG as _,
 	User1 = SIGUSR1 as _,
 	User2 = SIGUSR2 as _,
 	VirtualAlarm = SIGVTALRM as _,
+	WindowResize = SIGWINCH as _,
 }
 
 impl PartialEq for Signal {
