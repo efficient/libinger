@@ -8,7 +8,7 @@ pub fn assign_group() -> SyncResult<'static, GotchaGroup> {
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
-	static mut GROUPS: Option<SyncPool<GotchaGroup, fn() -> Option<GotchaGroup>>> = None;
+	static mut GROUPS: Option<SyncPool<GotchaGroup>> = None;
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| unsafe {
 		GROUPS.replace(SyncPool::new(GotchaGroup::new));

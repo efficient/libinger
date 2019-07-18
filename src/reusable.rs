@@ -70,13 +70,13 @@ where &'a A: SharedMut<Vec<T>> {
 	}
 }
 
-pub struct Pool<T, B, A = Unsync<T>> {
+pub struct Pool<T, B = fn() -> Option<T>, A = Unsync<T>> {
 	allocated: A,
 	builder: Box<B>,
 	_type: PhantomData<T>,
 }
 
-pub type SyncPool<T, B> = Pool<T, B, Sync<T>>;
+pub type SyncPool<T, B = fn() -> Option<T>> = Pool<T, B, Sync<T>>;
 
 impl<'a, T, F: Fn() -> Option<T>, C: Default + 'a> Pool<T, F, C>
 where &'a C: SharedMut<Vec<T>> {
