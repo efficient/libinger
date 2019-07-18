@@ -27,23 +27,23 @@ pub type Handler = extern "C" fn(Signal, Option<&siginfo_t>, Option<&mut ucontex
 
 #[allow(dead_code)]
 pub enum Operation {
-	Block = SIG_BLOCK as isize,
-	Unblock = SIG_UNBLOCK as isize,
-	SetMask = SIG_SETMASK as isize,
+	Block = SIG_BLOCK as _,
+	Unblock = SIG_UNBLOCK as _,
+	SetMask = SIG_SETMASK as _,
 }
 
 #[allow(dead_code)]
 #[derive(Clone)]
 pub enum Signal {
-	Alarm = SIGALRM as isize,
-	Hangup = SIGHUP as isize,
-	Interrupt = SIGINT as isize,
-	Pipe = SIGPIPE as isize,
-	Syscall = SIGSYS as isize,
-	Term = SIGTERM as isize,
-	User1 = SIGUSR1 as isize,
-	User2 = SIGUSR2 as isize,
-	VirtualAlarm = SIGVTALRM as isize,
+	Alarm = SIGALRM as _,
+	Hangup = SIGHUP as _,
+	Interrupt = SIGINT as _,
+	Pipe = SIGPIPE as _,
+	Syscall = SIGSYS as _,
+	Term = SIGTERM as _,
+	User1 = SIGUSR1 as _,
+	User2 = SIGUSR2 as _,
+	VirtualAlarm = SIGVTALRM as _,
 }
 
 impl PartialEq for Signal {
