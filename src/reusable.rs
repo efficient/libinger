@@ -70,10 +70,10 @@ where &'a A: SharedMut<Vec<T>> {
 	}
 }
 
-pub struct Pool<T, B = fn() -> Option<T>, A = Unsync<T>> {
-	allocated: A,
-	builder: Box<B>,
+pub struct Pool<T, B: ?Sized = fn() -> Option<T>, A = Unsync<T>> {
 	_type: PhantomData<T>,
+	allocated: A,
+	builder: B,
 }
 
 pub type SyncPool<T, B = fn() -> Option<T>> = Pool<T, B, Sync<T>>;
@@ -82,9 +82,9 @@ impl<'a, T, F: Fn() -> Option<T>, C: Default + 'a> Pool<T, F, C>
 where &'a C: SharedMut<Vec<T>> {
 	pub fn new(builder: F) -> Self {
 		Self {
-			allocated: C::default(),
-			builder: Box::new(builder),
 			_type: PhantomData::default(),
+			allocated: C::default(),
+			builder: builder,
 		}
 	}
 }
