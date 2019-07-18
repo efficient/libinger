@@ -34,6 +34,7 @@ pub enum Operation {
 
 #[allow(dead_code)]
 #[derive(Clone)]
+#[derive(Copy)]
 pub enum Signal {
 	Alarm = SIGALRM as _,
 	Hangup = SIGHUP as _,
@@ -48,7 +49,7 @@ pub enum Signal {
 
 impl PartialEq for Signal {
 	fn eq(&self, other: &Self) -> bool {
-		self.clone() as isize == other.clone() as isize
+		*self as isize == *other as isize
 	}
 }
 impl Eq for Signal {}
