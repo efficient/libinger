@@ -1,4 +1,4 @@
-use libsignal::Signal;
+use signal::Signal;
 use reusable::SyncResult;
 
 static NOTIFICATION_SIGNALS: [Signal; 4] = [
