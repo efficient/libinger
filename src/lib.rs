@@ -10,6 +10,7 @@ mod linger;
 mod reusable;
 mod signals;
 mod time;
+mod timer;
 mod zeroable;
 
 pub use linger::*;
