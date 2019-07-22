@@ -1,4 +1,2 @@
-#![allow(dead_code)]
-
-#[inline(always)]
+#[inline]
 pub fn assert_sync<T: Sync>(_: &T) {}
