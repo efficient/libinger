@@ -16,6 +16,7 @@ pub enum Linger<T, F: FnMut() -> Option<T>> {
 	Continuation(Continuation<T, F>),
 }
 
+// TODO: Store the current group, either here or in a separate variable.
 #[derive(Default)]
 struct Executing {
 	checkpoint: Option<Context<Box<[u8]>>>,
@@ -23,6 +24,8 @@ struct Executing {
 }
 
 thread_local! {
+	// TODO: Support nested timed functions by replacing with a stack.
+	// TODO: Optimize by using an UnsafeCell.
 	static EXECUTING: RefCell<Executing> = RefCell::default();
 	static LAUNCHING: Cell<*mut (dyn FnMut() + Send)> = Cell::new(null_fn_mut());
 }
@@ -37,6 +40,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 
 	let mut task = None;
 	makecontext(
+		// TODO: Optimize by allocating the execution stacks from a pool.
 		vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
 		|context| drop(task.replace(context)),
 		schedule,
@@ -46,6 +50,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	let mut fun = Some(fun);
 	let result = Cell::new(move || {
 		if let Some(fun) = fun.take() {
+			// TODO: Catch panics in the user-supplied closure?
 			result.replace(fun())
 		} else {
 			debug_assert!(
@@ -82,6 +87,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 ///
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
+// TODO: Return the total time spent running?
 pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64) -> Result<()> {
 	use lifetime::unbound_mut;
 	use timetravel::restorecontext;
@@ -98,6 +104,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64) -> Res
 						executing.checkpoint.is_none(),
 						"libinger: timed function tried to call launch()!",
 					);
+					// TODO: Add in current wall-clock time (unless unlimited!).
 					executing.deadline = us;
 
 					let resume = executing.checkpoint.get_or_insert(pause);
@@ -137,9 +144,12 @@ fn schedule() {
 	let fun = unsafe {
 		&mut *fun
 	};
+	// TODO: Enable preemption here.
 	fun();
+	// TODO: Disable preemption here.
 
 	// The closure completed!  Drop the preemption checkpoint to inform resume().
+	// TODO: This is safe, right (considering we still need the successor to return from here)?
 	EXECUTING.with(|executing| {
 		let mut executing = executing.borrow_mut();
 		debug_assert!(
@@ -151,6 +161,8 @@ fn schedule() {
 }
 
 /// Opaque representation of a timed function that has not yet returned.
+// TODO: Make this non-Send!
+// TODO: Add a field associating it with a group.
 pub struct Continuation<T, F: FnMut() -> Option<T>> {
 	task: Option<Context<Box<[u8]>>>,
 
@@ -162,6 +174,7 @@ pub struct Continuation<T, F: FnMut() -> Option<T>> {
 }
 
 impl<T, F: FnMut() -> Option<T>> Drop for Continuation<T, F> {
+	// TODO: Support aborting by reinitializing the namespace instead of resuming.
 	fn drop(&mut self) {
 		let mut fun = Linger::Continuation(Continuation {
 			task: self.task.take(),
