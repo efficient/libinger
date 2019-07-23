@@ -5,7 +5,9 @@ extern crate timetravel;
 
 mod compile_assert;
 mod groups;
+mod lifetime;
 mod linger;
+mod null;
 mod reusable;
 mod signals;
 mod timer;
