@@ -28,7 +28,7 @@ const SIGSETCONTEXT: c_int = SIGVTALRM;
 ///! Even though they have their own execution stacks, call gate continuations have a finite lifetime because they return to the original stack upon completion.
 ///! Some call gates have a `StableMutAddr` type parameter rather than a mere `DerefMut`;
 ///! since their stacks outlive the creation stack frame such continuations may be transplanted onto a new successor stack frame to extend their lifetime.
-pub struct Context<S: DerefMut<Target = [u8]>> {
+pub struct Context<S: DerefMut<Target = [u8]> = Void> {
 	id: Id,
 	context: RefCell<ucontext_t>,
 	persistent: Option<Persistent<S>>,
