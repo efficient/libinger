@@ -56,7 +56,7 @@ pub struct SignalMask<'a> (RefMut<'a, ucontext_t>);
 ///!
 ///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `checkpoint`, which is then restarted from the beginning.
 ///! However, the continuation is automatically invalidated once `getcontext()` returns, since its checkpointed stack frame no longer exists.
-pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, mut checkpoint: B) -> Result<T> {
+pub fn getcontext<T>(scope: impl FnOnce(Context<Void>) -> T, mut checkpoint: impl FnMut() -> T) -> Result<T> {
 	use libc::getcontext;
 	use std::mem::forget;
 	use volatile::VolBool;
@@ -94,7 +94,7 @@ pub fn getcontext<T, A: FnOnce(Context<Void>) -> T, B: FnMut() -> T>(scope: A, m
 ///!
 ///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `call`, which is then restarted from the beginning.
 ///! However, once `call` returns, control returns to the `makecontext()` call site and the continuation is automatically invalidated.
-pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, gate: F, call: fn()) -> Result<()> {
+pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Context<S>), call: fn()) -> Result<()> {
 	use std::mem::transmute;
 	use std::os::raw::c_uint;
 
@@ -163,7 +163,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>, F: FnOnce(Context<S>)>(stack: S, 
 ///! Upon calling this function, the `scope` closure is invoked, which may then choose to invoke `setcontext()` or `sigsetcontext()` on the updated continuation, as appropriate.
 ///! Even if the continuation had previously been invalidated, a valid such call will now succeed, and control will return to the call site of `restorecontext()` upon completion.
 ///! However, once `restorecontext()` returns, the continuation is automatically invalidated once again.
-pub fn restorecontext<S: StableMutAddr<Target = [u8]>, F: FnOnce(Context<S>)>(mut persistent: Context<S>, scope: F) -> StdResult<(), Option<Error>> {
+pub fn restorecontext<S: StableMutAddr<Target = [u8]>>(mut persistent: Context<S>, scope: impl FnOnce(Context<S>)) -> StdResult<(), Option<Error>> {
 	use platform::Stack;
 
 	// Allow use on contexts from swap(), but not those from sigsetcontext(); the latter never
