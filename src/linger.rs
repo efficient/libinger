@@ -16,6 +16,16 @@ pub enum Linger<T, F: FnMut() -> Option<T>> {
 	Continuation(Continuation<T, F>),
 }
 
+impl<T, F: FnMut() -> Option<T>> Linger<T, F> {
+	pub fn is_completion(&self) -> bool {
+		if let Linger::Completion(_) = self { true } else { false }
+	}
+
+	pub fn is_continuation(&self) -> bool {
+		if let Linger::Continuation(_) = self { true } else { false }
+	}
+}
+
 // TODO: Store the current group, either here or in a separate variable.
 #[derive(Default)]
 struct Executing {
