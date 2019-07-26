@@ -15,6 +15,9 @@ const char *error_message(enum error error) {
 	case ERROR_RUNTIME_LOADED:
 		res = "Loading me at runtime via dlopen() is unsupported";
 		break;
+	case ERROR_DLMOPEN:
+		res = "Unable to load ancillary copies of library";
+		break;
 	case ERROR_FNAME_PATH:
 		res = "Determining path to program executable (check PATH environment variable)";
 		break;
@@ -40,15 +43,16 @@ const char *error_message(enum error error) {
 const char *error_explanation(enum error error) {
 	const char *res = NULL;
 	switch(error) {
+	case ERROR_DLMOPEN:
+	case ERROR_DLADDR:
+		res = dlerror();
+		break;
 	case ERROR_MALLOC:
 	case ERROR_SIGACTION:
 		res = strerror(errno);
 		break;
 	case ERROR_LIBASM:
 		res = asm_errmsg(asm_errno());
-		break;
-	case ERROR_DLADDR:
-		res = dlerror();
 		break;
 	default:
 		break;

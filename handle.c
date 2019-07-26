@@ -643,7 +643,9 @@ enum error handle_got_shadow(struct handle *h) {
 			// without doing this, calls would result in undefined behavior, but after
 			// this step, they instead result in a normal namespace switch.
 			free(globdats);
-			if(!getenv("LD_PRELOAD"))
+			if(open == namespace_load)
+				return ERROR_DLMOPEN;
+			else if(!getenv("LD_PRELOAD"))
 				return ERROR_RUNTIME_LOADED;
 
 			handle_got_whitelist_all(h);
