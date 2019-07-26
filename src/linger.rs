@@ -11,18 +11,22 @@ const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 /// The closure might have:
 ///  * completed and returned a value, *or*
 ///  * been preempted and now need to be explicitly `resume()`'d
-pub enum Linger<T, F: FnMut() -> Option<T>> {
-	Completion(T),
-	Continuation(Continuation<T, F>),
-}
+pub struct Linger<T, F: FnMut() -> Option<T>> (TaggedLinger<T, F>);
 
 impl<T, F: FnMut() -> Option<T>> Linger<T, F> {
 	pub fn is_completion(&self) -> bool {
-		if let Linger::Completion(_) = self { true } else { false }
+		if let Self (TaggedLinger::Completion(_)) = self { true } else { false }
 	}
 
 	pub fn is_continuation(&self) -> bool {
-		if let Linger::Continuation(_) = self { true } else { false }
+		if let Self (TaggedLinger::Continuation(_)) = self { true } else { false }
+	}
+}
+
+impl<T, F: FnMut() -> Option<T>> Drop for Linger<T, F> {
+	// TODO: Support aborting by reinitializing the namespace instead of resuming.
+	fn drop(&mut self) {
+		resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
 	}
 }
 
@@ -82,10 +86,10 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		launching.replace(result);
 	});
 
-	let mut state = Linger::Continuation(Continuation {
+	let mut state = Linger (TaggedLinger::Continuation(Continuation {
 		task,
 		result,
-	});
+	}));
 	if us != 0 {
 		resume(&mut state, us)?;
 	}
@@ -104,7 +108,8 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
 
-	if let Linger::Continuation(continuation) = fun {
+	let Linger (tfun) = fun;
+	if let TaggedLinger::Continuation(continuation) = tfun {
 		let mut error = None;
 		restorecontext(
 			continuation.task.take().expect("resume(): continuation missing!"),
@@ -141,7 +146,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 			let completion = completion().expect(
 				"resume(): return value missing despite apparent completion!"
 			);
-			*fun = Linger::Completion(completion);
+			*tfun = TaggedLinger::Completion(completion);
 		}
 	}
 
@@ -171,29 +176,22 @@ fn schedule() {
 	});
 }
 
+enum TaggedLinger<T, F> {
+	Completion(T),
+	Continuation(Continuation<F>),
+}
+
 /// Opaque representation of a timed function that has not yet returned.
 // TODO: Make this non-Send!
 // TODO: Add a field associating it with a group.
-pub struct Continuation<T, F: FnMut() -> Option<T>> {
+struct Continuation<T> {
 	task: Option<Context<Box<[u8]>>>,
 
 	// When called, this function invokes the user-supplied closure and saves the result instead
 	// of returning it.  On the immediately *following* invocation, it returns this value.  Note
 	// that it is neither reentrant nor, consequently, AS-safe.  For this reason, care must be
 	// taken not to attempt the second call until it is already known that the first completed.
-	result: Cell<F>,
-}
-
-impl<T, F: FnMut() -> Option<T>> Drop for Continuation<T, F> {
-	// TODO: Support aborting by reinitializing the namespace instead of resuming.
-	fn drop(&mut self) {
-		let mut fun = Linger::Continuation(Continuation {
-			task: self.task.take(),
-			result: Cell::new(self.result.get_mut()),
-		});
-
-		resume(&mut fun, u64::max_value()).expect("libinger: did not run to completion!");
-	}
+	result: Cell<T>,
 }
 
 #[doc(hidden)]
