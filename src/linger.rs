@@ -11,15 +11,60 @@ const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 /// The closure might have:
 ///  * completed and returned a value, *or*
 ///  * been preempted and now need to be explicitly `resume()`'d
-pub struct Linger<T, F: FnMut() -> Option<T>> (TaggedLinger<T, F>);
+// The only time this can contain a None is during a call to Linger::into() -> Option<T>.
+pub struct Linger<T, F: FnMut() -> Option<T>> (Option<TaggedLinger<T, F>>);
 
 impl<T, F: FnMut() -> Option<T>> Linger<T, F> {
+	/// Indicates whether this closure has completed and returned a value.
+	///
+	/// This check is `true` if and only if conversion `into()` an `Option` will yield a `Some`;
+	/// if you need to use the function's return value, perform the conversion instead.
 	pub fn is_completion(&self) -> bool {
-		if let Self (TaggedLinger::Completion(_)) = self { true } else { false }
+		let this: Option<&T> = self.into();
+		this.is_some()
 	}
 
+	/// Indicates whether this closure has been preempted before it could complete.
 	pub fn is_continuation(&self) -> bool {
-		if let Self (TaggedLinger::Continuation(_)) = self { true } else { false }
+		let this: Option<&T> = self.into();
+		this.is_none()
+	}
+}
+
+impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a T>> for &'a Linger<T, F> {
+	fn into(self) -> Option<&'a T> {
+		let Linger (this) = self;
+		if let TaggedLinger::Completion(this) = this.as_ref().unwrap() {
+			Some(this)
+		} else {
+			None
+		}
+	}
+}
+
+impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
+	fn into(self) -> Option<&'a mut T> {
+		let Linger (this) = self;
+		if let TaggedLinger::Completion(this) = this.as_mut().unwrap() {
+			Some(this)
+		} else {
+			None
+		}
+	}
+}
+
+impl<T, F: FnMut() -> Option<T>> Into<Option<T>> for Linger<T, F> {
+	fn into(mut self) -> Option<T> {
+		let Self (this) = &mut self;
+		let that = this.take().unwrap();
+		if let TaggedLinger::Completion(that) = that {
+			Some(that)
+		} else {
+			// Put Humpty Dumpty back together again so it can be drop()'d!
+			this.replace(that);
+
+			None
+		}
 	}
 }
 
@@ -86,10 +131,10 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		launching.replace(result);
 	});
 
-	let mut state = Linger (TaggedLinger::Continuation(Continuation {
+	let mut state = Linger (Some (TaggedLinger::Continuation(Continuation {
 		task,
 		result,
-	}));
+	})));
 	if us != 0 {
 		resume(&mut state, us)?;
 	}
@@ -109,7 +154,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 	use timetravel::sigsetcontext;
 
 	let Linger (tfun) = fun;
-	if let TaggedLinger::Continuation(continuation) = tfun {
+	if let TaggedLinger::Continuation(continuation) = tfun.as_mut().unwrap() {
 		let mut error = None;
 		restorecontext(
 			continuation.task.take().expect("resume(): continuation missing!"),
@@ -146,7 +191,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 			let completion = completion().expect(
 				"resume(): return value missing despite apparent completion!"
 			);
-			*tfun = TaggedLinger::Completion(completion);
+			tfun.replace(TaggedLinger::Completion(completion));
 		}
 	}
 
