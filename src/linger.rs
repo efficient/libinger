@@ -195,3 +195,14 @@ impl<T, F: FnMut() -> Option<T>> Drop for Continuation<T, F> {
 		resume(&mut fun, u64::max_value()).expect("libinger: did not run to completion!");
 	}
 }
+
+#[doc(hidden)]
+pub fn nsnow() -> u64 {
+	use std::time::UNIX_EPOCH;
+	use std::time::SystemTime;
+
+	let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("libinger: wall clock error");
+	let mut sum = now.subsec_nanos().into();
+	sum += now.as_secs() * 1_000_000_000;
+	sum
+}

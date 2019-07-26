@@ -58,7 +58,7 @@ fn launch_panic_outer() {
 fn launch_panic_inner() {
 	let mut lock = sigalrm_lock();
 	lock.preserve();
-	drop(launch(|| launch(|| panic!("PASS"), 1_000), 1_000));
+	drop(launch(|| drop(launch(|| panic!("PASS"), 1_000)), 1_000));
 	// Lock becomes poisoned.
 }
 
@@ -85,11 +85,10 @@ fn launch_continuations() {
 fn resume_completion() {
 	let mut lock = sigalrm_lock();
 	lock.preserve();
-	if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10).unwrap() {
-		assert!(resume(cont, 10_000_000).unwrap().is_completion());
-	} else {
-		unreachable!("completion instead of continuation!");
-	}
+
+	let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
+	assert!(cont.is_continuation(), "completion instead of continuation");
+	assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
 	drop(lock);
 }
 
@@ -97,11 +96,10 @@ fn resume_completion() {
 fn resume_completion_drop() {
 	let mut lock = sigalrm_lock();
 	lock.preserve();
-	if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 100).unwrap() {
-		assert!(resume(cont, 10_000).unwrap().is_continuation());
-	} else {
-		unreachable!("completion instead of continuation!");
-	}
+
+	let mut cont = launch(|| timeout(1_000_000), 100).unwrap();
+	assert!(cont.is_continuation(), "completion instead of continuation");
+	assert!(resume(&mut cont, 10_000).unwrap().is_continuation());
 	drop(lock);
 }
 
@@ -109,15 +107,12 @@ fn resume_completion_drop() {
 fn resume_completion_repeat() {
 	let mut lock = sigalrm_lock();
 	lock.preserve();
-	if let Linger::Continuation(cont) = launch(|| timeout(1_000_000), 10).unwrap() {
-		if let Linger::Continuation(cont) = resume(cont, 10).unwrap() {
-			assert!(resume(cont, 10_000_000).unwrap().is_completion());
-		} else {
-			unreachable!("inner: completion instead of continuation!");
-		}
-	} else {
-		unreachable!("outer: completion instead of continuation!");
-	}
+
+	let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
+	assert!(cont.is_continuation(), "launch(): returned completion instead of continuation");
+	resume(&mut cont, 10).unwrap();
+	assert!(cont.is_continuation(), "resume(): returned completion instead of continuation");
+	assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
 	drop(lock);
 }
 
