@@ -88,7 +88,8 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
 // TODO: Return the total time spent running?
-pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64) -> Result<()> {
+pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
+-> Result<&mut Linger<T, impl FnMut() -> Option<T>>> {
 	use lifetime::unbound_mut;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
@@ -134,7 +135,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64) -> Res
 		}
 	}
 
-	Ok(())
+	Ok(fun)
 }
 
 fn schedule() {
