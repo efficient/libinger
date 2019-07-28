@@ -80,6 +80,7 @@ impl<T, F: FnMut() -> Option<T>> Drop for Linger<T, F> {
 struct Executing {
 	checkpoint: Option<Context<Box<[u8]>>>,
 	deadline: u64,
+	returned: bool,
 }
 
 thread_local! {
@@ -165,6 +166,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 						executing.checkpoint.is_none(),
 						"libinger: timed function tried to call launch()!",
 					);
+					executing.returned = false;
 					// TODO: Add in current wall-clock time (unless unlimited!).
 					executing.deadline = us;
 
@@ -182,16 +184,26 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 			Err(error)?;
 		}
 
-		if let Some(resume) = EXECUTING.with(|executing|
-			executing.borrow_mut().checkpoint.take()
-		) {
-			continuation.task.replace(resume);
-		} else {
+		let mut returned = false;
+		let mut checkpoint = None;
+		EXECUTING.with(|executing| {
+			let mut executing = executing.borrow_mut();
+			checkpoint = executing.checkpoint.take();
+			executing.deadline = 0;
+			returned = executing.returned;
+			executing.returned = false;
+		});
+
+		if returned {
 			let completion = continuation.result.get_mut();
 			let completion = completion().expect(
-				"resume(): return value missing despite apparent completion!"
+				"resume(): return value missing following closure return!"
 			);
 			tfun.replace(TaggedLinger::Completion(completion));
+		} else {
+			let checkpoint = checkpoint
+				.expect("resume(): checkpoint missing following preemption!");
+			continuation.task.replace(checkpoint);
 		}
 	}
 
@@ -209,15 +221,10 @@ fn schedule() {
 	fun();
 	// TODO: Disable preemption here.
 
-	// The closure completed!  Drop the preemption checkpoint to inform resume().
-	// TODO: This is safe, right (considering we still need the successor to return from here)?
+	// The closure completed!  Set the flag to inform resume().
 	EXECUTING.with(|executing| {
 		let mut executing = executing.borrow_mut();
-		debug_assert!(
-			executing.checkpoint.is_some(),
-			"libinger: checkpoint disappeared before timed function completed!",
-		);
-		executing.checkpoint.take();
+		executing.returned = true;
 	});
 }
 
