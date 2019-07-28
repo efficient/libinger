@@ -96,6 +96,7 @@ thread_local! {
 /// it is run to completion.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut() -> Option<T> + Send>> {
+	use std::hint::unreachable_unchecked;
 	use timetravel::makecontext;
 
 	let mut task = None;
@@ -120,22 +121,31 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			result.take()
 		}
 	});
+
+	let mut state = Linger (None);
+	let Linger (continuation) = &mut state;
+	let continuation = continuation.get_or_insert(TaggedLinger::Continuation(Continuation {
+		task,
+		result,
+	}));
+	let continuation = if let TaggedLinger::Continuation(continuation) = continuation {
+		continuation
+	} else {
+		unsafe {
+			unreachable_unchecked()
+		}
+	};
 	LAUNCHING.with(|launching| {
 		debug_assert!(
 			launching.get().is_null(),
 			"launch(): called twice concurrently from the same thread!",
 		);
 
-		let result = result.as_ptr();
+		let result = continuation.result.as_ptr();
 		let result: *mut (dyn FnMut() -> Option<T> + Send) = result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
 		launching.replace(result);
 	});
-
-	let mut state = Linger (Some (TaggedLinger::Continuation(Continuation {
-		task,
-		result,
-	})));
 	if us != 0 {
 		resume(&mut state, us)?;
 	}
