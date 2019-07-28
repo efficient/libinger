@@ -267,7 +267,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	if ! validatecontext(unsafe {
 		continuation.as_ref()
 	}?, true) {
-		None?;
+		return setcontext(continuation);
 	}
 
 	let mut err = None;
