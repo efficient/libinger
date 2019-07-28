@@ -32,6 +32,7 @@ fn launch_continuation() {
 	drop(lock);
 }
 
+#[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic() {
@@ -41,6 +42,7 @@ fn launch_panic() {
 	// Lock becomes poisoned.
 }
 
+#[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic_outer() {
@@ -53,6 +55,7 @@ fn launch_panic_outer() {
 	// Lock becomes poisoned.
 }
 
+#[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic_inner() {
@@ -62,6 +65,7 @@ fn launch_panic_inner() {
 	// Lock becomes poisoned.
 }
 
+#[ignore]
 #[test]
 fn launch_completions() {
 	let mut lock = sigalrm_lock();
@@ -70,6 +74,7 @@ fn launch_completions() {
 	drop(lock);
 }
 
+#[ignore]
 #[test]
 fn launch_continuations() {
 	let mut lock = sigalrm_lock();
