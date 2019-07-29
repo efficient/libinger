@@ -1,14 +1,28 @@
 #!/bin/sh
 
+readonly PIPE="/tmp/configure"
+
 version() {
 	echo -n "Looking for $1..."
 
 	local version
-	version="`"$1" --version | grep -o '[[:digit:].]\+'`"
+	version="`"$1" --version 2>"$PIPE" | grep -o '[[:digit:].]\+'`"
 	echo " found `echo "$version" | head -n1`"
 }
 
+handler() {
+	if [ -e "$PIPE" ]
+	then
+		printf %s '[31m' >&2
+		sed 's/.*://' "$PIPE" >&2
+		printf %s '[0m' >&2
+		rm "$PIPE"
+	fi
+}
+
 set -e
+trap handler EXIT
+
 version cargo
 version rustc
 
@@ -55,3 +69,5 @@ echo " done"
 echo -n "Removing lockfile..."
 rm -f Cargo.lock
 echo " done"
+
+rm -f "$PIPE"
