@@ -6,7 +6,8 @@ version() {
 	echo -n "Looking for $1..."
 
 	local version
-	version="`"$1" --version 2>"$PIPE" | grep -o '[[:digit:].]\+'`"
+	echo -n " broken installation" >"$PIPE"
+	version="`"$1" --version 2>>"$PIPE" | grep -o '[[:digit:].]\+[[:digit:]]'`"
 	echo " found `echo "$version" | head -n1`"
 }
 
@@ -14,7 +15,7 @@ handler() {
 	if [ -e "$PIPE" ]
 	then
 		printf %s '[31m' >&2
-		sed 's/.*://' "$PIPE" >&2
+		tr -d '\n' <"$PIPE" | sed 's/.*://;a\' >&2
 		printf %s '[0m' >&2
 		rm "$PIPE"
 	fi
