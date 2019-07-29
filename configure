@@ -59,6 +59,20 @@ else
 	echo " consistent"
 fi
 
+echo -n "Configuring toolchain..."
+if [ -e ".cargo/config" ]
+then
+	echo " skipping"
+else
+	cat >.cargo/config <<-tac
+		`cat .cargo/config.toml`
+
+		[target.x86_64-unknown-linux-gnu]
+		linker = "./cc"
+	tac
+	echo " generated"
+fi
+
 echo -n "Cleaning libinger build..."
 cargo clean
 echo " done"
@@ -70,5 +84,18 @@ echo " done"
 echo -n "Removing lockfile..."
 rm -f Cargo.lock
 echo " done"
+
+echo -n "Detecting interpreter..."
+if [ -n "$LIBINGER_LINKER" ]
+then
+	file -L "$LIBINGER_LINKER" 2>&1 | tee "$PIPE" | grep '\<ELF\>' >/dev/null
+	echo " using $LIBINGER_LINKER"
+elif [ -e ld.so ]
+then
+	echo " using `readlink ld.so`"
+else
+	echo " define LIBINGER_LINKER to a dynamic linker or place one at ./ld.so" >"$PIPE"
+	false
+fi
 
 rm -f "$PIPE"
