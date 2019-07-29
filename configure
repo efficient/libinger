@@ -2,7 +2,10 @@
 
 version() {
 	echo -n "Looking for $1..."
-	echo " found `"$1" --version | grep -o '[[:digit:].]\+' | head -n1`"
+
+	local version
+	version="`"$1" --version | grep -o '[[:digit:].]\+'`"
+	echo " found `echo "$version" | head -n1`"
 }
 
 set -e
