@@ -1,7 +1,7 @@
-use null::null_fn_mut;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
+use std::ptr::NonNull;
 use timetravel::Context;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
@@ -87,7 +87,7 @@ thread_local! {
 	// TODO: Support nested timed functions by replacing with a stack.
 	// TODO: Optimize by using an UnsafeCell.
 	static EXECUTING: RefCell<Executing> = RefCell::default();
-	static LAUNCHING: Cell<*mut (dyn FnMut() + Send)> = Cell::new(null_fn_mut());
+	static LAUNCHING: Cell<Option<NonNull<dyn FnMut() + Send>>> = Cell::default();
 }
 
 /// Run `fun` with the specified time budget, in `us`econds.
@@ -141,13 +141,13 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	};
 	LAUNCHING.with(|launching| {
 		debug_assert!(
-			launching.get().is_null(),
+			launching.get().is_none(),
 			"launch(): called twice concurrently from the same thread!",
 		);
 
 		let result: *mut (dyn FnMut(*mut Option<T>) + Send) = &mut continuation.result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
-		launching.replace(result);
+		launching.replace(NonNull::new(result));
 	});
 	if us != 0 {
 		resume(&mut state, us)?;
@@ -224,11 +224,12 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<T>)>, us: u64)
 }
 
 fn schedule() {
-	let fun = LAUNCHING.with(|launching| launching.replace(null_fn_mut()));
-	debug_assert!(! fun.is_null(), "schedule() called from outside launch()!");
+	let fun = LAUNCHING.with(|launching| launching.take());
+	debug_assert!(! fun.is_none(), "schedule() called from outside launch()!");
 
+	let mut fun = fun.expect("libinger: schedule() called from outside launch()!");
 	let fun = unsafe {
-		&mut *fun
+		fun.as_mut()
 	};
 	// TODO: Enable preemption here.
 	fun();
