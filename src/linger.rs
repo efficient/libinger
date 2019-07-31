@@ -12,9 +12,9 @@ const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 ///  * completed and returned a value, *or*
 ///  * been preempted and now need to be explicitly `resume()`'d
 // The only time this can contain a None is during a call to Linger::into() -> Option<T>.
-pub struct Linger<T, F: FnMut() -> Option<T>> (Option<TaggedLinger<T, F>>);
+pub struct Linger<T, F: FnMut(*mut Option<T>)> (Option<TaggedLinger<T, F>>);
 
-impl<T, F: FnMut() -> Option<T>> Linger<T, F> {
+impl<T, F: FnMut(*mut Option<T>)> Linger<T, F> {
 	/// Indicates whether this closure has completed and returned a value.
 	///
 	/// This check is `true` if and only if conversion `into()` an `Option` will yield a `Some`;
@@ -31,7 +31,7 @@ impl<T, F: FnMut() -> Option<T>> Linger<T, F> {
 	}
 }
 
-impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a T>> for &'a Linger<T, F> {
+impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a T>> for &'a Linger<T, F> {
 	fn into(self) -> Option<&'a T> {
 		let Linger (this) = self;
 		if let TaggedLinger::Completion(this) = this.as_ref().unwrap() {
@@ -42,7 +42,7 @@ impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a T>> for &'a Linger<T, F> {
 	}
 }
 
-impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
+impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
 	fn into(self) -> Option<&'a mut T> {
 		let Linger (this) = self;
 		if let TaggedLinger::Completion(this) = this.as_mut().unwrap() {
@@ -53,7 +53,7 @@ impl<'a, T, F: FnMut() -> Option<T>> Into<Option<&'a mut T>> for &'a mut Linger<
 	}
 }
 
-impl<T, F: FnMut() -> Option<T>> Into<Option<T>> for Linger<T, F> {
+impl<T, F: FnMut(*mut Option<T>)> Into<Option<T>> for Linger<T, F> {
 	fn into(mut self) -> Option<T> {
 		let Self (this) = &mut self;
 		let that = this.take().unwrap();
@@ -68,7 +68,7 @@ impl<T, F: FnMut() -> Option<T>> Into<Option<T>> for Linger<T, F> {
 	}
 }
 
-impl<T, F: FnMut() -> Option<T>> Drop for Linger<T, F> {
+impl<T, F: FnMut(*mut Option<T>)> Drop for Linger<T, F> {
 	// TODO: Support aborting by reinitializing the namespace instead of resuming.
 	fn drop(&mut self) {
 		resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
@@ -95,7 +95,7 @@ thread_local! {
 /// If the budget is `0`, the timed function is initialized but not invoked; if it is `max_value()`,
 /// it is run to completion.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
--> Result<Linger<T, impl FnMut() -> Option<T> + Send>> {
+-> Result<Linger<T, impl FnMut(*mut Option<T>) + Send>> {
 	use std::hint::unreachable_unchecked;
 	use timetravel::makecontext;
 
@@ -109,16 +109,20 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 
 	let mut result = None;
 	let mut fun = Some(fun);
-	let result = Cell::new(move || {
+	let result = Cell::new(move |ret: *mut Option<T>| {
 		if let Some(fun) = fun.take() {
 			// TODO: Catch panics in the user-supplied closure?
-			result.replace(fun())
+			result.replace(fun());
 		} else {
 			debug_assert!(
-				result.is_some(),
-				"libinger: memoized closure called twice concurrently or thrice!",
+				! ret.is_null(),
+				"libinger: memoized closure re-called with null output argument",
 			);
-			result.take()
+
+			let result = result.take();
+			unsafe {
+				ret.replace(result);
+			}
 		}
 	});
 
@@ -142,7 +146,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		);
 
 		let result = continuation.result.as_ptr();
-		let result: *mut (dyn FnMut() -> Option<T> + Send) = result;
+		let result: *mut (dyn FnMut(*mut Option<T>) + Send) = result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
 		launching.replace(result);
 	});
@@ -158,8 +162,8 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
 // TODO: Return the total time spent running?
-pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
--> Result<&mut Linger<T, impl FnMut() -> Option<T>>> {
+pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<T>)>, us: u64)
+-> Result<&mut Linger<T, impl FnMut(*mut Option<T>)>> {
 	use lifetime::unbound_mut;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
@@ -206,10 +210,11 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut() -> Option<T>>, us: u64)
 
 		if returned {
 			let completion = continuation.result.get_mut();
-			let completion = completion().expect(
-				"resume(): return value missing following closure return!"
-			);
-			tfun.replace(TaggedLinger::Completion(completion));
+			let mut result = None;
+			completion(&mut result);
+
+			let result = result.expect("resume(): return value missing on completion!");
+			tfun.replace(TaggedLinger::Completion(result));
 		} else {
 			let checkpoint = checkpoint
 				.expect("resume(): checkpoint missing following preemption!");
