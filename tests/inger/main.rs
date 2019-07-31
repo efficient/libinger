@@ -39,7 +39,6 @@ fn launch_union() {
 	drop(lock);
 }
 
-#[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic() {

@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
 use std::ptr::NonNull;
+use std::thread::Result as ThdResult;
 use timetravel::Context;
 
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
@@ -12,9 +13,9 @@ const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 ///  * completed and returned a value, *or*
 ///  * been preempted and now need to be explicitly `resume()`'d
 // The only time this can contain a None is during a call to Linger::into() -> Option<T>.
-pub struct Linger<T, F: FnMut(*mut Option<T>)> (Option<TaggedLinger<T, F>>);
+pub struct Linger<T, F: FnMut(*mut Option<ThdResult<T>>)> (Option<TaggedLinger<T, F>>);
 
-impl<T, F: FnMut(*mut Option<T>)> Linger<T, F> {
+impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Linger<T, F> {
 	/// Indicates whether this closure has completed and returned a value.
 	///
 	/// This check is `true` if and only if conversion `into()` an `Option` will yield a `Some`;
@@ -31,7 +32,7 @@ impl<T, F: FnMut(*mut Option<T>)> Linger<T, F> {
 	}
 }
 
-impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a T>> for &'a Linger<T, F> {
+impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<&'a T>> for &'a Linger<T, F> {
 	fn into(self) -> Option<&'a T> {
 		let Linger (this) = self;
 		if let TaggedLinger::Completion(this) = this.as_ref().unwrap() {
@@ -42,7 +43,7 @@ impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a T>> for &'a Linger<T, F> {
 	}
 }
 
-impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
+impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
 	fn into(self) -> Option<&'a mut T> {
 		let Linger (this) = self;
 		if let TaggedLinger::Completion(this) = this.as_mut().unwrap() {
@@ -53,7 +54,7 @@ impl<'a, T, F: FnMut(*mut Option<T>)> Into<Option<&'a mut T>> for &'a mut Linger
 	}
 }
 
-impl<T, F: FnMut(*mut Option<T>)> Into<Option<T>> for Linger<T, F> {
+impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<T>> for Linger<T, F> {
 	fn into(mut self) -> Option<T> {
 		let Self (this) = &mut self;
 		let that = this.take().unwrap();
@@ -68,11 +69,17 @@ impl<T, F: FnMut(*mut Option<T>)> Into<Option<T>> for Linger<T, F> {
 	}
 }
 
-impl<T, F: FnMut(*mut Option<T>)> Drop for Linger<T, F> {
+impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
 	// TODO: Support aborting by reinitializing the namespace instead of resuming.
 	fn drop(&mut self) {
+		use std::thread::panicking;
+
 		let Self (this) = self;
-		if this.is_some() {
+
+		// The fact that we're currently panicking probably means that resume() is
+		// already running and propagated a panic from the timed function's stack back to
+		// the thread's main one.
+		if this.is_some() && ! panicking() {
 			resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
 		}
 	}
@@ -98,8 +105,10 @@ thread_local! {
 /// If the budget is `0`, the timed function is initialized but not invoked; if it is `max_value()`,
 /// it is run to completion.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
--> Result<Linger<T, impl FnMut(*mut Option<T>) + Send>> {
+-> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
 	use std::hint::unreachable_unchecked;
+	use std::panic::AssertUnwindSafe;
+	use std::panic::catch_unwind;
 	use timetravel::makecontext;
 
 	let mut task = None;
@@ -111,11 +120,10 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	)?;
 
 	let mut result = None;
-	let mut fun = Some(fun);
-	let result = move |ret: *mut Option<T>| {
+	let mut fun = Some(AssertUnwindSafe (fun));
+	let result = move |ret: *mut Option<ThdResult<T>>| {
 		if let Some(fun) = fun.take() {
-			// TODO: Catch panics in the user-supplied closure?
-			result.replace(fun());
+			result.replace(catch_unwind(fun));
 		} else {
 			debug_assert!(
 				! ret.is_null(),
@@ -148,7 +156,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			"launch(): called twice concurrently from the same thread!",
 		);
 
-		let result: *mut (dyn FnMut(*mut Option<T>) + Send) = &mut continuation.result;
+		let result: *mut (dyn FnMut(*mut Option<ThdResult<T>>) + Send) = &mut continuation.result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
 		launching.replace(NonNull::new(result));
 	});
@@ -164,9 +172,10 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
 // TODO: Return the total time spent running?
-pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<T>)>, us: u64)
--> Result<&mut Linger<T, impl FnMut(*mut Option<T>)>> {
+pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us: u64)
+-> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>> {
 	use lifetime::unbound_mut;
+	use std::panic::resume_unwind;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
 
@@ -215,6 +224,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<T>)>, us: u64)
 			(continuation.result)(&mut result);
 
 			let result = result.expect("resume(): return value missing on completion!");
+			let result = result.unwrap_or_else(|panic| resume_unwind(panic));
 			tfun.replace(TaggedLinger::Completion(result));
 		} else {
 			let checkpoint = checkpoint
