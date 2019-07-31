@@ -109,7 +109,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 
 	let mut result = None;
 	let mut fun = Some(fun);
-	let result = Cell::new(move |ret: *mut Option<T>| {
+	let result = move |ret: *mut Option<T>| {
 		if let Some(fun) = fun.take() {
 			// TODO: Catch panics in the user-supplied closure?
 			result.replace(fun());
@@ -124,7 +124,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 				ret.replace(result);
 			}
 		}
-	});
+	};
 
 	let mut state = Linger (None);
 	let Linger (continuation) = &mut state;
@@ -145,8 +145,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			"launch(): called twice concurrently from the same thread!",
 		);
 
-		let result = continuation.result.as_ptr();
-		let result: *mut (dyn FnMut(*mut Option<T>) + Send) = result;
+		let result: *mut (dyn FnMut(*mut Option<T>) + Send) = &mut continuation.result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
 		launching.replace(result);
 	});
@@ -209,9 +208,8 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<T>)>, us: u64)
 		});
 
 		if returned {
-			let completion = continuation.result.get_mut();
 			let mut result = None;
-			completion(&mut result);
+			(continuation.result)(&mut result);
 
 			let result = result.expect("resume(): return value missing on completion!");
 			tfun.replace(TaggedLinger::Completion(result));
@@ -258,7 +256,7 @@ struct Continuation<T> {
 	// of returning it.  On the immediately *following* invocation, it returns this value.  Note
 	// that it is neither reentrant nor, consequently, AS-safe.  For this reason, care must be
 	// taken not to attempt the second call until it is already known that the first completed.
-	result: Cell<T>,
+	result: T,
 }
 
 #[doc(hidden)]
