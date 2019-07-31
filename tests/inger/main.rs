@@ -8,7 +8,6 @@ extern crate test;
 
 mod lock;
 
-use inger::Linger;
 use inger::launch;
 use inger::nsnow;
 use inger::resume;
@@ -29,6 +28,14 @@ fn launch_continuation() {
 	let mut lock = sigalrm_lock();
 	lock.preserve();
 	assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
+	drop(lock);
+}
+
+#[test]
+fn launch_union() {
+	let mut lock = sigalrm_lock();
+	lock.preserve();
+	launch(|| -> Result<bool, Box<()>> { Ok(false) }, 1_000).unwrap();
 	drop(lock);
 }
 
