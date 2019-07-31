@@ -71,7 +71,10 @@ impl<T, F: FnMut(*mut Option<T>)> Into<Option<T>> for Linger<T, F> {
 impl<T, F: FnMut(*mut Option<T>)> Drop for Linger<T, F> {
 	// TODO: Support aborting by reinitializing the namespace instead of resuming.
 	fn drop(&mut self) {
-		resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
+		let Self (this) = self;
+		if this.is_some() {
+			resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
+		}
 	}
 }
 
