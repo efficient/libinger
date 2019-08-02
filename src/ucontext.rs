@@ -95,15 +95,25 @@ pub fn getcontext<T>(scope: impl FnOnce(Context<Void>) -> T, mut checkpoint: imp
 ///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `call`, which is then restarted from the beginning.
 ///! However, once `call` returns, control returns to the `makecontext()` call site and the continuation is automatically invalidated.
 pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Context<S>), call: fn()) -> Result<()> {
+	use libc::pthread_sigmask;
 	use std::mem::transmute;
+	use std::ptr::null;
 	use std::os::raw::c_uint;
 
-	extern "C" fn trampoline(lower: c_uint, upper: c_uint) {
-		let gate = lower as usize | ((upper as usize) << 32);
+	fn combine(lower: c_uint, upper: c_uint) -> usize {
+		lower as usize | ((upper as usize) << 32)
+	}
+
+	extern "C" fn trampoline(gl: c_uint, gu: c_uint, sl: c_uint, su: c_uint) {
 		let gate: fn() = unsafe {
-			transmute(gate)
+			transmute(combine(gl, gu))
 		};
 		gate();
+
+		let succ: *mut ucontext_t = combine(sl, su) as _;
+		unsafe {
+			pthread_sigmask(0, null(), &mut (*succ).uc_sigmask);
+		}
 	}
 
 	getcontext(
@@ -126,13 +136,17 @@ pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Conte
 				context.uc_stack.ss_sp = persistent.stack.as_mut_ptr() as _;
 				context.uc_stack.ss_size = persistent.stack.len();
 				context.uc_link = successor.context.as_ptr();
+
+				let successor: usize = context.uc_link as _;
 				unsafe {
 					makecontext(
 						&mut *context,
-						transmute(trampoline as extern "C" fn(c_uint, c_uint)),
+						transmute(trampoline as extern "C" fn(c_uint, c_uint, c_uint, c_uint)),
 						2,
 						call,
-						call >> 32
+						call >> 32,
+						successor,
+						successor >> 32,
 					);
 				}
 
@@ -225,17 +239,23 @@ fn validatecontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>, handle
 #[must_use]
 pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -> Option<Error> {
 	use invar::MoveInvariant;
+	use libc::pthread_sigmask;
 	use libc::setcontext;
+	use std::ptr::null;
 
 	let continuation = unsafe {
 		continuation.as_ref()
 	}?;
-
 	if ! validatecontext(continuation, false) {
 		None?;
 	}
 
-	continuation.context.borrow_mut().after_move();
+	let mut context = continuation.context.borrow_mut();
+	context.after_move();
+	unsafe {
+		pthread_sigmask(0, null(), &mut context.uc_sigmask);
+	}
+	drop(context);
 	unsafe {
 		setcontext(continuation.context.as_ptr());
 	}
@@ -273,8 +293,10 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	let mut err = None;
 	INIT.call_once(|| {
 		use libc::SA_SIGINFO;
+		use libc::pthread_sigmask;
 		use libc::sigaction;
 		use libc::siginfo_t;
+		use std::ptr::null;
 		use std::ptr::null_mut;
 		use zero::Zero;
 
@@ -282,6 +304,9 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
 			let success = checkpoint.swap(context.unwrap());
 			debug_assert!(success);
+			unsafe {
+				pthread_sigmask(0, null(), &mut context.uc_sigmask);
+			}
 		}
 
 		let config = sigaction {
