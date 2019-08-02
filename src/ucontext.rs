@@ -238,11 +238,13 @@ fn validatecontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>, handle
 ///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -> Option<Error> {
+	use errno::errno;
 	use invar::MoveInvariant;
 	use libc::pthread_sigmask;
 	use libc::setcontext;
 	use std::ptr::null;
 
+	let erryes = *errno();
 	let continuation = unsafe {
 		continuation.as_ref()
 	}?;
@@ -256,6 +258,7 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 		pthread_sigmask(0, null(), &mut context.uc_sigmask);
 	}
 	drop(context);
+	*errno() = erryes;
 	unsafe {
 		setcontext(continuation.context.as_ptr());
 	}
@@ -272,6 +275,7 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 ///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context<S>) -> Option<Error> {
+	use errno::errno;
 	use libc::pthread_kill;
 	use libc::pthread_self;
 	use std::cell::Cell;
@@ -281,12 +285,14 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 
 	static INIT: Once = ONCE_INIT;
 	thread_local! {
-		static CHECKPOINT: Cell<Option<&'static mut dyn Swap<Other = HandlerContext>>> = Cell::new(None);
+		static CHECKPOINT: Cell<Option<(&'static mut dyn Swap<Other = HandlerContext>, c_int)>> = Cell::new(None);
 	}
 
+	let erryes = *errno();
 	if ! validatecontext(unsafe {
 		continuation.as_ref()
 	}?, true) {
+		*errno() = erryes;
 		return setcontext(continuation);
 	}
 
@@ -299,9 +305,11 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 		use zero::Zero;
 
 		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
-			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
-			let success = checkpoint.swap(context.unwrap());
+			let (checkpoint, erryes) = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
+			let context = context.unwrap();
+			let success = checkpoint.swap(context);
 			debug_assert!(success);
+			*errno() = erryes;
 		}
 
 		let config = sigaction {
@@ -321,9 +329,9 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	}
 
 	let continuation: *mut dyn Swap<Other = HandlerContext> = continuation;
-	CHECKPOINT.with(|checkpoint| checkpoint.set(Some(unsafe {
+	CHECKPOINT.with(|checkpoint| checkpoint.set(Some((unsafe {
 		transmute(continuation)
-	})));
+	}, erryes))));
 	unsafe {
 		pthread_kill(pthread_self(), SIGSETCONTEXT);
 	}
