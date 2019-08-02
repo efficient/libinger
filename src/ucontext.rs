@@ -37,7 +37,7 @@ pub struct Context<S: DerefMut<Target = [u8]> = Void> {
 ///! The context received by a signal handler as its third argument.
 ///!
 ///! See the `Context` struct's `swap()` method.
-pub struct HandlerContext (ucontext_t);
+pub type HandlerContext = ucontext_t;
 
 struct Persistent<S: DerefMut<Target = [u8]>> {
 	stack: S,
@@ -398,7 +398,6 @@ impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 		// We mustn't call the member function on the signal HandlerContext because this
 		// will enforce the MoveInvariant, which is *not* correct for such contexts.  So
 		// it's important that we flip the call order around.
-		let HandlerContext (ref mut other) = other;
 		this.swap(other);
 
 		true
