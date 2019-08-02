@@ -7,9 +7,11 @@ mod compile_assert;
 mod groups;
 mod lifetime;
 mod linger;
+mod preemption;
 mod reusable;
 mod signals;
 mod timer;
+mod unfurl;
 
 pub use linger::*;
 

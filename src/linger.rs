@@ -1,10 +1,22 @@
+use gotcha::Group;
+use preemption::defer_preemption;
+use preemption::disable_preemption;
+use preemption::thread_signal;
+use reusable::ReusableSync;
+use signal::Set;
+use signal::Signal;
+use signal::siginfo_t;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
+use std::os::raw::c_int;
 use std::ptr::NonNull;
 use std::thread::Result as ThdResult;
+use timetravel::errno::errno;
 use timetravel::Context;
+use timetravel::HandlerContext;
 
+const QUANTUM_MICROSECS: u64  = 15;
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
 /// The result of `launch()`'ing a timed function.
@@ -89,27 +101,35 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
 #[derive(Default)]
 struct Executing {
 	checkpoint: Option<Context<Box<[u8]>>>,
+	preempted: Option<c_int>,
 	deadline: u64,
-	returned: bool,
 }
 
 thread_local! {
 	// TODO: Support nested timed functions by replacing with a stack.
 	// TODO: Optimize by using an UnsafeCell.
 	static EXECUTING: RefCell<Executing> = RefCell::default();
-	static LAUNCHING: Cell<Option<NonNull<dyn FnMut() + Send>>> = Cell::default();
+	static LAUNCHING: Cell<Option<(NonNull<dyn FnMut() + Send>, Group)>> = Cell::default();
 }
 
 /// Run `fun` with the specified time budget, in `us`econds.
 ///
 /// If the budget is `0`, the timed function is initialized but not invoked; if it is `max_value()`,
 /// it is run to completion.
+// TODO: Because this (and resume()) are parameterized on types, their monomorphized code is present
+//       in *client* implementations and therefore not subject to library group trampolining.  This
+//       will introduce concurrency bugs during nested launch() invocations; one way to address it
+//       would be to implement them using polymorphic functions using dynamic dispatch internally.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
+	use groups::assign_group;
 	use std::hint::unreachable_unchecked;
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
 	use timetravel::makecontext;
+	use preemption::thread_setup;
+
+	thread_setup(preempt, QUANTUM_MICROSECS)?;
 
 	let mut task = None;
 	makecontext(
@@ -140,7 +160,9 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	let mut state = Linger (None);
 	let Linger (continuation) = &mut state;
 	let continuation = continuation.get_or_insert(TaggedLinger::Continuation(Continuation {
+		group: None,
 		task,
+		errno: 0,
 		result,
 	}));
 	let continuation = if let TaggedLinger::Continuation(continuation) = continuation {
@@ -150,6 +172,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			unreachable_unchecked()
 		}
 	};
+	let group = assign_group().expect("launch(): too many active timed functions");
 	LAUNCHING.with(|launching| {
 		debug_assert!(
 			launching.get().is_none(),
@@ -158,10 +181,17 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 
 		let result: *mut (dyn FnMut(*mut Option<ThdResult<T>>) + Send) = &mut continuation.result;
 		let result: *mut (dyn FnMut() + Send) = result as _;
-		launching.replace(NonNull::new(result));
+		launching.replace(NonNull::new(result).map(|fun| (fun, *group)));
 	});
-	if us != 0 {
-		resume(&mut state, us)?;
+	if us == 0 {
+		// If the user doesn't want us to run their closure yet, ask schedule() to preempt
+		// the moment it enables preemptive execution.
+		defer_preemption();
+	}
+	resume(&mut state, us)?;
+
+	if let Linger (Some(TaggedLinger::Continuation(continuation))) = &mut state {
+		continuation.group.replace(group);
 	}
 
 	Ok(state)
@@ -174,7 +204,11 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 // TODO: Return the total time spent running?
 pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us: u64)
 -> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>> {
+	use gotcha::group_thread_set;
 	use lifetime::unbound_mut;
+	use signal::Operation;
+	use signal::Sigset;
+	use signal::pthread_sigmask;
 	use std::panic::resume_unwind;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
@@ -191,9 +225,11 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 						executing.checkpoint.is_none(),
 						"libinger: timed function tried to call launch()!",
 					);
-					executing.returned = false;
-					// TODO: Add in current wall-clock time (unless unlimited!).
-					executing.deadline = us;
+
+					// Add current wall-clock time, unless duration's unlimited.
+					executing.deadline = us
+						.checked_mul(1_000).map(|us| nsnow() + us)
+						.unwrap_or(us);
 
 					let resume = executing.checkpoint.get_or_insert(pause);
 					unsafe {
@@ -201,6 +237,24 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 					}
 				});
 
+				if let Some(group) = &continuation.group {
+					// We're resuming a continuation that has been preempted.
+					// Do everything to enable preemption short of unblocking
+					// the signal, which will be done atomically as we jump into
+					// the continuation.
+					let mut old = Sigset::empty();
+					let mut new = Sigset::empty();
+					let sig = thread_signal();
+					new.add(sig);
+					drop(pthread_sigmask(Operation::Block, &new, Some(&mut old)));
+					old.del(sig);
+					*resume.mask() = old;
+					group_thread_set!(**group);
+				}
+				*errno() = continuation.errno;
+
+				// TODO: Make sigsetcontext() restore the signal mask (in contrast
+				//       to setcontext()) so we can't get preempted until it's done.
 				let failure = sigsetcontext(resume);
 				error.replace(failure.expect("resume(): continuation invalid!"));
 			},
@@ -209,27 +263,19 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 			Err(error)?;
 		}
 
-		let mut returned = false;
-		let mut checkpoint = None;
-		EXECUTING.with(|executing| {
-			let mut executing = executing.borrow_mut();
-			checkpoint = executing.checkpoint.take();
-			executing.deadline = 0;
-			returned = executing.returned;
-			executing.returned = false;
-		});
-
-		if returned {
+		let executing = EXECUTING.with(|executing| executing.replace(Executing::default()));
+		if let Some(errno) = executing.preempted {
+			let checkpoint = executing.checkpoint
+				.expect("resume(): checkpoint missing following preemption!");
+			continuation.task.replace(checkpoint);
+			continuation.errno = errno;
+		} else {
 			let mut result = None;
 			(continuation.result)(&mut result);
 
 			let result = result.expect("resume(): return value missing on completion!");
 			let result = result.unwrap_or_else(|panic| resume_unwind(panic));
 			tfun.replace(TaggedLinger::Completion(result));
-		} else {
-			let checkpoint = checkpoint
-				.expect("resume(): checkpoint missing following preemption!");
-			continuation.task.replace(checkpoint);
 		}
 	}
 
@@ -237,22 +283,57 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 }
 
 fn schedule() {
-	let fun = LAUNCHING.with(|launching| launching.take());
-	debug_assert!(! fun.is_none(), "schedule() called from outside launch()!");
+	use preemption::enable_preemption;
 
-	let mut fun = fun.expect("libinger: schedule() called from outside launch()!");
+	let (mut fun, group) = LAUNCHING.with(|launching| launching.take())
+		.expect("libinger: schedule() called from outside launch()!");
 	let fun = unsafe {
 		fun.as_mut()
 	};
-	// TODO: Enable preemption here.
+	enable_preemption(group.into());
 	fun();
-	// TODO: Disable preemption here.
+	disable_preemption();
+}
 
-	// The closure completed!  Set the flag to inform resume().
-	EXECUTING.with(|executing| {
-		let mut executing = executing.borrow_mut();
-		executing.returned = true;
-	});
+extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerContext>) {
+	use preemption::is_preemptible;
+	use timetravel::Swap;
+	use unfurl::Unfurl;
+
+	let erryes = *errno();
+	let uc = unsafe {
+		uc.unfurl()
+	};
+	if no == thread_signal() && is_preemptible() {
+		EXECUTING.with(|executing| {
+			let mut executing = executing.borrow_mut();
+			if nsnow() >= executing.deadline {
+				// We're preempting the timed function.  Store the C library's error
+				// number and configure us to return into the stored checkpoint.
+				let checkpoint = executing.checkpoint.as_mut();
+				let checkpoint = unsafe {
+					checkpoint.unfurl()
+				};
+				checkpoint.swap(uc);
+				executing.preempted.replace(erryes);
+
+				// Disable preemption and prepare to return into libinger code.
+				uc.uc_sigmask.add(no);
+				disable_preemption();
+			}
+		});
+	} else {
+		if no == thread_signal() {
+			// The timed function has called into a nonpreemptible library function.
+			// We'll need to intercept it immediately upon the function's return.
+			defer_preemption();
+		}
+
+		// Block this signal so it doesn't disturb us again.
+		uc.uc_sigmask.add(no);
+	}
+
+	*errno() = erryes;
 }
 
 enum TaggedLinger<T, F> {
@@ -264,7 +345,9 @@ enum TaggedLinger<T, F> {
 // TODO: Make this non-Send!
 // TODO: Add a field associating it with a group.
 struct Continuation<T> {
+	group: Option<ReusableSync<'static, Group>>,
 	task: Option<Context<Box<[u8]>>>,
+	errno: c_int,
 
 	// When called, this function invokes the user-supplied closure and saves the result instead
 	// of returning it.  On the immediately *following* invocation, it returns this value.  Note
