@@ -293,10 +293,8 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	let mut err = None;
 	INIT.call_once(|| {
 		use libc::SA_SIGINFO;
-		use libc::pthread_sigmask;
 		use libc::sigaction;
 		use libc::siginfo_t;
-		use std::ptr::null;
 		use std::ptr::null_mut;
 		use zero::Zero;
 
@@ -304,9 +302,6 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 			let checkpoint = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
 			let success = checkpoint.swap(context.unwrap());
 			debug_assert!(success);
-			unsafe {
-				pthread_sigmask(0, null(), &mut context.uc_sigmask);
-			}
 		}
 
 		let config = sigaction {
