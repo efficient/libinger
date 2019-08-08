@@ -532,10 +532,16 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
 			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
 			uintptr_t *sgot = h->shadow.gots[n] + tramp;
+			uintptr_t defn = base + st->st_value;
+
+			if(ELF64_ST_TYPE(st->st_info) == STT_GNU_IFUNC) {
+				uintptr_t (*resolver)(void) = (uintptr_t (*)(void)) defn;
+				defn = resolver();
+			}
 
 			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
 			// the address of this ancillary namespace's own definition.
-			*sgot = sgot_entry(h->strtab + st->st_name, n, base + st->st_value);
+			*sgot = sgot_entry(h->strtab + st->st_name, n, defn);
 		}
 
 	const ElfW(Rela) *jmpslots = (ElfW(Rela) *) ((uintptr_t) h->jmpslots - h->baseaddr + base);
