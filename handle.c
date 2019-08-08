@@ -286,6 +286,12 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	for(const ElfW(Rela) *r = h->jmpslots; r != h->jmpslots_end; ++r) {
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 
+		// This is most likely an UND symbol, in which case it cannot be an
+		// indirectly-resolved function.  In the unlikely event it's a *local*
+		// indirectly-resolved function that might also be locally referenced, abort because
+		// we don't currently bother to reason about that case.
+		assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
+
 		// Does this object file define an instance of the target symbol?  If so, there's a
 		// chance this call would lazily resolve to the local definition; in this case, the
 		// semantics should be the same as if the definition weren't exported as a dynamic
@@ -498,6 +504,11 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
 			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 
+			// We already know this symbol resolves to a different object file;
+			// therefore, its symbol table entry is an UND and cannot describe an
+			// indirectly-resolved function.
+			assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
+
 			bool redirected = false;
 			if(*got && (*got != base + st->st_value || (redirected = partial))) {
 				// This is not an undefined weak symbol, and the reference didn't
@@ -558,6 +569,10 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 		const char *sym = h->strtab + st->st_name;
 		uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 		uintptr_t *sgot = h->shadow.gots[n] + tramp;
+
+		// We already know this symbol resolves to a different object file; therefore, its
+		// symbol table entry is an UND and cannot describe an indirectly-resolved function.
+		assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
 
 		bool redirected = false;
 		if(*got != base + st->st_value || ((redirected = partial) && n)) {
