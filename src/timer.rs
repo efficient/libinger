@@ -101,6 +101,7 @@ pub fn timer_settime(timerid: Timer, absolute: bool, new: &itimerspec, old: Opti
 	Ok(())
 }
 
+#[allow(dead_code)]
 pub fn timer_delete(timerid: Timer) -> Result<()> {
 	extern {
 		fn timer_delete(_: Timer) -> c_int;
