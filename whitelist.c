@@ -30,6 +30,12 @@ static bool libc(const char *sym) {
 		!strcmp(sym, "cfree");
 }
 
+static bool libpthread(const char *sym) {
+	return strcmp(sym, "pthread_sigmask") && strcmp(sym, "pthread_sigqueue") &&
+		!strstr(sym, "sigaction") && strcmp(sym, "sigwait") &&
+		!strstr(sym, "jmp");
+}
+
 static const struct patterns WHITELIST[] = {
 	// [Runtime] dynamic linker:
 	// Although the dynmaic linker internally enforces that there is only a single instance of
@@ -48,7 +54,7 @@ static const struct patterns WHITELIST[] = {
 	// According to https://sourceware.org/glibc/wiki/LinkerNamespaces, calling into multiple
 	// copies of this library can cause observable state inconsistencies between the threads of
 	// a single process.
-	{"/libpthread.so.", yes},
+	{"/libpthread.so.", libpthread},
 };
 
 // Does not replace.
