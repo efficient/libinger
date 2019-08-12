@@ -141,7 +141,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 
 	let mut result = None;
 	let mut fun = Some(AssertUnwindSafe (fun));
-	let result = move |ret: *mut Option<ThdResult<T>>| {
+	let result = Box::new(move |ret: *mut Option<ThdResult<T>>| {
 		if let Some(fun) = fun.take() {
 			result.replace(catch_unwind(fun));
 		} else {
@@ -155,7 +155,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 				ret.replace(result);
 			}
 		}
-	};
+	});
 
 	let mut state = Linger (None);
 	let Linger (continuation) = &mut state;
@@ -353,7 +353,8 @@ struct Continuation<T> {
 	// of returning it.  On the immediately *following* invocation, it returns this value.  Note
 	// that it is neither reentrant nor, consequently, AS-safe.  For this reason, care must be
 	// taken not to attempt the second call until it is already known that the first completed.
-	result: T,
+	// TODO: Eliminate the second allocation by somehow merging this into the ancillary stack?
+	result: Box<T>,
 }
 
 #[doc(hidden)]
