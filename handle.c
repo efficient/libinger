@@ -491,7 +491,17 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
-	bool self = myself(h);
+	// Don't trampoline any calls we ourselves make.  Note that, because calls to us are always
+	// routed to the base namespace, this means that all our calls also run in the base
+	// namespace, regardless of the current thread's namespace setting.  This makes namespace
+	// reinitialization easier by eliminating our own dependency on the ancillary namespaces,
+	// keeps our own semantics consistent regardless of whether we were brought in via DT_NEEDED
+	// or LD_PRELOAD, and avoids difficult semantics questions surrounding whitelisted symbols
+	// (e.g., if we interpose a non-whitelisted symbol, do our calls to its real definition
+	// result in a switch back to the base namespace or behave like those we don't interpose?).
+	if(myself(h))
+		return;
+
 	bool partial = whitelist_so_partial(h->path);
 
 	// Note that symbols that are the subject of COPY relocations are considered to be in the
@@ -522,8 +532,9 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 					// relocation unless we would have processed it were the
 					// library fully whitelisted.
 					uintptr_t uninterposed = trampolines_get(*got);
-					tramp = self || redirected ? uninterposed :
+					tramp = redirected ? uninterposed :
 						got_trampoline(h->strtab + st->st_name, uninterposed);
+
 					globdats[r - h->miscrels] = tramp;
 				} else {
 					tramp = globdats[r - h->miscrels];
@@ -592,7 +603,7 @@ static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t 
 			// library's relocation unless we would have processed it were the library
 			// fully whitelisted.
 			uintptr_t uninterposed = plot_trampoline(h, tramp);
-			*got = self || redirected ? uninterposed : got_trampoline(sym, uninterposed);
+			*got = redirected ? uninterposed : got_trampoline(sym, uninterposed);
 		}
 	}
 	prot_segment(base, h->lazygot_seg, 0);
