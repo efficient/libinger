@@ -6,20 +6,19 @@ use signal::Operation;
 use signal::Set;
 use signal::Signal;
 use signal::Sigset;
-use signals::assign_signal;
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::io::Result;
 
 thread_local! {
-	static SIGNAL: ReusableSync<'static, Signal> =
-		assign_signal().expect("libinger: no available signal for preempting this thread");
+	static SIGNAL: RefCell<Option<ReusableSync<'static, Signal>>> = RefCell::new(None);
 
 	// Whether we had to delay preemption checks until the end of a nonpreemptible call.
 	static DEFERRED: Cell<bool> = Cell::new(false);
 }
 
-pub fn thread_signal() -> Signal {
-	SIGNAL.with(|signal| **signal)
+pub fn thread_signal() -> Option<Signal> {
+	SIGNAL.with(|signal| signal.borrow().as_ref().map(|signal| **signal))
 }
 
 extern fn resume_preemption() {
@@ -39,7 +38,8 @@ pub fn enable_preemption(group: Option<Group>) {
 	}
 	// else the caller is asserting the group change has already been performed.
 
-	let signal = thread_signal();
+	let signal = thread_signal()
+		.expect("libinger: tried to enable preemption before setting up thread preemption");
 	DEFERRED.with(|deferred| if deferred.replace(false) {
 		drop(pthread_kill(pthread_self(), signal));
 		unblock = true;
@@ -72,6 +72,7 @@ pub fn thread_setup(handler: Handler, quantum: u64) -> Result<()> {
 	use libc::timespec;
 	use signal::Action;
 	use signal::Sigaction;
+	use signals::assign_signal;
 	use signal::sigaction;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
@@ -86,7 +87,12 @@ pub fn thread_setup(handler: Handler, quantum: u64) -> Result<()> {
 		static TIMER: Cell<Option<Timer>> = Cell::default();
 	}
 	if TIMER.with(|timer| timer.get()).is_none() {
-		let signal = thread_signal();
+		let signal = SIGNAL.with(|signal|
+			**signal.borrow_mut().get_or_insert(assign_signal()
+				.expect("libinger: no available signal for preempting this thread")
+			)
+		);
+
 		let sa = Sigaction::new(handler, Sigset::empty(), SA_SIGINFO | SA_RESTART);
 		sigaction(signal, &sa, None)?;
 		mask(Operation::Block, signal)?;

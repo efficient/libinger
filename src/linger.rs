@@ -210,6 +210,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 	use std::panic::resume_unwind;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
+	use unfurl::Unfurl;
 
 	let Linger (tfun) = fun;
 	if let TaggedLinger::Continuation(continuation) = tfun.as_mut().unwrap() {
@@ -243,6 +244,9 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 					let mut old = Sigset::empty();
 					let mut new = Sigset::empty();
 					let sig = thread_signal();
+					let sig = unsafe {
+						sig.unfurl()
+					};
 					new.add(sig);
 					drop(pthread_sigmask(Operation::Block, &new, Some(&mut old)));
 					old.del(sig);
@@ -309,7 +313,8 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 	let uc = unsafe {
 		uc.unfurl()
 	};
-	if no == thread_signal() && is_preemptible() {
+	let relevant = thread_signal().map(|signal| no == signal).unwrap_or(false);
+	if relevant && is_preemptible() {
 		EXECUTING.with(|executing| {
 			let mut executing = executing.borrow_mut();
 			if nsnow() >= executing.deadline {
@@ -328,7 +333,7 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 			}
 		});
 	} else {
-		if no == thread_signal() {
+		if relevant {
 			// The timed function has called into a nonpreemptible library function.
 			// We'll need to intercept it immediately upon the function's return.
 			defer_preemption();
