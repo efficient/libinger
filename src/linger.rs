@@ -127,11 +127,9 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
 	use timetravel::makecontext;
-	use preemption::thread_setup;
-
-	thread_setup(preempt, QUANTUM_MICROSECS)?;
 
 	let mut task = None;
+	thread_setup()?;
 	makecontext(
 		// TODO: Optimize by allocating the execution stacks from a pool.
 		vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
@@ -280,6 +278,13 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 	}
 
 	Ok(fun)
+}
+
+// TODO: Remove this wrapper if and when we solve the trampolining boundary issue.
+fn thread_setup() -> Result<()> {
+	use preemption::thread_setup;
+
+	thread_setup(preempt, QUANTUM_MICROSECS)
 }
 
 fn schedule() {
