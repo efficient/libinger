@@ -24,6 +24,7 @@
 extern "C" {
 #endif
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #define LIBGOTCHA_GROUP_ERROR -1
@@ -45,6 +46,10 @@ static inline libgotcha_group_t libgotcha_group_thread_set(libgotcha_group_t gro
 // if all groups are already allocated.  This and LIBGOTCHA_GROUP_SHARED are the only valid sources
 // of group identifiers for use with libgotcha_group_thread_set().
 libgotcha_group_t libgotcha_group_new(void);
+
+// Reinitialize a previously allocated group, closing and reopening all deletable objects therein,
+// but leaving it marked as allocated.  Returns whether it succeeded and left the group usable.
+bool libgotcha_group_renew(libgotcha_group_t);
 
 // Install a function to be invoked each time a call resolving to the shared group is finished.
 // Note that this callback runs in the preceding group, and that any explicit group switches it

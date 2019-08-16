@@ -1,10 +1,13 @@
 #include "libgotcha_api.h"
 
+#include "handle.h"
 #include "namespace.h"
 #include "shared.h"
 
 #include <assert.h>
+#include <link.h>
 #include <stdatomic.h>
+#include <stddef.h>
 
 // Position N corresponds to namespace N+1!
 static bool namespace_locked[NUM_SHADOW_NAMESPACES];
@@ -51,6 +54,25 @@ libgotcha_group_t libgotcha_group_new(void) {
 			return chosen;
 
 	return LIBGOTCHA_GROUP_ERROR;
+}
+
+bool libgotcha_group_renew(libgotcha_group_t which) {
+	const struct link_map *root = dlopen(NULL, RTLD_LAZY);
+	for(const struct link_map *l = root; l; l = l->l_next) {
+		const struct handle *h = handle_get(l, NULL, NULL);
+		assert(h);
+		if(h->owned) {
+			struct link_map *n = (struct link_map *)
+				namespace_get(which, h->path, RTLD_LAZY);
+			assert(n);
+			dlclose(n);
+		}
+	}
+
+	for(const struct link_map *l = root; l; l = l->l_next)
+		if(!handle_got_reshadow(handle_get(l, NULL, NULL), which))
+			return false;
+	return true;
 }
 
 void libgotcha_shared_hook(void (*hook)(void)) {

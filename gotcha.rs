@@ -27,6 +27,15 @@ impl Group {
 		}
 	}
 
+	#[must_use]
+	pub fn renew(&self) -> bool {
+		use crate::libgotcha_api::libgotcha_group_renew;
+		let Self (this) = self;
+		unsafe {
+			libgotcha_group_renew(*this)
+		}
+	}
+
 	pub fn is_shared(&self) -> bool {
 		self == &Self::SHARED
 	}
