@@ -3,6 +3,7 @@
 #include "namespace.h"
 
 #include <assert.h>
+#include <link.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -24,6 +25,67 @@ void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
 	void *null = dlmopen(NUM_SHADOW_NAMESPACES + 1, "", RTLD_LAZY);
 	assert(!null);
 	return null;
+}
+
+struct ure {
+	const char *const self;
+	Lmid_t namespace;
+	int (*const call)(int (*)(struct dl_phdr_info *, size_t, void *), void *);
+	int (*const callback)(struct dl_phdr_info *, size_t, void *);
+	void *const data;
+};
+
+static int ns_iterate_phdr(struct ure *structure) {
+	struct link_map *hand = (struct link_map *)
+		namespace_get(structure->namespace, structure->self, RTLD_LAZY);
+	if(!hand)
+		return 0;
+
+	int (*dl_iterate_phdr)(int (*)(struct dl_phdr_info *, size_t, void *), void *) =
+		(int (*)(int (*)(struct dl_phdr_info *, size_t, void *), void *)) (uintptr_t)
+		dlsym(hand, "dl_iterate_phdr");
+	assert(dl_iterate_phdr);
+	return dl_iterate_phdr(NULL, structure);
+}
+
+#pragma weak libgotcha_dl_iterate_phdr = dl_iterate_phdr
+int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data) {
+	int (*call)(int (*)(struct dl_phdr_info *, size_t, void *), void *) = dl_iterate_phdr;
+	struct ure *structure = NULL;
+	if(!callback) {
+		structure = data;
+		call = structure->call;
+		callback = structure->callback;
+		data = structure->data;
+	}
+
+	// We use an indirect call here because, unlike the rest of our functions, this one may
+	// execute in an ancillary namespace, where our interposition adjustments do not apply.
+	int eger = call(callback, data);
+	if(eger)
+		return eger;
+
+	// The _Unwind_RaiseException() implementations in libgcc and libunwind call
+	// dl_iterate_phdr() to find the .eh_frame section containing the canonical frame
+	// information (CFI) metadata.  Unfortunately, ld.so's implementation thereof only searches
+	// the invoking namespace, which causes unwinding to fail as soon as it crosses a namespace
+	// boundary.  We alter the semantics by extending the search to ancillary namespaces as long
+	// as we haven't yet found the callback's desired program header and we haven't encountered
+	// a namespace that doesn't appear to contain a copy of ourselves (since we must call
+	// ld.so's implementation from that copy in order for it to behave any differently).
+	if(!structure) {
+		struct ure structure = {
+			.self = namespace_self()->l_name,
+			.namespace = 1,
+			.call = call,
+			.callback = callback,
+			.data = data,
+		};
+		return ns_iterate_phdr(&structure);
+	} else {
+		++structure->namespace;
+		return ns_iterate_phdr(structure);
+	}
 }
 
 static thread_local bool segv_masked;

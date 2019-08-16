@@ -38,6 +38,7 @@ extern const bool libgotcha_staticlink;
 #include <dlfcn.h>
 
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
+int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
 #endif
 
 #ifdef __USE_POSIX
