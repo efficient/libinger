@@ -129,7 +129,7 @@ fn resume_completion_repeat() {
 
 #[test]
 fn abuse_preemption() {
-	for _ in 0..10_000 {
+	for _ in 0..25 {
 		launch_continuation();
 	}
 }
