@@ -10,14 +10,14 @@ use std::ops::Deref;
 pub struct Group (libgotcha_group_t);
 
 impl Group {
-	pub const SHARED: Self = Group (LIBGOTCHA_GROUP_SHARED as _);
+	pub const SHARED: Self = Self (LIBGOTCHA_GROUP_SHARED as _);
 
 	#[doc(hidden)]
-	pub const _ERROR: Self = Group (LIBGOTCHA_GROUP_ERROR as _);
+	pub const _ERROR: Self = Self (LIBGOTCHA_GROUP_ERROR as _);
 
 	pub fn new() -> Option<Self> {
 		use crate::libgotcha_api::libgotcha_group_new;
-		let this = Group (unsafe {
+		let this = Self (unsafe {
 			libgotcha_group_new()
 		});
 		if this != Self::_ERROR {
@@ -36,7 +36,7 @@ impl Deref for Group {
 	type Target = libgotcha_group_t;
 
 	fn deref(&self) -> &Self::Target {
-		let Group (this) = self;
+		let Self (this) = self;
 		this
 	}
 }
