@@ -18,9 +18,14 @@
 //    40   return address (must be preserved)
 .globl procedure_linkage_override
 procedure_linkage_override:
+.cfi_startproc
+.cfi_adjust_cfa_offset 16
 	push %rax
+.cfi_adjust_cfa_offset 8
 	push %rcx
+.cfi_adjust_cfa_offset 8
 	push %rdx
+.cfi_adjust_cfa_offset 8
 
 	mov  24(%rsp), %rcx          // GOOT address
 	mov  32(%rsp), %rdx          // trampoline index
@@ -68,10 +73,15 @@ procedure_linkage_override:
 
 	mov  %rcx, 32(%rsp)          // return address
 	pop  %rdx
+.cfi_adjust_cfa_offset -8
 	pop  %rcx
+.cfi_adjust_cfa_offset -8
 	pop  %rax
+.cfi_adjust_cfa_offset -8
 	add  $8, %rsp                // symbol address address
+.cfi_adjust_cfa_offset -8
 	ret                          // symbol address
+.cfi_endproc
 
 // Stack at entry:
 //  offset contents
@@ -85,6 +95,8 @@ procedure_linkage_override:
 //     0   saved %rax
 //     8   preserved return address
 hook_trampoline:
+.cfi_startproc
+.cfi_adjust_cfa_offset 8
 	mov  (%rsp), %rcx            // namespace
 	mov  %rax, (%rsp)            // save %rax
 
@@ -99,10 +111,12 @@ hook_trampoline:
 
 	lea  hook_ret(%rip), %rcx
 	push %rcx                   // intermediate return address
+.cfi_adjust_cfa_offset -8
 
 	mov  shared_trampoline@gotpcrel(%rip), %rcx
 	mov  (%rcx), %rcx
 	jmp  *%rcx
+.cfi_endproc
 
 // Stack at entry:
 //  offset contents
@@ -110,12 +124,16 @@ hook_trampoline:
 //     0   saved %rax
 //     8   return address
 hook_ret:
+.cfi_startproc
+.cfi_adjust_cfa_offset 8
 	call namespace_thread_tramp  // trampolining address
 	movb $0, (%rax)              // "unlock," as John Bercow would say
 .Lskip_hook:
 
 	pop  %rax
+.cfi_adjust_cfa_offset -8
 	ret                          // preserved return address
+.cfi_endproc
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.
