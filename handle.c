@@ -488,7 +488,7 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 }
 
 // Setup full shadow GOTs for the ancillary namespaces.
-static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
+static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uintptr_t base) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
 	// Don't trampoline any calls we ourselves make.  Note that, because calls to us are always
@@ -535,9 +535,9 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 					tramp = redirected ? uninterposed :
 						got_trampoline(h->strtab + st->st_name, uninterposed);
 
-					globdats[r - h->miscrels] = tramp;
+					h->globdats[r - h->miscrels] = tramp;
 				} else {
-					tramp = globdats[r - h->miscrels];
+					tramp = h->globdats[r - h->miscrels];
 				}
 
 				if(tramp && (!redirected || n))
@@ -645,14 +645,15 @@ enum error handle_got_shadow(struct handle *h) {
 		return SUCCESS;
 	}
 
-	dlm_t open = h->owned ? (dlm_t) namespace_load : namespace_get;
-	uintptr_t *globdats = malloc((h->miscrels_end - h->miscrels) * sizeof *globdats);
-	if(!globdats)
+	h->globdats = malloc((h->miscrels_end - h->miscrels) * sizeof *h->globdats);
+	if(!h->globdats)
 		return ERROR_MALLOC;
-	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr, globdats);
+	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr);
 	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
-		const struct link_map *l = open(namespace, h->path, RTLD_LAZY);
-		if(!l) {
+		if(len)
+			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
+
+		if(!handle_got_reshadow(h, namespace)) {
 			// The dynamic linker does not consider preloaded object files to be
 			// dependencies, so although we see them as not owned, they (and *their*
 			// dependencies) are absent from ancillary namespaces.  Since such object
@@ -674,8 +675,10 @@ enum error handle_got_shadow(struct handle *h) {
 			// symbols (thanks to us, really their trampolines) to said namespaces:
 			// without doing this, calls would result in undefined behavior, but after
 			// this step, they instead result in a normal namespace switch.
-			free(globdats);
-			if(open == namespace_load)
+			free(h->globdats);
+			h->globdats = NULL;
+
+			if(h->owned)
 				return ERROR_DLMOPEN;
 			else if(!getenv("LD_PRELOAD"))
 				return ERROR_RUNTIME_LOADED;
@@ -683,12 +686,7 @@ enum error handle_got_shadow(struct handle *h) {
 			handle_got_whitelist_all(h);
 			return SUCCESS;
 		}
-
-		if(len)
-			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
-		handle_got_shadow_init(h, namespace, l->l_addr, globdats);
 	}
-	free(globdats);
 
 	if(h->ldaccess)
 		// We just loaded ancillary copies of this object file that satisfies all of:
@@ -701,4 +699,22 @@ enum error handle_got_shadow(struct handle *h) {
 		h->ldaccess();
 
 	return SUCCESS;
+}
+
+bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
+	// Ignore objects that are not already multiplexed.
+	if(!h->globdats)
+		return true;
+
+	// Ensure this is not the vdso or the dynamic linker.
+	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
+		return true;
+
+	dlm_t open = h->owned ? (dlm_t) namespace_load : namespace_get;
+	const struct link_map *l = open(n, h->path, RTLD_LAZY);
+	if(!l)
+		return false;
+
+	handle_got_shadow_init(h, n, l->l_addr);
+	return true;
 }

@@ -35,6 +35,8 @@ struct handle {
 	const ElfW(Sym) *symtab_end;
 	const char *strtab;
 
+	uintptr_t *globdats; // Only present if multiplexed between multiple namspaces.
+
 	const ElfW(Rela) *jmpslots; // Not always present.
 	const ElfW(Rela) *jmpslots_end;
 	const ElfW(Rela) *miscrels; // Not always present.
@@ -67,6 +69,7 @@ enum error handle_update(const struct link_map *, enum error (*)(struct handle *
 const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
 
 enum error handle_got_shadow(struct handle *);
+bool handle_got_reshadow(const struct handle *h, Lmid_t n);
 
 static inline size_t handle_got_num_entries(const struct handle *h) {
 	return h->ntramps;
