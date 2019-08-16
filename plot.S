@@ -16,6 +16,7 @@
 //    24   GOOT address
 //    32   trampoline index
 //    40   return address (must be preserved)
+.type procedure_linkage_override, @function
 .globl procedure_linkage_override
 procedure_linkage_override:
 .cfi_startproc
@@ -82,6 +83,7 @@ procedure_linkage_override:
 .cfi_adjust_cfa_offset -8
 	ret                          // symbol address
 .cfi_endproc
+.size procedure_linkage_override, .-procedure_linkage_override
 
 // Stack at entry:
 //  offset contents
@@ -94,6 +96,7 @@ procedure_linkage_override:
 //  ===============
 //     0   saved %rax
 //     8   preserved return address
+.type hook_trampoline, @function
 hook_trampoline:
 .cfi_startproc
 .cfi_adjust_cfa_offset 8
@@ -117,12 +120,14 @@ hook_trampoline:
 	mov  (%rcx), %rcx
 	jmp  *%rcx
 .cfi_endproc
+.size hook_trampoline, .-hook_trampoline
 
 // Stack at entry:
 //  offset contents
 //  ===============
 //     0   saved %rax
 //     8   return address
+.type hook_ret, @function
 hook_ret:
 .cfi_startproc
 .cfi_adjust_cfa_offset 8
@@ -134,6 +139,7 @@ hook_ret:
 .cfi_adjust_cfa_offset -8
 	ret                          // preserved return address
 .cfi_endproc
+.size hook_ret, .-hook_ret
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.
