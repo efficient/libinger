@@ -33,7 +33,7 @@ static bool libc(const char *sym) {
 static bool libpthread(const char *sym) {
 	return strcmp(sym, "pthread_sigmask") && strcmp(sym, "pthread_sigqueue") &&
 		!strstr(sym, "sigaction") && strcmp(sym, "sigwait") &&
-		!strstr(sym, "jmp");
+		strcmp(sym, "pthread_kill") && !strstr(sym, "jmp");
 }
 
 static const struct patterns WHITELIST[] = {
