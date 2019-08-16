@@ -13,7 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef const struct link_map *(*dlm_t)(Lmid_t, const char *, int);
+typedef struct link_map *(*dlm_t)(Lmid_t, const char *, int);
 
 bool trampolines_insert(uintptr_t, uintptr_t);
 bool trampolines_contains(uintptr_t);
@@ -710,7 +710,7 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
 		return true;
 
-	dlm_t open = h->owned ? (dlm_t) namespace_load : namespace_get;
+	dlm_t open = h->owned ? namespace_load : namespace_get;
 	const struct link_map *l = open(n, h->path, RTLD_LAZY);
 	if(!l)
 		return false;

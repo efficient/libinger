@@ -36,8 +36,7 @@ struct ure {
 };
 
 static int ns_iterate_phdr(struct ure *structure) {
-	struct link_map *hand = (struct link_map *)
-		namespace_get(structure->namespace, structure->self, RTLD_LAZY);
+	struct link_map *hand = namespace_get(structure->namespace, structure->self, RTLD_LAZY);
 	if(!hand)
 		return 0;
 

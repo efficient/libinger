@@ -48,7 +48,7 @@ struct link_map *namespace_load(Lmid_t lmid, const char *filename, int flags) {
 	return l;
 }
 
-const struct link_map *namespace_get(Lmid_t lmid, const char *filename, int flags) {
+struct link_map *namespace_get(Lmid_t lmid, const char *filename, int flags) {
 	struct link_map *l = dlmopen(lmid, filename, flags | RTLD_NOLOAD);
 	if(l)
 		dlclose(l);

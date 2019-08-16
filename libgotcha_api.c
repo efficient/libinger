@@ -62,8 +62,7 @@ bool libgotcha_group_renew(libgotcha_group_t which) {
 		const struct handle *h = handle_get(l, NULL, NULL);
 		assert(h);
 		if(h->owned) {
-			struct link_map *n = (struct link_map *)
-				namespace_get(which, h->path, RTLD_LAZY);
+			struct link_map *n = namespace_get(which, h->path, RTLD_LAZY);
 			assert(n);
 			dlclose(n);
 		}
