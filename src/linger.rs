@@ -275,9 +275,13 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 			let mut result = None;
 			(continuation.result)(&mut result);
 
-			let result = result.expect("resume(): return value missing on completion!");
-			let result = result.unwrap_or_else(|panic| resume_unwind(panic));
-			tfun.replace(TaggedLinger::Completion(result));
+			match result.expect("resume(): return value missing on completion!") {
+				Ok(result) => drop(tfun.replace(TaggedLinger::Completion(result))),
+				Err(panic) => {
+					tfun.take();
+					resume_unwind(panic);
+				},
+			}
 		}
 	}
 
