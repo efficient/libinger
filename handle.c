@@ -488,7 +488,7 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 }
 
 // Setup full shadow GOTs for the ancillary namespaces.
-static inline void handle_got_shadow_init(struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
+static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uintptr_t base, uintptr_t *globdats) {
 	assert(n <= NUM_SHADOW_NAMESPACES);
 
 	// Don't trampoline any calls we ourselves make.  Note that, because calls to us are always
