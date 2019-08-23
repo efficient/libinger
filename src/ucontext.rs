@@ -3,6 +3,7 @@ use libc::SIGSTKFLT;
 use libc::sigset_t;
 use libc::ucontext_t;
 use stable::StableMutAddr;
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::cell::RefMut;
 use std::io::Error;
@@ -278,54 +279,26 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	use errno::errno;
 	use libc::pthread_kill;
 	use libc::pthread_self;
-	use std::cell::Cell;
 	use std::mem::transmute;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	static INIT: Once = ONCE_INIT;
-	thread_local! {
-		static CHECKPOINT: Cell<Option<(&'static mut dyn Swap<Other = HandlerContext>, c_int)>> = Cell::new(None);
-	}
 
 	let erryes = *errno();
-	let mut err = None;
-	INIT.call_once(|| {
-		use libc::SA_SIGINFO;
-		use libc::sigaction;
-		use libc::siginfo_t;
-		use std::ptr::null_mut;
-		use zero::Zero;
-
-		extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
-			let (checkpoint, erryes) = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
-			let context = context.unwrap();
-			let success = checkpoint.swap(context);
-			debug_assert!(success);
-			*errno() = erryes;
-		}
-
-		let config = sigaction {
-			sa_flags: SA_SIGINFO,
-			sa_sigaction: handler as _,
-			sa_restorer: None,
-			sa_mask: Zero::zero(),
-		};
-		if unsafe {
-			sigaction(SIGSETCONTEXT, &config, null_mut())
-		} != 0 {
-			err = Some(Error::last_os_error());
-		}
-	});
-	if let Some(err) = err {
-		return Some(err);
-	}
-
 	if ! validatecontext(unsafe {
 		continuation.as_ref()
 	}?, true) {
 		*errno() = erryes;
 		return setcontext(continuation);
+	}
+
+	let mut err = None;
+	INIT.call_once(|| if let Some(or) = sigsetupcontext() {
+		err.replace(or);
+	});
+	if let Some(err) = err {
+		return Some(err);
 	}
 
 	let continuation: *mut dyn Swap<Other = HandlerContext> = continuation;
@@ -337,6 +310,41 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	}
 
 	Some(Error::last_os_error())
+}
+
+thread_local! {
+	static CHECKPOINT: Cell<Option<(&'static mut dyn Swap<Other = HandlerContext>, c_int)>> = Cell::new(None);
+}
+
+fn sigsetupcontext() -> Option<Error> {
+	use errno::errno;
+	use libc::SA_SIGINFO;
+	use libc::sigaction;
+	use libc::siginfo_t;
+	use std::ptr::null_mut;
+	use zero::Zero;
+
+	extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
+		let (checkpoint, erryes) = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
+		let context = context.unwrap();
+		let success = checkpoint.swap(context);
+		debug_assert!(success);
+		*errno() = erryes;
+	}
+
+	let config = sigaction {
+		sa_flags: SA_SIGINFO,
+		sa_sigaction: handler as _,
+		sa_restorer: None,
+		sa_mask: Zero::zero(),
+	};
+	if unsafe {
+		sigaction(SIGSETCONTEXT, &config, null_mut())
+	} == 0 {
+		None
+	} else {
+		Some(Error::last_os_error())
+	}
 }
 
 impl Context<Void> {
