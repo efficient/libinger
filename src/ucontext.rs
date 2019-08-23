@@ -289,13 +289,6 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	}
 
 	let erryes = *errno();
-	if ! validatecontext(unsafe {
-		continuation.as_ref()
-	}?, true) {
-		*errno() = erryes;
-		return setcontext(continuation);
-	}
-
 	let mut err = None;
 	INIT.call_once(|| {
 		use libc::SA_SIGINFO;
@@ -326,6 +319,13 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	});
 	if let Some(err) = err {
 		return Some(err);
+	}
+
+	if ! validatecontext(unsafe {
+		continuation.as_ref()
+	}?, true) {
+		*errno() = erryes;
+		return setcontext(continuation);
 	}
 
 	let continuation: *mut dyn Swap<Other = HandlerContext> = continuation;
