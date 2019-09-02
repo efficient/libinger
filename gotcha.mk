@@ -19,11 +19,11 @@ RUSTFLAGS := -O
 endif
 
 lib%.so: %.o libgotcha.a
-	$(CC) $(LDFLAGS) -shared -zdefs -zinitfirst -znodelete -znoexecstack -ztext -static-libgcc -L. -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -o $@ $< $(LDLIBS) -Wl,--whole-archive -lgotcha -Wl,--no-whole-archive -l$(LIBSTDRUST_SONAME) -ldl -lpthread -lc -lasm -lebl_x86_64
+	$(CC) $(LDFLAGS) -shared -zdefs -zinitfirst -znoexecstack -ztext -static-libgcc -L. -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -o $@ $< $(LDLIBS) -Wl,--whole-archive -lgotcha -Wl,--no-whole-archive -l$(LIBSTDRUST_SONAME) -ldl -lpthread -lc -lasm -lebl_x86_64
 
 lib%.so: %.rs libgotcha.rlib
 	$(RM) libgotcha.so
-	$(RUSTC) $(RUSTFLAGS) --crate-type dylib -Clink-args="$(LDFLAGS) -zdefs -zinitfirst -znodelete -ztext -Wl,-zlazy -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -lasm -lebl_x86_64" -Cprefer-dynamic -L. $<
+	$(RUSTC) $(RUSTFLAGS) --crate-type dylib -Clink-args="$(LDFLAGS) -zdefs -zinitfirst -ztext -Wl,-zlazy -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -lasm -lebl_x86_64" -Cprefer-dynamic -L. $<
 
 libgotcha.%: $(LIBGOTCHA_PATH)/libgotcha.%
 	$(CP) $< $@

@@ -21,7 +21,7 @@ all: libgotcha.a libgotcha.rlib libgotcha.so libgotcha.mk
 libgotcha.a: libgotcha.o libgotcha_api.rs
 libgotcha.rlib: libgotcha.o libgotcha_api.rs
 
-libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -znodelete -Wl,-zlazy
+libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -Wl,-zlazy
 libgotcha.so: private LDFLAGS += libgotcha.o -ldl -lpthread -lc -lasm -lebl_x86_64 -lunwind
 libgotcha.so: libgotcha.o libgotcha_api.rs
 
