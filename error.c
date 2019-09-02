@@ -21,8 +21,14 @@ const char *error_message(enum error error) {
 	case ERROR_FNAME_PATH:
 		res = "Determining path to program executable (check PATH environment variable)";
 		break;
+	case ERROR_OPEN:
+		res = "Unable to open file";
+		break;
 	case ERROR_MALLOC:
 		res = "Unable to allocate memory";
+		break;
+	case ERROR_MMAP:
+		res = "Unable to memory map region";
 		break;
 	case ERROR_SIGACTION:
 		res = "Unable to install intermediate signal handler";
@@ -47,7 +53,9 @@ const char *error_explanation(enum error error) {
 	case ERROR_DLADDR:
 		res = dlerror();
 		break;
+	case ERROR_OPEN:
 	case ERROR_MALLOC:
+	case ERROR_MMAP:
 	case ERROR_SIGACTION:
 		res = strerror(errno);
 		break;

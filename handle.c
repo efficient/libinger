@@ -6,7 +6,9 @@
 #include "segprot.h"
 #include "whitelist.h"
 
+#include <sys/stat.h>
 #include <assert.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +16,8 @@
 #include <unistd.h>
 
 typedef struct link_map *(*dlm_t)(Lmid_t, const char *, int);
+
+static char nodelete[] = "/tmp/libgotcha-XXXXXX";
 
 bool trampolines_insert(uintptr_t, uintptr_t);
 bool trampolines_contains(uintptr_t);
@@ -68,6 +72,57 @@ static const char *interp_path(void) {
 	return interp;
 }
 
+static enum error nodelete_clear_flag(struct handle *h) {
+	if(!strcmp(nodelete + sizeof nodelete - 7, "XXXXXX"))
+		mkdtemp(nodelete);
+
+	int tagged = open(h->path, O_RDONLY);
+	if(tagged < 0)
+		return ERROR_OPEN;
+
+	const char *basename = strrchr(h->path, '/');
+	h->path = malloc(sizeof nodelete + strlen(basename));
+	if(!h->path) {
+		close(tagged);
+		return ERROR_MALLOC;
+	}
+	sprintf(h->path, "%s%s", nodelete, basename);
+
+	int untagged = open(h->path, O_CREAT | O_EXCL | O_RDWR, 0666);
+	if(untagged < 0) {
+		close(tagged);
+		free(h->path);
+		return ERROR_OPEN;
+	}
+
+	struct stat st;
+	fstat(tagged, &st);
+	ftruncate(untagged, st.st_size);
+
+	ElfW(Ehdr) *e = mmap(NULL, st.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, untagged, 0);
+	close(untagged);
+	if(e == MAP_FAILED) {
+		close(tagged);
+		free(h->path);
+		return ERROR_MMAP;
+	}
+
+	for(size_t remaining = st.st_size; remaining; remaining -= read(tagged, e, remaining));
+	close(tagged);
+
+	const ElfW(Phdr) *p;
+	for(p = (ElfW(Phdr) *) ((uintptr_t) e + e->e_phoff); p->p_type != PT_DYNAMIC; ++p);
+
+	ElfW(Dyn) *d;
+	for(d = (ElfW(Dyn) *) ((uintptr_t) e + p->p_offset); d->d_tag != DT_FLAGS_1; ++d);
+
+	uint64_t *f = &d->d_un.d_ptr;
+	*f &= ~DF_1_NODELETE;
+	munmap(e, st.st_size);
+
+	return SUCCESS;
+}
+
 const char *handle_progname(void) {
 	extern const char *__progname_full;
 	static const char *progname;
@@ -105,7 +160,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	memset(h, 0, sizeof *h);
 
 	h->path = l->l_name;
-	if((!h->path || !*h->path) && !(h->path = handle_progname()))
+	if((!h->path || !*h->path) && !(h->path = (char *) handle_progname()))
 		return ERROR_FNAME_PATH;
 
 	h->baseaddr = l->l_addr;
@@ -166,6 +221,10 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		h->symtab = (ElfW(Sym) *) (h->baseaddr + (uintptr_t) h->symtab);
 		symhash = (struct sym_hash *) (h->baseaddr + (uintptr_t) symhash);
 		h->strtab = (char *) (h->baseaddr + (uintptr_t) h->strtab);
+	} else if(flags_1 & DF_1_NODELETE) {
+		enum error code = nodelete_clear_flag(h);
+		if(code != SUCCESS)
+			return code;
 	}
 
 	// Use the symbol hash table to determine the size of the symbol table, if the former is

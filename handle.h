@@ -25,7 +25,7 @@ struct shadow_gots {
 struct handle {
 	struct shadow_gots shadow; // Must be the first member so the trampoline can find it.
 
-	const char *path;
+	char *path;
 	uintptr_t baseaddr;
 	bool owned;
 	bool eager;
