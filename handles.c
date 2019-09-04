@@ -11,6 +11,7 @@
 // initially marked with the NODELETE flag.  This way, further libraries loaded into this namespace
 // will use our copies instead of the system ones to satisfy their dependencies.
 static enum error nodelete_preshadow(const struct link_map *root, Lmid_t namespace) {
+	Lmid_t new = LM_ID_NEWLM;
 	for(const struct link_map *l = root; l; l = l->l_next) {
 		enum error code;
 		const struct handle *h = handle_get(l, NULL, &code);
@@ -18,13 +19,14 @@ static enum error nodelete_preshadow(const struct link_map *root, Lmid_t namespa
 			return code;
 
 		if(handle_is_nodelete(h)) {
-			struct link_map *l = namespace_load(namespace, h->path, RTLD_LAZY);
+			struct link_map *l = dlmopen(new, h->path, RTLD_LAZY);
 			assert(l);
 
 			// Force the dynamic linker to consider this object when satisfying future
 			// objects' dependencies.  This workaround is necessary to avoid bringing in
 			// NODELETE objects that would prevent later namespace reinitialization.
 			l->l_name += handle_nodelete_pathlen();
+			new = namespace;
 		}
 	}
 	return SUCCESS;

@@ -769,7 +769,7 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
 		return true;
 
-	dlm_t open = h->owned ? namespace_load : namespace_get;
+	dlm_t open = h->owned ? dlmopen : namespace_get;
 	const struct link_map *l = open(n, h->path, RTLD_LAZY);
 	if(!l)
 		return false;

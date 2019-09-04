@@ -17,8 +17,6 @@ bool *namespace_thread_tramp(void);
 // Returns the our own handle only if we're loaded in the base namespace (including LD_PRELOADs).
 const struct link_map *namespace_self(void);
 
-struct link_map *namespace_load(Lmid_t lmid, const char *filename, int flags);
-
 // This function MUST NOT be called on the dynamic linker itself: the reference counting of its
 // link_map works differently than that of other object files', and it reacts VERY poorly to being
 // dlclose()'d!
