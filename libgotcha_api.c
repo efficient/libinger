@@ -1,6 +1,7 @@
 #include "libgotcha_api.h"
 
 #include "handle.h"
+#include "handles.h"
 #include "namespace.h"
 #include "shared.h"
 
@@ -57,21 +58,7 @@ libgotcha_group_t libgotcha_group_new(void) {
 }
 
 bool libgotcha_group_renew(libgotcha_group_t which) {
-	const struct link_map *root = dlopen(NULL, RTLD_LAZY);
-	for(const struct link_map *l = root; l; l = l->l_next) {
-		const struct handle *h = handle_get(l, NULL, NULL);
-		assert(h);
-		if(h->owned) {
-			struct link_map *n = namespace_get(which, h->path, RTLD_LAZY);
-			assert(n);
-			dlclose(n);
-		}
-	}
-
-	for(const struct link_map *l = root; l; l = l->l_next)
-		if(!handle_got_reshadow(handle_get(l, NULL, NULL), which))
-			return false;
-	return true;
+	return handles_reshadow(dlopen(NULL, RTLD_LAZY), which);
 }
 
 void libgotcha_shared_hook(void (*hook)(void)) {

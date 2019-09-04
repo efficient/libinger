@@ -777,3 +777,17 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 	handle_got_shadow_init(h, n, l->l_addr);
 	return true;
 }
+
+size_t handle_nodelete_pathlen(void) {
+	static size_t size = 0;
+	if(!size) {
+		// Include the '/'!
+		size = sizeof nodelete;
+		assert(size == strlen(nodelete) + 1);
+	}
+	return size;
+}
+
+bool handle_is_nodelete(const struct handle *h) {
+	return !strncmp(h->path, nodelete, handle_nodelete_pathlen() - 1);
+}

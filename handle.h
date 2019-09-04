@@ -71,6 +71,9 @@ const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
 enum error handle_got_shadow(struct handle *);
 bool handle_got_reshadow(const struct handle *h, Lmid_t n);
 
+size_t handle_nodelete_pathlen(void);
+bool handle_is_nodelete(const struct handle *);
+
 static inline size_t handle_got_num_entries(const struct handle *h) {
 	return h->ntramps;
 }

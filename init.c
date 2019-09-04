@@ -2,6 +2,7 @@
 #include "config.h"
 #include "globals.h"
 #include "handle.h"
+#include "handles.h"
 #include "interpose.h"
 #include "namespace.h"
 #include "whitelist.h"
@@ -66,13 +67,7 @@ static inline enum error init(void) {
 		return code;
 
 	// Now multiplex everything and set up shadowing!
-	for(const struct link_map *l = root; l; l = l->l_next) {
-		enum error code = handle_update(l, handle_got_shadow);
-		if(code)
-			return code;
-	}
-
-	return SUCCESS;
+	return handles_shadow(root);
 }
 
 static inline void __attribute__((constructor(101))) ctor(void) {
