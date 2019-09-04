@@ -747,16 +747,6 @@ enum error handle_got_shadow(struct handle *h) {
 		}
 	}
 
-	if(h->ldaccess)
-		// We just loaded ancillary copies of this object file that satisfies all of:
-		//  * Accesses ld.so's mutable _rtld_global
-		//  * Is marked NODELETE, indicating it is unsafe to run its destructors
-		//  * Has a legacy constructor, a la _init()
-		// Such objects (e.g., libpthread.so) sometimes install function pointers into the
-		// dynamic linker itself.  Let's be cautious and rerun the constructor in the base
-		// namespace to prevent leaving unnecessary ancillary references around.
-		h->ldaccess();
-
 	return SUCCESS;
 }
 
@@ -775,6 +765,17 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 		return false;
 
 	handle_got_shadow_init(h, n, l->l_addr);
+
+	if(h->ldaccess)
+		// We just loaded ancillary copies of this object file that satisfies all of:
+		//  * Accesses ld.so's mutable _rtld_global
+		//  * Is marked NODELETE, indicating it is unsafe to run its destructors
+		//  * Has a legacy constructor, a la _init()
+		// Such objects (e.g., libpthread.so) sometimes install function pointers into the
+		// dynamic linker itself.  Let's be cautious and rerun the constructor in the base
+		// namespace to prevent leaving unnecessary ancillary references around.
+		h->ldaccess();
+
 	return true;
 }
 
