@@ -86,13 +86,17 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
 	fn drop(&mut self) {
 		use std::thread::panicking;
 
-		let Self (this) = self;
-
-		// The fact that we're currently panicking probably means that resume() is
-		// already running and propagated a panic from the timed function's stack back to
-		// the thread's main one.
-		if this.is_some() && ! panicking() {
-			resume(self, u64::max_value()).expect("libinger: drop() did not complete!");
+		if let Self (Some(TaggedLinger::Continuation(this))) = self {
+			if let Some(group) = this.group.take() {
+				assert!(
+					group.renew(),
+					"libgotcha: failed to reinitialize group for reuse",
+				);
+			} else {
+				// The fact that we're currently panicking might mean that we failed
+				// to assign a new group identifier to the continuation.
+				assert!(panicking());
+			}
 		}
 	}
 }

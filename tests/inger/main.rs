@@ -127,6 +127,30 @@ fn resume_completion_repeat() {
 	drop(lock);
 }
 
+#[should_panic(expected = "launch(): too many active timed functions: None")]
+#[test]
+fn launch_toomany() {
+	let mut lock = sigalrm_lock();
+	lock.preserve();
+
+	let _thing_one = launch(|| timeout(1_000_000), 0).unwrap();
+	let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
+	let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
+	drop(lock);
+}
+
+#[test]
+fn launch_toomany_reinit() {
+	let mut lock = sigalrm_lock();
+	lock.preserve();
+
+	let thing_one = launch(|| timeout(1_000_000), 0).unwrap();
+	let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
+	drop(thing_one);
+	let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
+	drop(lock);
+}
+
 #[test]
 fn abuse_preemption() {
 	for _ in 0..25 {
