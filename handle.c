@@ -15,6 +15,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define RET 0xc3
+
 typedef struct link_map *(*dlm_t)(Lmid_t, const char *, int);
 
 static char nodelete[] = "/tmp/libgotcha-XXXXXX";
@@ -113,13 +115,39 @@ static enum error nodelete_clear_flag(struct handle *h) {
 	const ElfW(Phdr) *p;
 	for(p = (ElfW(Phdr) *) ((uintptr_t) e + e->e_phoff); p->p_type != PT_DYNAMIC; ++p);
 
+	uint64_t *flags_1 = NULL;
+	uintptr_t *init = NULL;
 	ElfW(Dyn) *d;
-	for(d = (ElfW(Dyn) *) ((uintptr_t) e + p->p_offset); d->d_tag != DT_FLAGS_1; ++d);
+	for(d = (ElfW(Dyn) *) ((uintptr_t) e + p->p_offset); d->d_tag != DT_NULL; ++d)
+		switch(d->d_tag) {
+		case DT_FLAGS_1:
+			flags_1 = &d->d_un.d_ptr;
+			break;
+		case DT_INIT:
+			init = &d->d_un.d_ptr;
+			break;
+		}
 
-	uint64_t *f = &d->d_un.d_ptr;
-	*f &= ~DF_1_NODELETE;
+	// Clear the NODELETE flag to *allow* unloading ancillary copies of this object.
+	*flags_1 &= ~DF_1_NODELETE;
+
+	if(h->ldaccess) {
+		// This object file satisfies all of:
+		//  * Is marked NODELETE, indicating it "cannot" be unloaded
+		//  * Accesses ld.so's internal mutable _rtld_global structure
+		//  * has a legacy constructor, a la _init()
+		// Such objects (e.g., libpthread.so) might monkey patch the dynamic linker by
+		// overwriting its function pointers with their own.  We don't want them to create a
+		// dependency between the dynamic linker and an ancillary namespace, so disable
+		// their legacy constructors.
+		assert(init);
+
+		uint8_t *ret;
+		for(ret = (uint8_t *) (uintptr_t) h->ldaccess; *ret != RET; ++ret);
+		*init += (uintptr_t) ret - (uintptr_t) h->ldaccess;
+	}
+
 	munmap(e, st.st_size);
-
 	return SUCCESS;
 }
 
@@ -221,10 +249,6 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		h->symtab = (ElfW(Sym) *) (h->baseaddr + (uintptr_t) h->symtab);
 		symhash = (struct sym_hash *) (h->baseaddr + (uintptr_t) symhash);
 		h->strtab = (char *) (h->baseaddr + (uintptr_t) h->strtab);
-	} else if(flags_1 & DF_1_NODELETE) {
-		enum error code = nodelete_clear_flag(h);
-		if(code != SUCCESS)
-			return code;
 	}
 
 	// Use the symbol hash table to determine the size of the symbol table, if the former is
@@ -472,6 +496,12 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		}
 	}
 	assert(!trampolines_contains(0));
+
+	if(flags_1 & DF_1_NODELETE) {
+		enum error code = nodelete_clear_flag(h);
+		if(code != SUCCESS)
+			return code;
+	}
 
 	return SUCCESS;
 }
@@ -765,16 +795,6 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 		return false;
 
 	handle_got_shadow_init(h, n, l->l_addr);
-
-	if(h->ldaccess)
-		// We just loaded ancillary copies of this object file that satisfies all of:
-		//  * Accesses ld.so's mutable _rtld_global
-		//  * Is marked NODELETE, indicating it is unsafe to run its destructors
-		//  * Has a legacy constructor, a la _init()
-		// Such objects (e.g., libpthread.so) sometimes install function pointers into the
-		// dynamic linker itself.  Let's be cautious and rerun the constructor in the base
-		// namespace to prevent leaving unnecessary ancillary references around.
-		h->ldaccess();
 
 	return true;
 }
