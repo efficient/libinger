@@ -18,7 +18,10 @@ thread_local! {
 }
 
 pub fn thread_signal() -> Option<Signal> {
-	SIGNAL.with(|signal| signal.borrow().as_ref().map(|signal| **signal))
+	// Because this is called from signal handlers, it might happen during thread teardown, when
+	// the thread-local variable is being/has been destructed.  In such a case, we simply report
+	// that the current thread has no preemption signal assigned (any longer).
+	SIGNAL.try_with(|signal| signal.borrow().as_ref().map(|signal| **signal)).unwrap_or(None)
 }
 
 extern fn resume_preemption() {
