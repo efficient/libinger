@@ -127,6 +127,22 @@ fn resume_completion_repeat() {
 	drop(lock);
 }
 
+#[test]
+fn setup_only() {
+	use std::sync::atomic::AtomicBool;
+	use std::sync::atomic::Ordering;
+
+	let mut lock = sigalrm_lock();
+	lock.preserve();
+
+	let run = AtomicBool::new(false);
+	let mut prep = launch(|| run.store(true, Ordering::Relaxed), 0).unwrap();
+	assert!(! run.load(Ordering::Relaxed));
+	resume(&mut prep, 1_000).unwrap();
+	assert!(run.load(Ordering::Relaxed));
+	drop(lock);
+}
+
 #[should_panic(expected = "launch(): too many active timed functions: None")]
 #[test]
 fn launch_toomany() {
