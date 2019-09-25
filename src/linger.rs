@@ -82,7 +82,6 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<T>> for Linger<T, F> {
 }
 
 impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
-	// TODO: Support aborting by reinitializing the namespace instead of resuming.
 	fn drop(&mut self) {
 		use std::thread::panicking;
 
@@ -101,7 +100,6 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
 	}
 }
 
-// TODO: Store the current group, either here or in a separate variable.
 #[derive(Default)]
 struct Executing {
 	checkpoint: Option<Context<Box<[u8]>>>,
@@ -361,7 +359,6 @@ enum TaggedLinger<T, F> {
 
 /// Opaque representation of a timed function that has not yet returned.
 // TODO: Make this non-Send!
-// TODO: Add a field associating it with a group.
 struct Continuation<T> {
 	group: Option<ReusableSync<'static, Group>>,
 	task: Option<Context<Box<[u8]>>>,
