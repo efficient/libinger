@@ -9,7 +9,7 @@ use std::ops::DerefMut;
 use std::result::Result as StdResult;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
-use std::sync::TryLockError;
+use std::sync::PoisonError;
 
 type Sync<T> = Mutex<Vec<T>>;
 type Unsync<T> = RefCell<Vec<T>>;
@@ -122,9 +122,9 @@ impl<'a, T> SharedMut<T> for &'a RefCell<T> {
 
 impl<'a, T> SharedMut<T> for &'a Mutex<T> {
 	type Okay = MutexGuard<'a, T>;
-	type Error = TryLockError<Self::Okay>;
+	type Error = PoisonError<Self::Okay>;
 
 	fn try(self) -> StdResult<Self::Okay, Self::Error> {
-		self.try_lock()
+		self.lock()
 	}
 }
