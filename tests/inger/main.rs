@@ -1,8 +1,6 @@
 #![cfg_attr(bench, feature(test))]
 
 extern crate inger;
-extern crate libc;
-extern crate signal;
 #[cfg(bench)]
 extern crate test;
 
