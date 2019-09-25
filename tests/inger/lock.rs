@@ -2,7 +2,14 @@ use signal::Sigaction;
 use std::ops::Deref;
 use std::sync::MutexGuard;
 
-pub fn sigalrm_lock() -> Restorer<Sigaction, Box<Fn() -> Sigaction>, Box<Fn(&Sigaction)>, MutexGuard<'static, (Box<Fn() -> Sigaction>, Box<Fn(&Sigaction)>)>> {
+pub fn exclusive<T>(fun: fn() -> T) {
+	let mut lock = sigalrm_lock();
+	lock.preserve();
+	fun();
+	drop(lock);
+}
+
+fn sigalrm_lock() -> Restorer<Sigaction, Box<Fn() -> Sigaction>, Box<Fn(&Sigaction)>, MutexGuard<'static, (Box<Fn() -> Sigaction>, Box<Fn(&Sigaction)>)>> {
 	use libc::ucontext_t;
 	use signal::Action;
 	use signal::Set;

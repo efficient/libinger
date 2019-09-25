@@ -11,120 +11,109 @@ mod lock;
 use inger::launch;
 use inger::nsnow;
 use inger::resume;
-use lock::sigalrm_lock;
+use lock::exclusive;
 #[cfg(bench)]
 use test::Bencher;
 
 #[test]
 fn launch_completion() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	assert!(launch(|| (), 1_000).unwrap().is_completion());
-	drop(lock);
+	exclusive(||
+		assert!(launch(|| (), 1_000).unwrap().is_completion())
+	);
 }
 
 #[test]
 fn launch_continuation() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
-	drop(lock);
+	exclusive(||
+		assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation())
+	);
 }
 
 #[test]
 fn launch_union() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	launch(|| -> Result<bool, Box<()>> { Ok(false) }, 1_000).unwrap();
-	drop(lock);
+	exclusive(||
+		launch(|| -> Result<bool, Box<()>> { Ok(false) }, 1_000).unwrap()
+	);
 }
 
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	drop(launch(|| panic!("PASS"), 1_000));
-	// Lock becomes poisoned.
+	exclusive(||
+		drop(launch(|| panic!("PASS"), 1_000))
+		// Lock becomes poisoned.
+	);
 }
 
 #[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic_outer() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	drop(launch(|| {
-		drop(launch(|| (), 1_000));
-		panic!("PASS");
-	}, 1_000));
-	// Lock becomes poisoned.
+	exclusive(||
+		drop(launch(|| {
+			drop(launch(|| (), 1_000));
+			panic!("PASS");
+		}, 1_000))
+		// Lock becomes poisoned.
+	);
 }
 
 #[ignore]
 #[should_panic(expected = "PASS")]
 #[test]
 fn launch_panic_inner() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	drop(launch(|| drop(launch(|| panic!("PASS"), 1_000)), 1_000));
-	// Lock becomes poisoned.
+	exclusive(||
+		drop(launch(|| drop(launch(|| panic!("PASS"), 1_000)), 1_000))
+		// Lock becomes poisoned.
+	);
 }
 
 #[ignore]
 #[test]
 fn launch_completions() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	assert!(launch(|| assert!(launch(|| (), 1_000).unwrap().is_completion()), 1_000).unwrap().is_completion());
-	drop(lock);
+	exclusive(||
+		assert!(launch(|| assert!(launch(|| (), 1_000).unwrap().is_completion()), 1_000).unwrap().is_completion())
+	);
 }
 
 #[ignore]
 #[test]
 fn launch_continuations() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-	assert!(launch(|| {
-		assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
-		timeout(1_000_000);
-	}, 1_000).unwrap().is_continuation());
-	drop(lock);
+	exclusive(|| {
+		assert!(launch(|| {
+			assert!(launch(|| timeout(1_000_000), 10).unwrap().is_continuation());
+			timeout(1_000_000);
+		}, 1_000).unwrap().is_continuation());
+	});
 }
 
 #[test]
 fn resume_completion() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
-	assert!(cont.is_continuation(), "completion instead of continuation");
-	assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
-	drop(lock);
+	exclusive(|| {
+		let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
+		assert!(cont.is_continuation(), "completion instead of continuation");
+		assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
+	});
 }
 
 #[test]
 fn resume_completion_drop() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let mut cont = launch(|| timeout(1_000_000), 100).unwrap();
-	assert!(cont.is_continuation(), "completion instead of continuation");
-	assert!(resume(&mut cont, 10_000).unwrap().is_continuation());
-	drop(lock);
+	exclusive(|| {
+		let mut cont = launch(|| timeout(1_000_000), 100).unwrap();
+		assert!(cont.is_continuation(), "completion instead of continuation");
+		assert!(resume(&mut cont, 10_000).unwrap().is_continuation());
+	});
 }
 
 #[test]
 fn resume_completion_repeat() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
-	assert!(cont.is_continuation(), "launch(): returned completion instead of continuation");
-	resume(&mut cont, 10).unwrap();
-	assert!(cont.is_continuation(), "resume(): returned completion instead of continuation");
-	assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
-	drop(lock);
+	exclusive(|| {
+		let mut cont = launch(|| timeout(1_000_000), 10).unwrap();
+		assert!(cont.is_continuation(), "launch(): returned completion instead of continuation");
+		resume(&mut cont, 10).unwrap();
+		assert!(cont.is_continuation(), "resume(): returned completion instead of continuation");
+		assert!(resume(&mut cont, 10_000_000).unwrap().is_completion());
+	});
 }
 
 #[test]
@@ -132,39 +121,34 @@ fn setup_only() {
 	use std::sync::atomic::AtomicBool;
 	use std::sync::atomic::Ordering;
 
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let run = AtomicBool::new(false);
-	let mut prep = launch(|| run.store(true, Ordering::Relaxed), 0).unwrap();
-	assert!(! run.load(Ordering::Relaxed));
-	resume(&mut prep, 1_000).unwrap();
-	assert!(run.load(Ordering::Relaxed));
-	drop(lock);
+	exclusive(|| {
+		let run = AtomicBool::new(false);
+		let mut prep = launch(|| run.store(true, Ordering::Relaxed), 0).unwrap();
+		assert!(! run.load(Ordering::Relaxed));
+		resume(&mut prep, 1_000).unwrap();
+		assert!(run.load(Ordering::Relaxed));
+	});
 }
 
 #[should_panic(expected = "launch(): too many active timed functions: None")]
 #[test]
 fn launch_toomany() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let _thing_one = launch(|| timeout(1_000_000), 0).unwrap();
-	let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
-	let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
-	drop(lock);
+	exclusive(|| {
+		let _thing_one = launch(|| timeout(1_000_000), 0).unwrap();
+		let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
+		let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
+		// Lock becomes poisoned.
+	});
 }
 
 #[test]
 fn launch_toomany_reinit() {
-	let mut lock = sigalrm_lock();
-	lock.preserve();
-
-	let thing_one = launch(|| timeout(1_000_000), 0).unwrap();
-	let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
-	drop(thing_one);
-	let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
-	drop(lock);
+	exclusive(|| {
+		let thing_one = launch(|| timeout(1_000_000), 0).unwrap();
+		let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
+		drop(thing_one);
+		let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
+	});
 }
 
 #[test]
