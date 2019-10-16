@@ -1,6 +1,6 @@
 use gotcha::Group;
-use preemption::defer_preemption;
 use preemption::disable_preemption;
+use preemption::is_preemptible;
 use preemption::thread_signal;
 use reusable::ReusableSync;
 use signal::Set;
@@ -15,272 +15,173 @@ use std::thread::Result as ThdResult;
 use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
+use unfurl::Unfurl;
 
 const QUANTUM_MICROSECS: u64  = 15;
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
-/// The result of `launch()`'ing a timed function.
-///
-/// The closure might have:
-///  * completed and returned a value, *or*
-///  * been preempted and now need to be explicitly `resume()`'d
-// The only time this can contain a None is during a call to Linger::into() -> Option<T>.
-pub struct Linger<T, F: FnMut(*mut Option<ThdResult<T>>)> (Option<TaggedLinger<T, F>>);
-
-impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Linger<T, F> {
-	/// Indicates whether this closure has completed and returned a value.
-	///
-	/// This check is `true` if and only if conversion `into()` an `Option` will yield a `Some`;
-	/// if you need to use the function's return value, perform the conversion instead.
-	pub fn is_completion(&self) -> bool {
-		let this: Option<&T> = self.into();
-		this.is_some()
-	}
-
-	/// Indicates whether this closure has been preempted before it could complete.
-	pub fn is_continuation(&self) -> bool {
-		let this: Option<&T> = self.into();
-		this.is_none()
-	}
+pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
+	Completion(T),
+	Continuation(Continuation<F>),
+	Poison,
 }
 
-impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<&'a T>> for &'a Linger<T, F> {
-	fn into(self) -> Option<&'a T> {
-		let Linger (this) = self;
-		if let TaggedLinger::Completion(this) = this.as_ref().unwrap() {
-			Some(this)
-		} else {
-			None
-		}
-	}
+pub struct Continuation<T> {
+	// First they called for the preemptible function to be executed, and I did not read the
+	// argument because it was not present.  Then they called for the return value, and I did
+	// not call the preemptible function because it was not present.  Then they called for me,
+	// and I did not call or return because there was no one left to call and I had nothing left
+	// to give.  (Only call this twice!)
+	functional: T,
+	stateful: Task,
+	group: ReusableSync<'static, Group>,
 }
 
-impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<&'a mut T>> for &'a mut Linger<T, F> {
-	fn into(self) -> Option<&'a mut T> {
-		let Linger (this) = self;
-		if let TaggedLinger::Completion(this) = this.as_mut().unwrap() {
-			Some(this)
-		} else {
-			None
-		}
-	}
-}
-
-impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Into<Option<T>> for Linger<T, F> {
-	fn into(mut self) -> Option<T> {
-		let Self (this) = &mut self;
-		let that = this.take().unwrap();
-		if let TaggedLinger::Completion(that) = that {
-			Some(that)
-		} else {
-			// Put Humpty Dumpty back together again so it can be drop()'d!
-			this.replace(that);
-
-			None
-		}
-	}
-}
-
-impl<T, F: FnMut(*mut Option<ThdResult<T>>)> Drop for Linger<T, F> {
+impl<T> Drop for Continuation<T> {
 	fn drop(&mut self) {
-		use std::thread::panicking;
+		debug_assert!(! is_preemptible(), "libinger: dropped from preemptible function");
 
-		if let Self (Some(TaggedLinger::Continuation(this))) = self {
-			if let Some(group) = this.group.take() {
-				assert!(
-					group.renew(),
-					"libgotcha: failed to reinitialize group for reuse",
-				);
-			} else {
-				// The fact that we're currently panicking might mean that we failed
-				// to assign a new group identifier to the continuation.
-				assert!(panicking());
-			}
+		let group = &self.group;
+		if self.stateful.errno.is_some() {
+			// We're canceling a paused preemptible function.  Clean up the group!
+			assert!(group.renew(), "libinger: failed to reinitialize library group");
 		}
 	}
 }
 
 #[derive(Default)]
-struct Executing {
+struct Task {
+	// Also indicates the state of execution.  If we have a Continuation instance, we know the
+	// computatation cannot have completed earlier, so it must be in one of these states...
+	//  * None on entry to resume() means it hasn't yet started running.
+	//  * None at end of resume() means it has completed.
+	//  * Some at either point means it timed out and is currently paused.
+	errno: Option<c_int>,
 	checkpoint: Option<Context<Box<[u8]>>>,
-	preempted: Option<c_int>,
-	deadline: u64,
-}
-
-thread_local! {
-	// TODO: Support nested timed functions by replacing with a stack.
-	// TODO: Optimize by using an UnsafeCell.
-	static EXECUTING: RefCell<Executing> = RefCell::default();
-	static LAUNCHING: Cell<Option<(NonNull<dyn FnMut() + Send>, Group)>> = Cell::default();
 }
 
 /// Run `fun` with the specified time budget, in `us`econds.
 ///
 /// If the budget is `0`, the timed function is initialized but not invoked; if it is `max_value()`,
 /// it is run to completion.
-// TODO: Because this (and resume()) are parameterized on types, their monomorphized code is present
-//       in *client* implementations and therefore not subject to library group trampolining.  This
-//       will introduce concurrency bugs during nested launch() invocations; one way to address it
-//       would be to implement them using polymorphic functions using dynamic dispatch internally.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
 	use groups::assign_group;
-	use std::hint::unreachable_unchecked;
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
-	use timetravel::makecontext;
 
-	let mut task = None;
-	thread_setup()?;
-	makecontext(
-		// TODO: Optimize by allocating the execution stacks from a pool.
-		vec![0; STACK_SIZE_BYTES].into_boxed_slice(),
-		|context| drop(task.replace(context)),
-		schedule,
-	)?;
+	enum Completion<F, T> {
+		Function(F),
+		Return(T),
+		Empty,
+	}
 
-	let mut result = None;
-	let mut fun = Some(AssertUnwindSafe (fun));
-	let result = Box::new(move |ret: *mut Option<ThdResult<T>>| {
-		if let Some(fun) = fun.take() {
-			result.replace(catch_unwind(fun));
-		} else {
-			debug_assert!(
-				! ret.is_null(),
-				"libinger: memoized closure re-called with null output argument",
-			);
+	impl<F, T> Completion<F, T> {
+		fn take(&mut self) -> Self {
+			use std::mem::replace;
 
-			let result = result.take();
-			unsafe {
-				ret.replace(result);
-			}
+			replace(self, Completion::Empty)
+		}
+	}
+
+	// Danger, W.R.!  Although in theory libgotcha ensures there's only one copy of our library,
+	// exported parameterized functions are actually monomorphized into the *caller's* object
+	// file!  This means that this function has an inconsistent view of the worldstate if called
+	// from a preemptible function, but that any non-generic (name brand?) functions it calls
+	// are guaranteed to run in the libgotcha's shared group.  To guard against heisenbugs
+	// arising from the former case, we first assert that no one has attempted a nested call.
+	debug_assert!(! is_preemptible(), "launch(): called from preemptible function");
+
+	let mut fun = Completion::Function(AssertUnwindSafe (fun));
+	let fun = Box::new(move |ret: *mut Option<ThdResult<T>>| {
+		fun = match fun.take() {
+		Completion::Function(fun) =>
+			// We haven't yet moved the closure.  This means schedule() is invoking us
+			// as a *nullary* function, implying ret is undefined and mustn't be used.
+			Completion::Return(catch_unwind(fun)),
+		Completion::Return(val) => {
+			debug_assert!(! ret.is_null());
+			let ret = unsafe {
+				&mut *ret
+			};
+			ret.replace(val);
+			Completion::Empty
+		},
+		Completion::Empty =>
+			Completion::Empty,
 		}
 	});
 
-	let mut state = Linger (None);
-	let Linger (continuation) = &mut state;
-	let continuation = continuation.get_or_insert(TaggedLinger::Continuation(Continuation {
-		group: None,
-		task,
-		errno: 0,
-		result,
-	}));
-	let continuation = if let TaggedLinger::Continuation(continuation) = continuation {
-		continuation
-	} else {
-		unsafe {
-			unreachable_unchecked()
-		}
-	};
+	let checkpoint = setup_stack(STACK_SIZE_BYTES)?;
 	let group = assign_group().expect("launch(): too many active timed functions");
-	LAUNCHING.with(|launching| {
-		debug_assert!(
-			launching.get().is_none(),
-			"launch(): called twice concurrently from the same thread!",
-		);
-
-		let result: *mut (dyn FnMut(*mut Option<ThdResult<T>>) + Send) = &mut continuation.result;
-		let result: *mut (dyn FnMut() + Send) = result as _;
-		launching.replace(NonNull::new(result).map(|fun| (fun, *group)));
+	let mut linger = Linger::Continuation(Continuation {
+		functional: fun,
+		stateful: Task {
+			errno: None,
+			checkpoint,
+		},
+		group,
 	});
-	if us == 0 {
-		// If the user doesn't want us to run their closure yet, ask schedule() to preempt
-		// the moment it enables preemptive execution.
-		defer_preemption();
+	if us != 0 {
+		resume(&mut linger, us)?;
 	}
-	resume(&mut state, us)?;
+	Ok(linger)
+}
 
-	if let Linger (Some(TaggedLinger::Continuation(continuation))) = &mut state {
-		continuation.group.replace(group);
-	}
-
-	Ok(state)
+thread_local! {
+	static BOOTSTRAP: Cell<Option<(NonNull<(dyn FnMut() + Send)>, Group)>> = Cell::default();
+	static TASK: RefCell<Task> = RefCell::default();
+	static DEADLINE: Cell<u64> = Cell::default();
 }
 
 /// Let `fun` continue running for the specified time budget, in `us`econds.
 ///
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
-// TODO: Return the total time spent running?
-pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us: u64)
--> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>> {
-	use gotcha::group_thread_set;
-	use lifetime::unbound_mut;
-	use signal::Operation;
-	use signal::Sigset;
-	use signal::pthread_sigmask;
+pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>, us: u64)
+-> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
 	use std::panic::resume_unwind;
-	use timetravel::restorecontext;
-	use timetravel::sigsetcontext;
-	use unfurl::Unfurl;
 
-	let Linger (tfun) = fun;
-	if let TaggedLinger::Continuation(continuation) = tfun.as_mut().unwrap() {
-		let mut error = None;
-		restorecontext(
-			continuation.task.take().expect("resume(): continuation missing!"),
-			|pause| {
-				let resume = EXECUTING.with(|executing| {
-					let mut executing = executing.borrow_mut();
-					debug_assert!(
-						executing.checkpoint.is_none(),
-						"libinger: timed function tried to call launch()!",
-					);
+	// Danger, W.R!  The same disclaimer from launch() applies here.
+	debug_assert!(! is_preemptible(), "resume(): called from preemptible function");
 
-					// Add current wall-clock time, unless duration's unlimited.
-					executing.deadline = us
-						.checked_mul(1_000).map(|us| nsnow() + us)
-						.unwrap_or(us);
+	if let Linger::Continuation(continuation) = fun {
+		let task = &mut continuation.stateful;
+		let group = *continuation.group;
 
-					let resume = executing.checkpoint.get_or_insert(pause);
-					unsafe {
-						unbound_mut(resume)
-					}
-				});
-
-				if let Some(group) = &continuation.group {
-					// We're resuming a continuation that has been preempted.
-					// Do everything to enable preemption short of unblocking
-					// the signal, which will be done atomically as we jump into
-					// the continuation.
-					let mut old = Sigset::empty();
-					let mut new = Sigset::empty();
-					let sig = thread_signal();
-					let sig = unsafe {
-						sig.unfurl()
-					};
-					new.add(sig);
-					drop(pthread_sigmask(Operation::Block, &new, Some(&mut old)));
-					old.del(sig);
-					*resume.mask() = old;
-					group_thread_set!(**group);
-				}
-				*errno() = continuation.errno;
-
-				// TODO: Make sigsetcontext() restore the signal mask (in contrast
-				//       to setcontext()) so we can't get preempted until it's done.
-				let failure = sigsetcontext(resume);
-				error.replace(failure.expect("resume(): continuation invalid!"));
-			},
-		).map_err(|or| or.expect("resume(): continuation contains invalid stack!"))?;
-		if let Some(error) = error {
-			Err(error)?;
+		// Are we launching this preemptible function for the first time?
+		if task.errno.is_none() {
+			let fun = &mut continuation.functional;
+			BOOTSTRAP.with(|bootstrap| {
+				// The schedule() function is polymorphic across "return" types, but
+				// we expect a storage area appropriate for our own type.  To remove
+				// the specialization from our signature, we reduce our arity by
+				// casting away our parameter.  This is safe because schedule()
+				// represents our first caller, so we know not to read the argument.
+				let fun: *mut (dyn FnMut(_) + Send) = fun;
+				let fun: *mut (dyn FnMut() + Send) = fun as _;
+				let no_fun = bootstrap.replace(NonNull::new(fun).map(|fun|
+					(fun, group)
+				));
+				debug_assert!(
+					no_fun.is_none(),
+					"resume(): bootstraps without an intervening schedule()",
+				);
+			});
 		}
 
-		let executing = EXECUTING.with(|executing| executing.replace(Executing::default()));
-		if let Some(errno) = executing.preempted {
-			let checkpoint = executing.checkpoint
-				.expect("resume(): checkpoint missing following preemption!");
-			continuation.task.replace(checkpoint);
-			continuation.errno = errno;
-		} else {
-			let mut result = None;
-			(continuation.result)(&mut result);
+		DEADLINE.with(|deadline| deadline.replace(us));
+		if switch_stack(task, group)? {
+			// The preemptible function finished (either ran to completion or panicked).
+			// Since we know the closure is no longer running concurrently, it's now
+			// safe to call it again to retrieve the return value.
+			let mut retval = None;
+			(continuation.functional)(&mut retval);
 
-			match result.expect("resume(): return value missing on completion!") {
-				Ok(result) => drop(tfun.replace(TaggedLinger::Completion(result))),
+			match retval.expect("resume(): return value was already retrieved") {
+				Ok(retval) => *fun = Linger::Completion(retval),
 				Err(panic) => {
-					tfun.take();
+					*fun = Linger::Poison;
 					resume_unwind(panic);
 				},
 			}
@@ -290,30 +191,131 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>)>, us:
 	Ok(fun)
 }
 
-// TODO: Remove this wrapper if and when we solve the trampolining boundary issue.
-fn thread_setup() -> Result<()> {
-	use preemption::thread_setup;
+/// Set up the oneshot execution stack.  Always returns a Some when things are Ok.
+#[inline(never)]
+fn setup_stack(bytes: usize) -> Result<Option<Context<Box<[u8]>>>> {
+	use timetravel::makecontext;
 
-	thread_setup(preempt, QUANTUM_MICROSECS)
+	let mut checkpoint = None;
+	makecontext(
+		vec![0; bytes].into_boxed_slice(),
+		|goto| drop(checkpoint.replace(goto)),
+		schedule,
+	)?;
+	Ok(checkpoint)
 }
 
+/// Jump to the preemptible function, reenabling preemption if the function was previously paused.
+/// Runs on the main execution stack.  Returns whether the function "finished" without a timeout.
+#[inline(never)]
+fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
+	use gotcha::group_thread_set;
+	use lifetime::unbound_mut;
+	use signal::Operation;
+	use signal::Sigset;
+	use signal::pthread_sigmask;
+	use timetravel::restorecontext;
+	use timetravel::sigsetcontext;
+
+	let mut error = None;
+	restorecontext(
+		task.checkpoint.take().expect("switch_stack(): continuation is missing"),
+		|pause| {
+			let resume = TASK.with(|task| {
+				let mut task = task.borrow_mut();
+				debug_assert!(
+					task.checkpoint.is_none(),
+					"switch_stack(): this continuation would nest?!"
+				);
+
+				let resume = task.checkpoint.get_or_insert(pause);
+				unsafe {
+					unbound_mut(resume)
+				}
+			});
+
+			// Are we resuming a paused preemptible function?
+			if let Some(erryes) = task.errno {
+				// Do everything to enable preemption short of unblocking the
+				// signal, which will be don atomically by sigsetcontext() as it
+				// jumps into the continuation.
+				let mut old = Sigset::empty();
+				let mut new = Sigset::empty();
+				let sig = thread_signal();
+				let sig = unsafe {
+					sig.unfurl()
+				};
+				new.add(sig);
+				if let Err(or) = pthread_sigmask(
+					Operation::Block,
+					&new,
+					Some(&mut old),
+				) {
+					error.replace(or);
+				}
+				old.del(sig);
+				*resume.mask() = old;
+
+				// The clock is ticking from this "start" point.
+				stamp();
+
+				// The order of these two lines, with respect to both each other and
+				// the rest of the program, is very important.  We need to switch to
+				// the new group before we restore errno so we get the right one,
+				// and there cannot be any standard library calls between its
+				// restoration and the call to sigsetcontext().
+				group_thread_set!(group);
+				*errno() = erryes;
+			}
+
+			// No library calls may be made before this one!
+			let failure = sigsetcontext(resume);
+			error.replace(failure.expect("resume(): continuation is invalid"));
+		},
+	).map_err(|or| or.expect("resume(): continuation contains invalid stack"))?;
+	if let Some(error) = error {
+		Err(error)?;
+	}
+
+	let descheduled = TASK.with(|task| task.replace(Task::default()));
+	let preempted = descheduled.errno.is_some();
+	if preempted {
+		*task = descheduled;
+	}
+	Ok(! preempted)
+}
+
+/// Enable preemption and call the preemptible function.  Runs on the oneshot execution stack.
 fn schedule() {
 	use preemption::enable_preemption;
+	use preemption::thread_setup;
 
-	let (mut fun, group) = LAUNCHING.with(|launching| launching.take())
-		.expect("libinger: schedule() called from outside launch()!");
+	let (mut fun, group) = BOOTSTRAP.with(|bootstrap| bootstrap.take()).unwrap_or_else(||
+		abort("schedule(): called without bootstrapping")
+	);
 	let fun = unsafe {
 		fun.as_mut()
 	};
+	if let Err(or) = thread_setup(preempt, QUANTUM_MICROSECS) {
+		abort(&format!("schedule(): failure in thread_setup(): {}", or));
+	}
+	stamp();
 	enable_preemption(group.into());
 	fun();
 	disable_preemption();
+
+	// It's important that we haven't saved any errno, since we'll check it to determine whether
+	// the preemptible function ran to completion.
+	debug_assert!(
+		TASK.with(|task| task.borrow().errno.is_none()),
+		"schedule(): finished leaving errno",
+	);
 }
 
+/// Signal handler that pauses the preemptible function on timeout.  Runs on the oneshot stack.
 extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerContext>) {
-	use preemption::is_preemptible;
+	use preemption::defer_preemption;
 	use timetravel::Swap;
-	use unfurl::Unfurl;
 
 	let erryes = *errno();
 	let uc = unsafe {
@@ -321,23 +323,27 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 	};
 	let relevant = thread_signal().map(|signal| no == signal).unwrap_or(false);
 	if relevant && is_preemptible() {
-		EXECUTING.with(|executing| {
-			let mut executing = executing.borrow_mut();
-			if nsnow() >= executing.deadline {
-				// We're preempting the timed function.  Store the C library's error
-				// number and configure us to return into the stored checkpoint.
-				let checkpoint = executing.checkpoint.as_mut();
+		if nsnow() >= DEADLINE.with(|deadline| deadline.get()) {
+			TASK.with(|task| {
+				// The preemptible function has timed out.  Configure us to return
+				// into the checkpoint for its call site.
+				let mut task = task.borrow_mut();
+				let checkpoint = task.checkpoint.as_mut();
 				let checkpoint = unsafe {
 					checkpoint.unfurl()
 				};
 				checkpoint.swap(uc);
-				executing.preempted.replace(erryes);
 
-				// Disable preemption and prepare to return into libinger code.
+				// Instead of restoring errno, save it for if and when we resume.
+				task.errno.replace(erryes);
+
+				// Block this signal and disable preemption.
 				uc.uc_sigmask.add(no);
 				disable_preemption();
-			}
-		});
+			});
+		} else {
+			*errno() = erryes;
+		}
 	} else {
 		if relevant {
 			// The timed function has called into a nonpreemptible library function.
@@ -347,31 +353,21 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 
 		// Block this signal so it doesn't disturb us again.
 		uc.uc_sigmask.add(no);
+
+		*errno() = erryes;
 	}
-
-	*errno() = erryes;
 }
 
-enum TaggedLinger<T, F> {
-	Completion(T),
-	Continuation(Continuation<F>),
+/// Bump the deadline forward by the current wall-clock time, unless the timeout is unlimited.
+fn stamp() {
+	DEADLINE.with(|deadline|
+		deadline.replace(deadline.get().checked_mul(1_000).map(|timeout|
+			nsnow() + timeout
+		).unwrap_or(deadline.get()))
+	);
 }
 
-/// Opaque representation of a timed function that has not yet returned.
-// TODO: Make this non-Send!
-struct Continuation<T> {
-	group: Option<ReusableSync<'static, Group>>,
-	task: Option<Context<Box<[u8]>>>,
-	errno: c_int,
-
-	// When called, this function invokes the user-supplied closure and saves the result instead
-	// of returning it.  On the immediately *following* invocation, it returns this value.  Note
-	// that it is neither reentrant nor, consequently, AS-safe.  For this reason, care must be
-	// taken not to attempt the second call until it is already known that the first completed.
-	// TODO: Eliminate the second allocation by somehow merging this into the ancillary stack?
-	result: Box<T>,
-}
-
+/// Read the current wall-clock time, in nanoseconds.
 #[doc(hidden)]
 pub fn nsnow() -> u64 {
 	use std::time::UNIX_EPOCH;
@@ -381,4 +377,12 @@ pub fn nsnow() -> u64 {
 	let mut sum = now.subsec_nanos().into();
 	sum += now.as_secs() * 1_000_000_000;
 	sum
+}
+
+fn abort(err: &str) -> ! {
+	use std::process::abort;
+
+	let abort: fn() -> _ = abort;
+	eprintln!("{}", err);
+	abort()
 }
