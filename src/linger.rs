@@ -26,6 +26,24 @@ pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
 	Poison,
 }
 
+impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Linger<T, F> {
+	pub fn is_completion(&self) -> bool {
+		if let Linger::Completion(_) = self {
+			true
+		} else {
+			false
+		}
+	}
+
+	pub fn is_continuation(&self) -> bool {
+		if let Linger::Continuation(_) = self {
+			true
+		} else {
+			false
+		}
+	}
+}
+
 pub struct Continuation<T> {
 	// First they called for the preemptible function to be executed, and I did not read the
 	// argument because it was not present.  Then they called for the return value, and I did
