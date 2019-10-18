@@ -5,3 +5,5 @@
 *.lock
 *.rs.bk
 *.so
+
+!/.cargo/cc.so
