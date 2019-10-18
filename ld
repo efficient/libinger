@@ -9,7 +9,12 @@ do
 		then
 			LIBINGER_LINKER="`dirname "$0"`/ld.so"
 		fi
-		interp="-Wl,-I`readlink -f "$LIBINGER_LINKER"`"
+
+		if [ -n "$LIBINGER_LINKER" ]
+		then
+			interp="-Wl,-I`readlink -f "$LIBINGER_LINKER"`"
+		fi
+
 		break
 	fi
 done
