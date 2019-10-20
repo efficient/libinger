@@ -198,7 +198,7 @@ impl Actionable for () {
 	}
 }
 
-pub fn sigaction(signal: Signal, new: &Actionable, old: Option<&mut Sigaction>) -> Result<()> {
+pub fn sigaction(signal: Signal, new: &dyn Actionable, old: Option<&mut Sigaction>) -> Result<()> {
 	use libc::sigaction;
 
 	if unsafe {

@@ -17,7 +17,7 @@ pub fn assign_signal() -> SyncResult<'static, Signal> {
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
-	static mut SIGNALS: Option<SyncPool<Signal, Box<Fn() -> Option<Signal> + Sync>>> = None;
+	static mut SIGNALS: Option<SyncPool<Signal, Box<dyn Fn() -> Option<Signal> + Sync>>> = None;
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| unsafe {
 		let free = AtomicUsize::new(0);
