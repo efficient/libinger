@@ -43,7 +43,7 @@ libbenchmark.so: private LDLIBS += -ldl
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
-handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
+handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]" --blacklist-type La_x86_64_regs --blacklist-function la_x86_64_gnu_pltenter --blacklist-function la_x86_64_gnu_pltexit --blacklist-function la_x32_gnu_pltenter --blacklist-function la_x32_gnu_pltexit
 handle.rs: private CPPFLAGS += -D_GNU_SOURCE
 handle.rs: error.h namespace.h
 libgotcha_api.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types, non_upper_case_globals)]"
