@@ -162,7 +162,31 @@ static void segv(int no, siginfo_t *si, void *co) {
 	size_t index = addr & (pagesize - 1);
 	const struct plot *plot = (struct plot *) (addr - index - pagesize);
 	if(index >= PLOT_ENTRIES_PER_PAGE || plot->resolver != procedure_linkage_override) {
-		if(last_old && (greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new)) {
+		// It looks like the base of the displacement-mode address calculation isn't one we
+		// instrumented.  Maybe the code computed a custom base address using a register
+		// that we've since updated due to a separate (but nearby) dereference?
+		if(!last_old)
+			// I guess not: we haven't actually resolved any addresses before.  Bail!
+			goto out;
+
+		// See whether we can apply one of our heuristics.  Note that they currently assume
+		// that the code applied a *linear* offset to the last address we resolved.
+		if(greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new) {
+			// Let's try adding the same offset we did last time we resolved an address,
+			// because we're in one of the following common situations:
+			//  * The client code is using the same base address register as it was
+			//    during our last trip through this function.  This might indicate that
+			//    said code is using the register as an address accumulator, but doing
+			//    so in concert with some other temporary register: because of this
+			//    indirection, overwriting the register with the temporary after we
+			//    had preformed the original address resolution would have left us
+			//    unable to process any subsequent values accumulated into the register.
+			//  * The base address register is different than the one updated during our
+			//    last trip through this function, but the value of the latter has
+			//    remained unchanged since we updated it.  Because it contains a memory
+			//    address we had to resolve, this strongly suggests that the client code
+			//    has only executed a few instructions since then, which we can infer
+			//    even if that set included one or more branch instructions.
 			ptrdiff_t offset = addr - last_old;
 			mc->gregs[greg] = last_new + offset;
 			next = false;
