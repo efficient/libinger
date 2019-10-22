@@ -133,6 +133,8 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 
 static void segv(int no, siginfo_t *si, void *co) {
 	static thread_local size_t last_reg;
+	static thread_local gregset_t last_regs;
+	static thread_local uintptr_t last_next;
 	static thread_local uintptr_t last_old;
 	static thread_local uintptr_t last_new;
 
@@ -171,7 +173,9 @@ static void segv(int no, siginfo_t *si, void *co) {
 
 		// See whether we can apply one of our heuristics.  Note that they currently assume
 		// that the code applied a *linear* offset to the last address we resolved.
-		if(greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new) {
+		uintptr_t *retaddr = (uintptr_t *) mc->gregs[REG_RSP];
+		if(greg == last_reg || (uintptr_t) mc->gregs[last_reg] == last_new ||
+			(*retaddr == last_next && mc->gregs[greg] == last_regs[greg])) {
 			// Let's try adding the same offset we did last time we resolved an address,
 			// because we're in one of the following common situations:
 			//  * The client code is using the same base address register as it was
@@ -187,6 +191,16 @@ static void segv(int no, siginfo_t *si, void *co) {
 			//    address we had to resolve, this strongly suggests that the client code
 			//    has only executed a few instructions since then, which we can infer
 			//    even if that set included one or more branch instructions.
+			//  * The current return address points to the instruction immediately
+			//    following the one that faulted to result in the last invocation of
+			//    this function, and the current base address register's value has
+			//    remained the same since the faulting instruction was executed.  This
+			//    implies that said instruction was an indirect procedure call, and that
+			//    the register was probably just used to pass a pointer argument.
+			//    Because we didn't resolve the address of the indirect call until the
+			//    client code was already transferring control, there was no way for it
+			//    to have passed a pointer without performing arithmetic directly on the
+			//    dummy address present before the call.
 			ptrdiff_t offset = addr - last_old;
 			mc->gregs[greg] = last_new + offset;
 			next = false;
@@ -229,6 +243,8 @@ static void segv(int no, siginfo_t *si, void *co) {
 		// experience.  Because this is guarded, heuristics cannot chain, but multiple of
 		// them can be triggered based on a common base resolution.
 		last_reg = greg;
+		memcpy(last_regs, &mc->gregs, sizeof last_regs);
+		last_next = (uintptr_t) inst;
 		last_old = addr;
 		last_new = dest;
 	}
