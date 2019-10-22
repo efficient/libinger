@@ -223,9 +223,15 @@ static void segv(int no, siginfo_t *si, void *co) {
 
 	libgotcha_traceglobal(addr, dest);
 	mc->gregs[greg] = dest;
-	last_reg = greg;
-	last_old = addr;
-	last_new = dest;
+	if(next) {
+		// We resolved the address without applying a heuristic.  Save a record of what we
+		// changed and how to allow us to heuristically resolve addresses based on our
+		// experience.  Because this is guarded, heuristics cannot chain, but multiple of
+		// them can be triggered based on a common base resolution.
+		last_reg = greg;
+		last_old = addr;
+		last_new = dest;
+	}
 	next = false;
 
 out:
