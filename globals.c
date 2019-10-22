@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 
@@ -25,6 +26,12 @@ static void __attribute__((noinline)) libgotcha_traceglobal(uintptr_t before, ui
 	if(err)
 		fprintf(err, "libgotcha trace: rerouted memory access from %#lx to %#lx\n",
 			before, after);
+}
+
+static void unresolvable_global(const char *message) {
+	assert(message);
+	fputs(message, stderr);
+	abort();
 }
 
 // If an instruction contains a memory access to an location computed from one or more
@@ -146,6 +153,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 	*nsp = LM_ID_BASE;
 
 	bool next = true;
+	const char *error = NULL;
 	int erryes = errno;
 	ucontext_t *uc = co;
 	mcontext_t *mc = &uc->uc_mcontext;
@@ -157,8 +165,10 @@ static void segv(int no, siginfo_t *si, void *co) {
 		goto out;
 
 	uintptr_t addr = mc->gregs[greg];
-	if(!addr)
+	if(!addr) {
+		error = "libgotcha error: pointer dereference with NULL base address\n";
 		goto out;
+	}
 
 	uintptr_t pagesize = plot_pagesize();
 	size_t index = addr & (pagesize - 1);
@@ -167,9 +177,11 @@ static void segv(int no, siginfo_t *si, void *co) {
 		// It looks like the base of the displacement-mode address calculation isn't one we
 		// instrumented.  Maybe the code computed a custom base address using a register
 		// that we've since updated due to a separate (but nearby) dereference?
-		if(!last_old)
+		if(!last_old) {
 			// I guess not: we haven't actually resolved any addresses before.  Bail!
+			error = "libgotcha error: attempted to dereference unrecognized global\n";
 			goto out;
+		}
 
 		// See whether we can apply one of our heuristics.  Note that they currently assume
 		// that the code applied a *linear* offset to the last address we resolved.
@@ -204,17 +216,15 @@ static void segv(int no, siginfo_t *si, void *co) {
 			ptrdiff_t offset = addr - last_old;
 			mc->gregs[greg] = last_new + offset;
 			next = false;
-		}
+		} else
+			error = "libgotcha error: unrecognized global and no heuristic pertains\n";
 		goto out;
 	}
 
 	const struct goot *goot = plot->goot;
 	const union goot_entry *entry = goot->entries + index;
 	if(entry->free.odd_tag & 0x1) {
-		fputs_unlocked(
-			"libgotcha error: access to global address backed by dangling GOOT entry\n",
-			stderr
-		);
+		error = "libgotcha error: access to global address backed by dangling GOOT entry\n";
 		goto out;
 	}
 
@@ -230,8 +240,7 @@ static void segv(int no, siginfo_t *si, void *co) {
 	if(!dest)
 		dest = shadow->gots[LM_ID_BASE][index];
 	if(!dest) {
-		fputs_unlocked("libgotcha error: access to global backed by NULL pointer",
-			stderr);
+		error = "libgotcha error: access to global backed by NULL pointer\n";
 		goto out;
 	}
 
@@ -252,8 +261,15 @@ static void segv(int no, siginfo_t *si, void *co) {
 
 out:
 	*nsp = ns;
-	if(next)
-		handler.sa_sigaction(no, si, co);
+	if(next) {
+		if(error && config_abortsegv()) {
+			uintptr_t *sp = (uintptr_t *) (mc->gregs[REG_RSP] -= 8);
+			mc->gregs[REG_RIP] = (uintptr_t) unresolvable_global;
+			mc->gregs[REG_RDI] = (uintptr_t) error;
+			*sp = (uintptr_t) inst;
+		} else
+			handler.sa_sigaction(no, si, co);
+	}
 	errno = erryes;
 }
 
@@ -261,6 +277,9 @@ enum error globals_init(void) {
 	// Because we call this while rerouting each global variable access, and because it uses
 	// (and caches) stderr, we must bootstrap it before we begin intercepting such accesses.
 	config_traceglobals();
+
+	// Likewise, because of its use of getenv().
+	config_abortsegv();
 
 	sigset_t mask;
 	sigfillset(&mask);

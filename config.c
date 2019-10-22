@@ -46,3 +46,15 @@ FILE *config_traceglobals(void) {
 	}
 	return res;
 }
+
+bool config_abortsegv(void) {
+	static bool memo;
+	static bool res;
+	if(!memo) {
+		if((res = getenv("LIBGOTCHA_ABORTSEGV")))
+			fputs("libgotcha notice: Will abort rather than calling segfault handler\n",
+				stderr);
+		memo = true;
+	}
+	return res;
+}
