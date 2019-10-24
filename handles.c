@@ -6,6 +6,50 @@
 #include <assert.h>
 #include <link.h>
 #include <stddef.h>
+#include <string.h>
+
+static inline size_t find_lib(const char *const *deps, const char *soname) {
+	const char *const *name;
+	for(name = deps; *name && !strstr(*name, soname); ++name);
+	return name - deps;
+}
+
+static enum error sort_deps(const char **deps, const struct link_map *lib) {
+	enum error code;
+	const struct handle *h = handle_get(lib, NULL, &code);
+	if(!h)
+		return code;
+	else if(!handle_is_nodelete(h))
+		return SUCCESS;
+
+	const char *soname = strrchr(h->path, '/');
+	soname = soname ? soname + 1 : h->path;
+	if(deps[find_lib(deps, soname)])
+		return SUCCESS;
+
+	for(const ElfW(Dyn) *d = lib->l_ld; d->d_tag != DT_NULL; ++d)
+		if(d->d_tag == DT_NEEDED) {
+			const char *s = h->strtab + d->d_un.d_val;
+			struct link_map *l = namespace_get(LM_ID_BASE, s, RTLD_LAZY);
+			enum error bummer = sort_deps(deps, l);
+			if(bummer)
+				return bummer;
+		}
+
+	size_t index = find_lib(deps, soname);
+	if(!deps[index])
+		deps[index] = h->path;
+	return SUCCESS;
+}
+
+static inline enum error sort_libs(const char **deps, const struct link_map *libs) {
+	for(const struct link_map *l = libs; l; l = l->l_next) {
+		enum error bummer = sort_deps(deps, l);
+		if(bummer)
+			return bummer;
+	}
+	return SUCCESS;
+}
 
 // Create a new namespace, populating it with our own unmarked copies of any libraries that were
 // initially marked with the NODELETE flag.  This way, further libraries loaded into this namespace
