@@ -71,15 +71,22 @@ enum error handles_shadow(const struct link_map *root) {
 }
 
 bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
+	const struct handle *bin = NULL;
 	for(const struct link_map *l = root; l; l = l->l_next) {
 		const struct handle *h = handle_get(l, NULL, NULL);
 		assert(h);
+		if(!bin)
+			bin = h;
+
 		if(h->owned) {
 			struct link_map *n = namespace_get(namespace, h->path, RTLD_LAZY);
 			assert(n);
 			dlclose(n);
 		}
 	}
+
+	// The namespace should now be empty (and nonexistent by the dynamic linker's definition)!
+	assert(!namespace_get(namespace, bin->path, RTLD_LAZY) && dlerror());
 
 	nodelete_preshadow(root, namespace);
 	for(const struct link_map *l = root; l; l = l->l_next)

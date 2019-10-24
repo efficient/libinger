@@ -53,6 +53,7 @@ static inline enum error init(void) {
 	if(in_ancillary_namespace())
 		// We don't want to initialize any copies of ourself that we may have loaded.
 		return ancillary_disable_ctors_dtors();
+	assert(namespace_self() && "libgotcha clash from in_ancillary_namespace() false negative");
 
 	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
 	// will be routed to their external definitions.
