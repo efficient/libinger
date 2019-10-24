@@ -16,8 +16,28 @@
 
 static struct link_map *root;
 
-static inline bool in_ancillary_namespace(void) {
-	return !namespace_self();
+static unsigned addr_width(void) {
+	unsigned word_size = sizeof &addr_width * 8;
+	for(unsigned bit = word_size - 1; bit; --bit)
+		if(((uintptr_t) addr_width) >> bit == 0x1)
+			return bit;
+	return word_size;
+}
+
+static bool in_ancillary_namespace(void) {
+	// Should resolve to the executable's .text section, which the kernel and dynamic linker
+	// load at wildly different addresses.  We'll compare against our own address to decide
+	// which one loaded the current namespace's copy of the executable.
+	#pragma weak _start
+	void _start(void);
+
+	if(!_start) {
+		fputs("libgotcha error: missing _start symbol (rebuild executable?)", stderr);
+		abort();
+	}
+
+	uintptr_t mask = 0x3ul << (addr_width() - 1);
+	return ((uintptr_t) _start & mask) == ((uintptr_t) in_ancillary_namespace & mask);
 }
 
 static inline enum error hook_object(struct handle *h, const struct link_map *l) {
