@@ -299,6 +299,9 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 	let preempted = descheduled.errno.is_some();
 	if preempted {
 		*task = descheduled;
+	} else {
+		// Prevent namespace reinitialization on drop of Continuation containing the Task.
+		task.errno.take();
 	}
 	Ok(! preempted)
 }
