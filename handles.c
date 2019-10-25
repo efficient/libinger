@@ -8,10 +8,10 @@
 #include <stddef.h>
 #include <string.h>
 
-static inline size_t find_lib(const char *const *deps, const char *soname) {
-	const char *const *name;
-	for(name = deps; *name && !strstr(*name, soname); ++name);
-	return name - deps;
+static inline size_t find_lib(const char *const *deps, const char *name) {
+	const char *const *it;
+	for(it = deps; *it && strcmp(*it, name); ++it);
+	return it - deps;
 }
 
 static enum error sort_deps(const char **deps, const struct link_map *lib) {
@@ -19,12 +19,7 @@ static enum error sort_deps(const char **deps, const struct link_map *lib) {
 	const struct handle *h = handle_get(lib, NULL, &code);
 	if(!h)
 		return code;
-	else if(!handle_is_nodelete(h))
-		return SUCCESS;
-
-	const char *soname = strrchr(h->path, '/');
-	soname = soname ? soname + 1 : h->path;
-	if(deps[find_lib(deps, soname)])
+	else if(!handle_is_nodelete(h) || deps[find_lib(deps, h->path)])
 		return SUCCESS;
 
 	for(const ElfW(Dyn) *d = lib->l_ld; d->d_tag != DT_NULL; ++d)
@@ -36,7 +31,7 @@ static enum error sort_deps(const char **deps, const struct link_map *lib) {
 				return bummer;
 		}
 
-	size_t index = find_lib(deps, soname);
+	size_t index = find_lib(deps, h->path);
 	if(!deps[index])
 		deps[index] = h->path;
 	return SUCCESS;
