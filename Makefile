@@ -68,6 +68,7 @@ gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
+handles.o: private CFLAGS += -fpic
 handles.o: private CPPFLAGS += -D_GNU_SOURCE
 handles.o: handles.h error.h handle.h namespace.h
 init.o: private CFLAGS += -fpic

@@ -202,6 +202,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 	uint64_t flags = 0;
 	uint64_t flags_1 = 0;
+	size_t soname = 0;
 	const struct sym_hash *symhash = NULL;
 	size_t njmpslots = 0;
 	size_t nmiscrels = 0;
@@ -213,6 +214,9 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			break;
 		case DT_FLAGS_1:
 			flags_1 = d->d_un.d_val;
+			break;
+		case DT_SONAME:
+			soname = d->d_un.d_val;
 			break;
 		case DT_SYMTAB:
 			h->symtab = (ElfW(Sym) *) d->d_un.d_ptr;
@@ -305,6 +309,12 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 	if(h->lazygot_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
 		h->eager = true;
+
+	if(soname) {
+		const char *sopath = strrchr(h->path, '/');
+		sopath = sopath ? sopath + 1 : h->path;
+		h->sonamed = !strcmp(h->strtab + soname, sopath);
+	}
 
 	bool partial = whitelist_so_partial(h->path);
 
