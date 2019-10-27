@@ -1,4 +1,5 @@
 use gotcha::Group;
+use preemption::defer_preemption;
 use preemption::disable_preemption;
 use preemption::is_preemptible;
 use preemption::thread_signal;
@@ -42,6 +43,14 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Linger<T, F> {
 			false
 		}
 	}
+
+	pub fn yielded(&self) -> bool {
+		if let Linger::Continuation(continuation) = self {
+			continuation.stateful.yielded
+		} else {
+			false
+		}
+	}
 }
 
 pub struct Continuation<T> {
@@ -78,6 +87,7 @@ struct Task {
 	//  * Some at either point means it timed out and is currently paused.
 	errno: Option<c_int>,
 	checkpoint: Option<Context<Box<[u8]>>>,
+	yielded: bool,
 }
 
 /// Run `fun` with the specified time budget, in `us`econds.
@@ -139,6 +149,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		stateful: Task {
 			errno: None,
 			checkpoint,
+			yielded: false,
 		},
 		group,
 	});
@@ -338,7 +349,6 @@ fn schedule() {
 
 /// Signal handler that pauses the preemptible function on timeout.  Runs on the oneshot stack.
 extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerContext>) {
-	use preemption::defer_preemption;
 	use timetravel::Swap;
 
 	let erryes = *errno();
@@ -347,11 +357,16 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 	};
 	let relevant = thread_signal().map(|signal| no == signal).unwrap_or(false);
 	if relevant && is_preemptible() {
-		if nsnow() >= DEADLINE.with(|deadline| deadline.get()) {
+		let deadline = DEADLINE.with(|deadline| deadline.get());
+		if nsnow() >= deadline {
 			TASK.with(|task| {
-				// The preemptible function has timed out.  Configure us to return
-				// into the checkpoint for its call site.
+				// It's time to pause the function.  We need to save its state.
 				let mut task = task.borrow_mut();
+
+				// Did it cooperatively yield instead of being preempted?
+				task.yielded = deadline == 0;
+
+				// Configure us to return into the checkpoint for its call site.
 				let checkpoint = task.checkpoint.as_mut();
 				let checkpoint = unsafe {
 					checkpoint.unfurl()
@@ -389,6 +404,17 @@ fn stamp() {
 			nsnow() + timeout
 		).unwrap_or(deadline.get()))
 	);
+}
+
+/// Immediately yield the calling preemptible function.
+#[inline(never)]
+pub fn pause() {
+	// Note that this function is not parameterized, so it is itself nonpreemptible.  This is
+	// key because we need to be able to request preemption atomically (so we only get one).
+	DEADLINE.with(|deadline| deadline.take());
+
+	// Get preempted when we return.
+	defer_preemption();
 }
 
 /// Read the current wall-clock time, in nanoseconds.
