@@ -55,6 +55,8 @@ pub struct Continuation<T> {
 	group: ReusableSync<'static, Group>,
 }
 
+unsafe impl<T> Send for Continuation<T> {}
+
 impl<T> Drop for Continuation<T> {
 	fn drop(&mut self) {
 		debug_assert!(! is_preemptible(), "libinger: dropped from preemptible function");
@@ -234,6 +236,11 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 	use signal::pthread_sigmask;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
+	use preemption::thread_setup;
+
+	if let Err(or) = thread_setup(preempt, QUANTUM_MICROSECS) {
+		abort(&format!("switch_stack(): failure in thread_setup(): {}", or));
+	}
 
 	let mut error = None;
 	restorecontext(
@@ -309,7 +316,6 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 /// Enable preemption and call the preemptible function.  Runs on the oneshot execution stack.
 fn schedule() {
 	use preemption::enable_preemption;
-	use preemption::thread_setup;
 
 	let (mut fun, group) = BOOTSTRAP.with(|bootstrap| bootstrap.take()).unwrap_or_else(||
 		abort("schedule(): called without bootstrapping")
@@ -317,9 +323,6 @@ fn schedule() {
 	let fun = unsafe {
 		fun.as_mut()
 	};
-	if let Err(or) = thread_setup(preempt, QUANTUM_MICROSECS) {
-		abort(&format!("schedule(): failure in thread_setup(): {}", or));
-	}
 	stamp();
 	enable_preemption(group.into());
 	fun();
