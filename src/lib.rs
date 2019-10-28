@@ -4,6 +4,7 @@ extern crate signal;
 extern crate timetravel;
 
 mod compile_assert;
+pub mod future;
 mod groups;
 mod lifetime;
 mod linger;

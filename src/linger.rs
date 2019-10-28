@@ -27,6 +27,8 @@ pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
 	Poison,
 }
 
+impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Unpin for Linger<T, F> {}
+
 impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Linger<T, F> {
 	pub fn is_completion(&self) -> bool {
 		if let Linger::Completion(_) = self {
