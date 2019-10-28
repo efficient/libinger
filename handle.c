@@ -348,6 +348,11 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		}
 	}
 	for(const ElfW(Sym) *st = h->symtab; st != h->symtab_end; ++st)
+		// Note that symbols that are the subject of COPY relocations are considered to be
+		// in the executable rather than the object file in which they are
+		// logically/programmatically defined.  These unexpected semantics may be difficult
+		// to reason about.  We output a warning whenever we encounter such a relocation,
+		// though, so the user has been warned.
 		if((partial || st->st_shndx != SHN_UNDEF) &&
 			ELF64_ST_TYPE(st->st_info) == STT_OBJECT) {
 			size_t tramp = trampolines_get(h->baseaddr + st->st_value);
@@ -603,10 +608,32 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 
 	bool partial = whitelist_so_partial(h->path);
 
-	// Note that symbols that are the subject of COPY relocations are considered to be in the
-	// executable rather than the object file in which they are logically/programmatically
-	// defined.  These unexpected semantics may be difficult to reason about.  We output a
-	// warning whenever we encounter such a relocation, though, so the user has been warned.
+	// First, update ancillary namespaces' shadow GOT entries for symbols defined in this same
+	// object.  These entries are shared among all GLOB_DAT relocations throughout the entire
+	// application in order to preserve pointer-comparison semantics.  They must be populated
+	// before we alter the GOT entries corresponding to local such relocations, which might
+	// occur within IFUNC relocations' resolver functions!
+	if(*h->shadow.gots && n)
+		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
+			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
+			uintptr_t *sgot = h->shadow.gots[n] + tramp;
+			uintptr_t defn = base + st->st_value;
+
+			if(ELF64_ST_TYPE(st->st_info) == STT_GNU_IFUNC) {
+				uintptr_t (*resolver)(void) = (uintptr_t (*)(void)) defn;
+				defn = resolver();
+			}
+
+			// No symbol's shadow GOT entry can be the same as its GOT entry; otherwise,
+			// any attempt to call it will result in infinite recursion!
+			assert(defn != trampolines_get(h->shadow.gots[0][tramp]));
+
+			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
+			// the address of this ancillary namespace's own definition.
+			*sgot = sgot_entry(h->strtab + st->st_name, n, defn);
+		}
+
+	// Next, overwrite the GOT entries for GLOB_DAT relocations with trampolines or traps.
 	prot_segment(base, h->eagergot_seg, PROT_WRITE);
 	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
 		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
@@ -649,22 +676,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 	if(!*h->shadow.gots)
 		return;
 
-	if(n)
-		for(unsigned tramp = 0; tramp < h->ntramps_symtab; ++tramp) {
-			const ElfW(Sym) *st = h->symtab + h->tramps[tramp];
-			uintptr_t *sgot = h->shadow.gots[n] + tramp;
-			uintptr_t defn = base + st->st_value;
-
-			if(ELF64_ST_TYPE(st->st_info) == STT_GNU_IFUNC) {
-				uintptr_t (*resolver)(void) = (uintptr_t (*)(void)) defn;
-				defn = resolver();
-			}
-
-			// Populate the shadow GOT entry.  If we're multiplexing this symbol, use
-			// the address of this ancillary namespace's own definition.
-			*sgot = sgot_entry(h->strtab + st->st_name, n, defn);
-		}
-
+	// Finally, update the GOT and shadow GOT entries corresponding to JUMP_SLOT relocations.
 	const ElfW(Rela) *jmpslots = (ElfW(Rela) *) ((uintptr_t) h->jmpslots - h->baseaddr + base);
 	prot_segment(base, h->lazygot_seg, PROT_WRITE);
 	if(!h->eager)
