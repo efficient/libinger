@@ -43,10 +43,10 @@ pub fn enable_preemption(group: Option<Group>) {
 
 	let signal = thread_signal()
 		.expect("libinger: tried to enable preemption before setting up thread preemption");
-	DEFERRED.with(|deferred| if deferred.replace(false) {
+	if DEFERRED.with(|deferred| deferred.replace(false)) {
 		drop(pthread_kill(pthread_self(), signal));
 		unblock = true;
-	});
+	}
 
 	if unblock {
 		drop(mask(Operation::Unblock, signal));
