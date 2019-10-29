@@ -4,7 +4,7 @@
 #include <dlfcn.h>
 #include <stdbool.h>
 
-#define NUM_SHADOW_NAMESPACES 2
+#define NUM_SHADOW_NAMESPACES 15
 
 struct link_map;
 
