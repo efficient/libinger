@@ -11,8 +11,8 @@ struct link_map;
 // Guarantees its *only* side effect is to clobber the return register.
 Lmid_t *namespace_thread(void);
 
-// Check whether the current thread is currently executing the shared-code completion trampoline.
-bool *namespace_thread_tramp(void);
+// Check whether the current namespace is currently executing the shared-code completion trampoline.
+bool *namespace_trampolining(Lmid_t);
 
 // Returns the our own handle only if we're loaded in the base namespace (including LD_PRELOADs).
 const struct link_map *namespace_self(void);

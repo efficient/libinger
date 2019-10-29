@@ -161,5 +161,8 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 			return false;
 	nodelete_postshadow(libs, namespace, missing);
 
+	// Unlock the shared code callback, in case it was running when we were canceled.
+	*namespace_trampolining(namespace) = false;
+
 	return true;
 }

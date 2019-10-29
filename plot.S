@@ -106,7 +106,8 @@ hook_trampoline:
 	call namespace_thread        // namespace address
 	mov  %rcx, (%rax)            // restore namespace
 
-	call namespace_thread_tramp  // trampolining address
+	mov  %rcx, %rdi              // namespace
+	call namespace_trampolining  // trampolining address
 	mov  (%rax), %cl             // trampolining
 	test %cl, %cl
 	jnz  .Lskip_hook
@@ -131,7 +132,8 @@ hook_trampoline:
 hook_ret:
 .cfi_startproc
 .cfi_adjust_cfa_offset 8
-	call namespace_thread_tramp  // trampolining address
+	xor  %rdi, %rdi              // sentinel to look up namespace
+	call namespace_trampolining  // trampolining address
 	movb $0, (%rax)              // "unlock," as John Bercow would say
 .Lskip_hook:
 

@@ -10,9 +10,11 @@ Lmid_t *namespace_thread(void) {
 	return &namespace;
 }
 
-bool *namespace_thread_tramp(void) {
-	static thread_local bool trampolining;
-	return &trampolining;
+bool *namespace_trampolining(Lmid_t optional) {
+	static bool trampolining[NUM_SHADOW_NAMESPACES];
+	Lmid_t namespace = optional ? optional : *namespace_thread();
+	assert(namespace);
+	return trampolining + namespace - 1;
 }
 
 const struct link_map *namespace_self(void) {
