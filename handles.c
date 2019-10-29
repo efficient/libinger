@@ -130,6 +130,8 @@ enum error handles_shadow(const struct link_map *root) {
 }
 
 bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
+	assert(namespace);
+
 	const struct handle *bin = NULL;
 	for(const struct link_map *l = root; l; l = l->l_next) {
 		const struct handle *h = handle_get(l, NULL, NULL);
