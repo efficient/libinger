@@ -102,6 +102,8 @@ hook_trampoline:
 .cfi_adjust_cfa_offset 8
 	mov  (%rsp), %rcx            // namespace
 	mov  %rax, (%rsp)            // save %rax
+	push %rdx                    // save %rdx
+	sub  $8, %rsp                // alignment
 
 	call namespace_thread        // namespace address
 	mov  %rcx, (%rax)            // restore namespace
@@ -137,6 +139,8 @@ hook_ret:
 	movb $0, (%rax)              // "unlock," as John Bercow would say
 .Lskip_hook:
 
+	add  $8, %rsp
+	pop  %rdx
 	pop  %rax
 .cfi_adjust_cfa_offset -8
 	ret                          // preserved return address
