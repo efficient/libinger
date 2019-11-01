@@ -8,7 +8,7 @@ fn main() -> Result {
 	let mut make = Command::new("make");
 	make.arg("libgotcha.o");
 	make.arg("libgotcha_api.rs");
-	if var("PROFILE")? == "debug" {
+	if var("DEBUG")?.parse()? {
 		make.arg("ASFLAGS=-g");
 		make.arg("CFLAGS=-g3 -Og");
 		make.arg("RUSTFLAGS=-g -Copt-level=0");
