@@ -337,7 +337,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 		if(!h->ldaccess && !strcmp(h->strtab + st->st_name, "_rtld_global")) {
 			// This object file accesses the dynamic linker's mutable global storage.
-			if(!whitelist_so_contains(h->path))
+			if(!whitelist_so_contains(h->path) && strcmp(h->path, interp_path()))
 				fprintf(stderr,
 					"%s: libgotcha warning: %s: unwhitelisted GL() access\n",
 					handle_progname(), h->path);
