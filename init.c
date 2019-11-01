@@ -32,7 +32,13 @@ static bool in_ancillary_namespace(void) {
 	void _start(void);
 
 	if(!_start) {
-		fputs("libgotcha error: missing _start symbol (rebuild executable?)", stderr);
+		if(strstr(getenv("LD_PRELOAD"), namespace_self()->l_name))
+			// We've been preloaded.  It's safe to skip the check (as long as the
+			// executable doesn't *also* depend on us, even transitively): we won't load
+			// duplicate copies of ourselves into the ancillary namespaces.
+			return false;
+
+		fputs("libgotcha error: missing _start symbol (rebuild executable?)\n", stderr);
 		abort();
 	}
 
