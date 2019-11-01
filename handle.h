@@ -27,6 +27,7 @@ struct handle {
 
 	char *path;
 	uintptr_t baseaddr;
+	bool vdso;
 	bool owned;
 	bool eager;
 	bool sonamed;

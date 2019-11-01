@@ -6,6 +6,7 @@
 #include "segprot.h"
 #include "whitelist.h"
 
+#include <sys/auxv.h>
 #include <sys/stat.h>
 #include <assert.h>
 #include <fcntl.h>
@@ -192,6 +193,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		return ERROR_FNAME_PATH;
 
 	h->baseaddr = l->l_addr;
+	h->vdso = h->baseaddr == getauxval(AT_SYSINFO_EHDR);
 	if(owner == l) {
 		h->owned = true;
 		if(owner == dlopen(NULL, RTLD_LAZY))
@@ -247,7 +249,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	assert(h->symtab && "Dynamic section without SYMTAB entry");
 	assert(h->strtab && "Dynamic section without STRTAB entry");
 
-	if(!strchr(h->path, '/')) {
+	if(h->vdso) {
 		// The vdso's dynamic section doesn't get relocated like other object files', so do
 		// that manually here.
 		h->symtab = (ElfW(Sym) *) (h->baseaddr + (uintptr_t) h->symtab);
@@ -725,7 +727,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 enum error handle_got_shadow(struct handle *h) {
 	assert(h);
 
-	if(!strchr(h->path, '/')) {
+	if(h->vdso) {
 		// Do not attempt to operate on the vdso, which isn't recognized by dlopen() and
 		// shouldn't be multiplexed anyway.  This is safe because all its functions are
 		// reentrant and it does not contain any dynamic relocations.  We must, however,
@@ -808,7 +810,7 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 		return true;
 
 	// Ensure this is not the vdso or the dynamic linker.
-	if(!strchr(h->path, '/') || !strcmp(h->path, interp_path()))
+	if(h->vdso || !strcmp(h->path, interp_path()))
 		return true;
 
 	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
