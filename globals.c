@@ -21,6 +21,8 @@ static DisasmCtx_t *ctx;
 static Ebl ebl;
 static struct sigaction handler;
 
+static thread_local bool saw_call_instr;
+
 static void __attribute__((noinline)) libgotcha_traceglobal(uintptr_t before, uintptr_t after) {
 	FILE *err = config_traceglobals();
 	if(err)
@@ -133,9 +135,16 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 			}
 		}
 	}
+	saw_call_instr = !strncmp(str, "call", 4);
 
 	// Stop after processing the first instruction.
 	return 1;
+}
+
+static inline bool disasm_instr(const uint8_t **inst, size_t *base_addr_reg) {
+	disasm_cb(ctx, inst, *inst + X86_64_MAX_INSTR_LEN, 0, "%m %.1o,%.2o,%.3o",
+		addr_calc_base_gpr, base_addr_reg, NULL);
+	return true;
 }
 
 static void segv(int no, siginfo_t *si, void *co) {
@@ -159,10 +168,34 @@ static void segv(int no, siginfo_t *si, void *co) {
 	mcontext_t *mc = &uc->uc_mcontext;
 	size_t greg;
 	const uint8_t *inst = (uint8_t *) mc->gregs[REG_RIP];
-	disasm_cb(ctx, &inst, inst + X86_64_MAX_INSTR_LEN, 0, "%.1o,%.2o,%.3o",
-		addr_calc_base_gpr, &greg, NULL);
-	if((signed) greg == -1)
-		goto out;
+	if(inst == si->si_addr) {
+		// Woah!  The error was in executing this instruction, which probably means it's
+		// unreadable.  Let's *not* try to disassemble it; instead, we'll see whether we
+		// just followed a misguided indirect call instruction.  First search backward from
+		// the return address for such an instruction...
+		bool hit = false;
+		const uint8_t *cur;
+		const uint8_t *retaddr = *(uint8_t **) mc->gregs[REG_RSP];
+		for(cur = inst = retaddr - 1;
+			cur >= retaddr - X86_64_MAX_INSTR_LEN && disasm_instr(&inst, &greg) &&
+			(!saw_call_instr || inst != retaddr || (signed) greg == -1 ||
+			!(hit = true));
+			inst = --cur);
+
+		if(hit) {
+			// We found a plausible instruction.  At this point instr has been set back
+			// to the return address, but cur points to the call instruction we need to
+			// reexecute, and greg contains the index of the base-address register from
+			// its displacement-mode memory address operand.
+			mc->gregs[REG_RIP] = (uintptr_t) cur;
+			mc->gregs[REG_RSP] += 8;
+		} else
+			goto out;
+	} else {
+		disasm_instr(&inst, &greg);
+		if((signed) greg == -1)
+			goto out;
+	}
 
 	uintptr_t addr = mc->gregs[greg];
 	if(!addr) {
