@@ -141,10 +141,15 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 	return 1;
 }
 
+// Disassembles the instruction at address inst, updating:
+//  * inst to point at the following instruction (which in some cases will be a return address)
+//  * base_addr_reg with the index of the general-purpose register containing the base of the
+//    address calculation, or -1 if no displacement-mode memory address operand was found
+//  * its return value to indicate whether it happened to process a call instruction
 static inline bool disasm_instr(const uint8_t **inst, size_t *base_addr_reg) {
 	disasm_cb(ctx, inst, *inst + X86_64_MAX_INSTR_LEN, 0, "%m %.1o,%.2o,%.3o",
 		addr_calc_base_gpr, base_addr_reg, NULL);
-	return true;
+	return saw_call_instr;
 }
 
 static void segv(int no, siginfo_t *si, void *co) {
@@ -177,8 +182,8 @@ static void segv(int no, siginfo_t *si, void *co) {
 		const uint8_t *cur;
 		const uint8_t *retaddr = *(uint8_t **) mc->gregs[REG_RSP];
 		for(cur = inst = retaddr - 1;
-			cur >= retaddr - X86_64_MAX_INSTR_LEN && disasm_instr(&inst, &greg) &&
-			(!saw_call_instr || inst != retaddr || (signed) greg == -1 ||
+			cur >= retaddr - X86_64_MAX_INSTR_LEN &&
+			(!disasm_instr(&inst, &greg) || inst != retaddr || (signed) greg == -1 ||
 			!(hit = true));
 			inst = --cur);
 
