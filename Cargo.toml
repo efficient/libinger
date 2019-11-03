@@ -18,4 +18,11 @@ path = "internal/libsignal"
 [dependencies.timetravel]
 path = "external/libtimetravel"
 
+[[bench]]
+name = "inger"
+harness = false
+
+[dev-dependencies]
+bencher = "*"
+
 [workspace]
