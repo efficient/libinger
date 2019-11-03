@@ -9,6 +9,7 @@ mod groups;
 mod lifetime;
 mod linger;
 mod preemption;
+pub mod profiler;
 mod reusable;
 mod signals;
 mod timer;
