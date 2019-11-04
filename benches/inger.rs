@@ -12,7 +12,7 @@ use std::sync::atomic::Ordering;
 
 const LIBSETS: usize = 511;
 
-benchmark_group![bench, launch, resume];
+benchmark_group![bench, launch, resume, renew];
 
 fn launch(lo: &mut Bencher) {
 	use inger::launch;
@@ -99,6 +99,16 @@ fn resume(lo: &mut Bencher) {
 
 	run.store(false, Ordering::Relaxed);
 	resume(&mut linger, u64::max_value()).unwrap();
+}
+
+fn renew(lo: &mut Bencher) {
+	use inger::launch;
+
+	let lingers: Vec<_> = (0..LIBSETS).map(|_| launch(pause, u64::max_value()).unwrap()).collect();
+	let mut lingers = lingers.into_iter();
+	lo.iter(||
+		drop(lingers.next())
+	);
 }
 
 benchmark_main! {
