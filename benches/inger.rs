@@ -3,6 +3,7 @@ extern crate bencher;
 extern crate inger;
 
 use bencher::Bencher;
+use inger::pause;
 use std::fs::File;
 use std::io::Write;
 
@@ -21,13 +22,12 @@ fn launch(lo: &mut Bencher) {
 	let mut index = 0;
 	lo.iter(|| {
 		if index < lingers.len() {
-			lingers[index] = MaybeUninit::new(launch(|| (), 0).unwrap());
+			lingers[index] = MaybeUninit::new(launch(pause, u64::max_value()).unwrap());
 		}
 		index += 1;
 	});
 
 	if let Ok(mut file) = File::create("bench_launch.log") {
-		writeln!(file, "don't forget to add in the time for resume()").unwrap();
 		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
@@ -49,7 +49,6 @@ fn launch(lo: &mut Bencher) {
 fn resume(lo: &mut Bencher) {
 	use inger::launch;
 	use inger::nsnow;
-	use inger::pause;
 	use inger::resume;
 	use std::sync::atomic::AtomicBool;
 	use std::sync::atomic::AtomicU64;
