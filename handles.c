@@ -155,7 +155,7 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 	bool missing = false;
 	enum error code = sort_libs(libs, &missing, root);
 	if(code != SUCCESS)
-		return code;
+		return false;
 
 	nodelete_preshadow(libs, namespace, missing);
 	for(const struct link_map *l = root; l; l = l->l_next)
