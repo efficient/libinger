@@ -3,6 +3,7 @@
 
 *.a
 *.lock
+*.log
 *.rs.bk
 *.so
 
