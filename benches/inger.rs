@@ -3,9 +3,12 @@ extern crate bencher;
 extern crate inger;
 
 use bencher::Bencher;
+use inger::nsnow;
 use inger::pause;
 use std::fs::File;
 use std::io::Write;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
 const LIBSETS: usize = 511;
 
@@ -19,15 +22,31 @@ fn launch(lo: &mut Bencher) {
 	let mut lingers: [MaybeUninit<_>; LIBSETS] = unsafe {
 		MaybeUninit::uninit().assume_init()
 	};
+	let during = AtomicU64::default();
+
+	let mut into = 0;
+	let mut outof = 0;
 	let mut index = 0;
 	lo.iter(|| {
 		if index < lingers.len() {
-			lingers[index] = MaybeUninit::new(launch(pause, u64::max_value()).unwrap());
+			let before = nsnow();
+			lingers[index] = MaybeUninit::new(launch(|| {
+				during.store(nsnow(), Ordering::Relaxed);
+				pause();
+			}, u64::max_value()).unwrap());
+
+			let after = nsnow();
+			let during = during.load(Ordering::Relaxed);
+			into += during - before;
+			outof += after - during;
 		}
 		index += 1;
 	});
 
 	if let Ok(mut file) = File::create("bench_launch.log") {
+		let index: u64 = index as _;
+		writeln!(file, "entry launch ... {} ns/iter", into / index).unwrap();
+		writeln!(file, "exit  launch ... {} ns/iter", outof / index).unwrap();
 		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
@@ -48,11 +67,8 @@ fn launch(lo: &mut Bencher) {
 
 fn resume(lo: &mut Bencher) {
 	use inger::launch;
-	use inger::nsnow;
 	use inger::resume;
 	use std::sync::atomic::AtomicBool;
-	use std::sync::atomic::AtomicU64;
-	use std::sync::atomic::Ordering;
 
 	let run = AtomicBool::from(true);
 	let during = AtomicU64::default();
