@@ -70,11 +70,12 @@ static inline const struct link_map *search_soname(const char *fullname) {
 // Create a new namespace, populating it with our own unmarked copies of any libraries that were
 // initially marked with the NODELETE flag.  This way, further libraries loaded into this namespace
 // will use our copies instead of the system ones to satisfy their dependencies.
-static void nodelete_preshadow(const char *const *libs, Lmid_t namespace, bool workaround) {
+static bool nodelete_preshadow(const char *const *libs, Lmid_t namespace, bool workaround) {
 	Lmid_t new = LM_ID_NEWLM;
 	for(const char *const *lib = libs; *lib; ++lib) {
 		struct link_map *l = dlmopen(new, *lib, RTLD_LAZY);
-		assert(l);
+		if(!l)
+			return false;
 
 		if(workaround && !handle_get(search_soname(l->l_name), NULL, NULL)->sonamed)
 			// Force the dynamic linker to consider this object when satisfying future
@@ -84,6 +85,7 @@ static void nodelete_preshadow(const char *const *libs, Lmid_t namespace, bool w
 
 		new = namespace;
 	}
+	return true;
 }
 
 // Fix the reference counts of any loaded libraries in the specified namespace that are marked
@@ -115,7 +117,8 @@ enum error handles_shadow(const struct link_map *root) {
 			stderr);
 
 	for(Lmid_t n = 1; n <= NUM_SHADOW_NAMESPACES; ++n)
-		nodelete_preshadow(libs, n, missing);
+		if(!nodelete_preshadow(libs, n, missing))
+			return ERROR_DLMOPEN;
 
 	for(const struct link_map *l = root; l; l = l->l_next) {
 		enum error code = handle_update(l, handle_got_shadow);
@@ -154,17 +157,25 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 
 	bool missing = false;
 	enum error code = sort_libs(libs, &missing, root);
-	if(code != SUCCESS)
+	if(code != SUCCESS) {
+		fprintf(stderr, "libgotcha warning: %s: %s\n",
+			error_message(code), error_explanation(code));
 		return false;
+	}
 
-	nodelete_preshadow(libs, namespace, missing);
+	if(!nodelete_preshadow(libs, namespace, missing))
+		goto drat;
 	for(const struct link_map *l = root; l; l = l->l_next)
 		if(!handle_got_reshadow(handle_get(l, NULL, NULL), namespace))
-			return false;
+			goto drat;
 	nodelete_postshadow(libs, namespace, missing);
 
 	// Unlock the shared code callback, in case it was running when we were canceled.
 	*namespace_trampolining(namespace) = false;
 
 	return true;
+
+drat:
+	fprintf(stderr, "libgotcha warning: %s (ld.so TLS_STATIC_SURPLUS too low?)\n", dlerror());
+	return false;
 }
