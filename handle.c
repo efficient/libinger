@@ -569,6 +569,7 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 		return;
 
 	// Look for JUMP_SLOT relocations against symbols we need to interpose with our own.
+	prot_segment(h->baseaddr, h->lazygot_seg, PROT_WRITE);
 	for(unsigned tramp = h->ntramps_symtab; tramp < h->ntramps; ++tramp) {
 		const ElfW(Rela) *r = h->jmpslots + h->tramps[tramp];
 		const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
@@ -577,6 +578,7 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 			// Substitute our own trampoline over the GOT entry.
 			*(uintptr_t *) (h->baseaddr + r->r_offset) = interposed;
 	}
+	prot_segment(h->baseaddr, h->lazygot_seg, 0);
 
 	// We must add this to the whitelist so that any lazily-resolved
 	// calls from other object files also proxy to the base namespace.
