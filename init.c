@@ -1,3 +1,4 @@
+#include <sys/auxv.h>
 #include "ancillary.h"
 #include "config.h"
 #include "globals.h"
@@ -9,6 +10,7 @@
 
 #include <sys/mman.h>
 #include <assert.h>
+#include <link.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,34 +19,26 @@
 
 static struct link_map *root;
 
-static unsigned addr_width(void) {
-	unsigned word_size = sizeof &addr_width * 8;
-	for(unsigned bit = word_size - 1; bit; --bit)
-		if(((uintptr_t) addr_width) >> bit == 0x1)
-			return bit;
-	return word_size;
-}
-
-static bool in_ancillary_namespace(void) {
-	// Should resolve to the executable's .text section, which the kernel and dynamic linker
-	// load at wildly different addresses.  We'll compare against our own address to decide
-	// which one loaded the current namespace's copy of the executable.
+static inline bool already_bootstrapping(void) {
 	#pragma weak _start
 	void _start(void);
 
-	if(!_start) {
-		if(strstr(getenv("LD_PRELOAD"), namespace_self()->l_name))
-			// We've been preloaded.  It's safe to skip the check (as long as the
-			// executable doesn't *also* depend on us, even transitively): we won't load
-			// duplicate copies of ourselves into the ancillary namespaces.
-			return false;
+	void (*start)(void) = (void (*)(void)) getauxval(AT_ENTRY);
+	if(start != _start) {
+		const char *preload = getenv("LD_PRELOAD");
+		if(!preload)
+			return true;
 
-		fputs("libgotcha error: missing _start symbol (rebuild executable?)\n", stderr);
-		abort();
+		const struct link_map *l;
+		for(l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
+			if(!l)
+				return true;
+
+		const char *name = strrchr(l->l_name, '/');
+		return !strstr(preload, name ? name + 1 : l->l_name);
 	}
 
-	uintptr_t mask = 0x3ul << (addr_width() - 1);
-	return ((uintptr_t) _start & mask) == ((uintptr_t) in_ancillary_namespace & mask);
+	return false;
 }
 
 static inline enum error hook_object(struct handle *h, const struct link_map *l) {
@@ -57,10 +51,10 @@ static inline enum error hook_object(struct handle *h, const struct link_map *l)
 
 static inline enum error init(void) {
 	// There can be only one!
-	if(in_ancillary_namespace())
+	if(already_bootstrapping())
 		// We don't want to initialize any copies of ourself that we may have loaded.
 		return ancillary_disable_ctors_dtors();
-	assert(namespace_self() && "libgotcha clash from in_ancillary_namespace() false negative");
+	assert(namespace_self() && "libgotcha clash from already_bootstrapping() false negative");
 
 	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
 	// will be routed to their external definitions.
