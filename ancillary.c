@@ -2,9 +2,12 @@
 
 #include "plot.h"
 
+#include <sys/auxv.h>
 #include <sys/mman.h>
 #include <link.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
 static void nop(void) {}
 
@@ -18,6 +21,28 @@ static inline void purge_array(uint8_t **arr, size_t len) {
 		*arr[idx] = *ret;
 		mprotect(page, pagesz, PROT_READ | PROT_EXEC);
 	}
+}
+
+bool ancillary_namespace(void) {
+	#pragma weak _start
+	void _start(void);
+
+	void (*start)(void) = (void (*)(void)) getauxval(AT_ENTRY);
+	if(start != _start) {
+		const char *preload = getenv("LD_PRELOAD");
+		if(!preload)
+			return true;
+
+		const struct link_map *l;
+		for(l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
+			if(!l)
+				return true;
+
+		const char *name = strrchr(l->l_name, '/');
+		return !strstr(preload, name ? name + 1 : l->l_name);
+	}
+
+	return false;
 }
 
 enum error ancillary_disable_ctors_dtors(void) {

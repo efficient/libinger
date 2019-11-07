@@ -1,4 +1,3 @@
-#include <sys/auxv.h>
 #include "ancillary.h"
 #include "config.h"
 #include "globals.h"
@@ -14,34 +13,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <threads.h>
 
 static struct link_map *root;
 
-static inline bool already_bootstrapping(void) {
-	#pragma weak _start
-	void _start(void);
-
-	void (*start)(void) = (void (*)(void)) getauxval(AT_ENTRY);
-	if(start != _start) {
-		const char *preload = getenv("LD_PRELOAD");
-		if(!preload)
-			return true;
-
-		const struct link_map *l;
-		for(l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
-			if(!l)
-				return true;
-
-		const char *name = strrchr(l->l_name, '/');
-		return !strstr(preload, name ? name + 1 : l->l_name);
-	}
-
-	return false;
-}
-
-static inline enum error hook_object(struct handle *h, const struct link_map *l) {
+static enum error hook_object(struct handle *h, const struct link_map *l) {
 	enum error code = handle_init(h, l, root);
 	if(code)
 		return code;
@@ -51,7 +27,7 @@ static inline enum error hook_object(struct handle *h, const struct link_map *l)
 
 static inline enum error init(void) {
 	// There can be only one!
-	if(already_bootstrapping())
+	if(ancillary_namespace())
 		// We don't want to initialize any copies of ourself that we may have loaded.
 		return ancillary_disable_ctors_dtors();
 	assert(namespace_self() && "libgotcha clash from already_bootstrapping() false negative");
