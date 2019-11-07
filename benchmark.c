@@ -62,6 +62,7 @@ static inline void (**addr(const struct link_map *l, const ElfW(Rela) *r))(void)
 }
 
 static void (**got)(void);
+static void (**sgot)(void);
 static void (*nope)(void);
 
 static void __attribute__((constructor)) ctor(void) {
@@ -74,6 +75,9 @@ static void __attribute__((constructor)) ctor(void) {
 	const ElfW(Rela) *r = jmprel(l, "nop");
 	assert(r);
 
+	// Save the address of the GOT entry containing the address of the PL(O)T trampoline.
+	got = addr(l, r);
+
 	// The loader initializes dependencies before LD_PRELOADs... unless the latter have
 	// INITFIRST set... unless *any* of the former has INITFIRST set.  Fortunately, we're in the
 	// latter case thanks to libpthread.  However, dlopen()'ing libgotcha here appears to
@@ -81,11 +85,11 @@ static void __attribute__((constructor)) ctor(void) {
 	// the address of the (real) GOT entry, so let's go ahead and do that now!
 	dlopen("libgotcha.so", RTLD_LAZY | RTLD_NOLOAD);
 
+	// Save the shadow GOT entry, which will be the GOT entry itself unless libgotcha is loaded.
+	sgot = addr(l, r);
+
 	if(!unmemoize(&nope, l, r))
 		abort();
-
-	// Save the address of the GOT entry containing the address of the PL(O)T trampoline.
-	got = addr(l, r);
 }
 
 void nop(void) {}
@@ -99,10 +103,10 @@ static void (*nop_location(void))(void) {
 }
 
 void with_eager_nop(void (*fun)(void)) {
-	void (*plt)(void) = *got;
-	*got = nop_location();
+	void (*plt)(void) = *sgot;
+	*sgot = nop_location();
 	fun();
-	*got = plt;
+	*sgot = plt;
 }
 
 size_t plot_pagesize(void) {
