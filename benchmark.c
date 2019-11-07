@@ -8,6 +8,10 @@
 #include <string.h>
 #include <unistd.h>
 
+#define nop _nop
+#include "ancillary.c"
+#undef nop
+
 static inline const ElfW(Rela) *jmprel(const struct link_map *l, const char *s) {
 	const ElfW(Dyn) *d;
 
@@ -61,6 +65,9 @@ static void (**got)(void);
 static void (*nope)(void);
 
 static void __attribute__((constructor)) ctor(void) {
+	if(ancillary_namespace())
+		return;
+
 	const struct link_map *l = dlopen(NULL, RTLD_LAZY);
 	assert(l);
 
@@ -96,4 +103,8 @@ void with_eager_nop(void (*fun)(void)) {
 	*got = nop_location();
 	fun();
 	*got = plt;
+}
+
+size_t plot_pagesize(void) {
+	return 0;
 }

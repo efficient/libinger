@@ -52,6 +52,7 @@ ancillary.o: private CPPFLAGS += -D_GNU_SOURCE
 ancillary.o: ancillary.h error.h plot.h
 benchmark.o: private CFLAGS += -fpic
 benchmark.o: private CPPFLAGS += -D_GNU_SOURCE -UNDEBUG
+benchmark.o: ancillary.c
 config.o: private CFLAGS += -fpic
 config.o: config.h
 ctestfuns.o: ctestfuns.h
