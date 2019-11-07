@@ -34,9 +34,9 @@ bool ancillary_namespace(void) {
 			return true;
 
 		const struct link_map *l;
-		for(l = dlopen(NULL, RTLD_LAZY); l->l_ld != _DYNAMIC; l = l->l_next)
-			if(!l)
-				return true;
+		for(l = dlopen(NULL, RTLD_LAZY); l && l->l_ld != _DYNAMIC; l = l->l_next);
+		if(!l)
+			return true;
 
 		const char *name = strrchr(l->l_name, '/');
 		return !strstr(preload, name ? name + 1 : l->l_name);
