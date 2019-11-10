@@ -36,8 +36,8 @@ gotcha.abi: $(CGLOBALS:.c=.o)
 
 bench: private LDFLAGS += -Wl,-zlazy -Wl,-R\$$ORIGIN
 bench: private LDLIBS += -lbenchmark
-bench: private RUSTFLAGS += --test -L.
-bench: libbenchmark.so
+bench: private RUSTFLAGS += --test -L. --extern test=libtest.rlib
+bench: libbenchmark.so libtest.rlib
 
 libbenchmark.so: private LDLIBS += -ldl
 libtest.rlib: private RUSTC := RUSTC_BOOTSTRAP= $(RUSTC)

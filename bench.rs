@@ -1,15 +1,7 @@
-#![feature(asm)]
-#![feature(test)]
-
 extern crate test;
 
 use test::Bencher;
-
-#[inline]
-unsafe fn nop() {
-	// Force the compiler to generate a lazy JUMP_SLOT relocation rather than a GLOB_DAT one.
-	asm!("call nop");
-}
+use test::nop;
 
 fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	use std::mem::transmute;
@@ -35,14 +27,14 @@ fn with_eager_nop<T: FnMut()>(mut fun: T) {
 }
 
 #[bench]
-fn eager(lo: &mut Bencher) {
+fn eager(lo: &mut impl Bencher) {
 	with_eager_nop(|| lo.iter(|| unsafe {
 		nop()
 	}));
 }
 
 #[bench]
-fn lazy(lo: &mut Bencher) {
+fn lazy(lo: &mut impl Bencher) {
 	lo.iter(|| unsafe {
 		nop()
 	});

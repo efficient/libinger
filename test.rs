@@ -1,4 +1,5 @@
 #![crate_type = "lib"]
+#![feature(asm)]
 #![feature(core_intrinsics)]
 #![feature(staged_api)]
 #![feature(test)]
@@ -30,4 +31,10 @@ macro_rules! lazy_extern {
 			asm!(concat!("call ", stringify!($fun)));
 		}
 	)*}
+}
+
+lazy_extern! {
+	#[inline]
+	#[stable(feature = "test", since = "0")]
+	pub fn nop();
 }
