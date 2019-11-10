@@ -21,3 +21,13 @@ impl Bencher for test::Bencher {
 		self.iter(fun);
 	}
 }
+
+/// Like extern, but calls generate lazy JUMP_SLOT relocations rather than eager GLOB_DAT ones.
+macro_rules! lazy_extern {
+	($($(#[$attr:meta])* $vis:vis fn $fun:ident($($argv:tt: $argt:ty),*);)*) => {$(
+		$(#[$attr])*
+		$vis unsafe extern fn $fun($($argv: $argt),*) {
+			asm!(concat!("call ", stringify!($fun)));
+		}
+	)*}
+}
