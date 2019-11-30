@@ -22,6 +22,10 @@ path = "external/libtimetravel"
 name = "inger"
 harness = false
 
+[[bench]]
+name = "baseline"
+harness = false
+
 [dev-dependencies]
 bencher = "*"
 
