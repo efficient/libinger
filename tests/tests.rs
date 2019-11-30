@@ -49,7 +49,6 @@ fn get_reached() {
 #[test]
 fn make_reached() {
 	use libc::MINSIGSTKSZ;
-	use std::cell::Cell;
 
 	thread_local! {
 		static REACHED: Cell<bool> = Cell::new(false);
@@ -68,7 +67,6 @@ fn make_reached() {
 #[test]
 fn restore_reached() {
 	use libc::MINSIGSTKSZ;
-	use std::cell::Cell;
 
 	thread_local! {
 		static REACHED: Cell<bool> = Cell::new(false);
@@ -242,7 +240,6 @@ fn swap_helper<T: StableMutAddr<Target = [u8]>>(context: *mut Context<T>) {
 	use libc::pthread_self;
 	use libc::sigaction;
 	use libc::siginfo_t;
-	use std::cell::Cell;
 	use std::io::Error;
 	use std::mem::transmute;
 	use std::mem::zeroed;
