@@ -476,7 +476,6 @@ mod tests {
 	fn context_swapinvariant() {
 		use invar::MoveInvariant;
 		use swap::Swap;
-		use ucontext::HandlerContext;
 		use ucontext::makecontext;
 
 		let st: Box<[u8]> = Box::new([0u8; 1_024]);
@@ -486,27 +485,25 @@ mod tests {
 			makecontext(&mut ack[..], |thing| second = Some(thing), || unreachable!()).unwrap();
 
 			let second = second.unwrap();
-			let mut second = HandlerContext (second.context.into_inner());
+			let mut second = second.context.into_inner();
 			{
 				let mut first = first.context.borrow_mut();
-				let HandlerContext (second) = &mut second;
 				assert!(! uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
-				assert!(! uc_inbounds(second.uc_mcontext.fpregs as _, second));
+				assert!(! uc_inbounds(second.uc_mcontext.fpregs as _, &second));
 
 				first.after_move();
 				second.after_move();
 				first.uc_link = first.uc_mcontext.fpregs as _;
 				second.uc_link = second.uc_mcontext.fpregs as _;
 				assert!(uc_inbounds(first.uc_link, &*first));
-				assert!(uc_inbounds(second.uc_link, second));
+				assert!(uc_inbounds(second.uc_link, &second));
 			}
 			assert!(first.swap(&mut second));
 
 			let first = first.context.borrow();
-			let HandlerContext (second) = &mut second;
 			assert!(uc_inbounds(first.uc_mcontext.fpregs as _, &*first));
-			assert!(uc_inbounds(second.uc_mcontext.fpregs as _, second));
-			assert!(uc_inbounds(first.uc_link, second));
+			assert!(uc_inbounds(second.uc_mcontext.fpregs as _, &second));
+			assert!(uc_inbounds(first.uc_link, &second));
 		}, || unreachable!()).unwrap();
 	}
 
