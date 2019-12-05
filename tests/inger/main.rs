@@ -85,6 +85,7 @@ fn launch_continuations() {
 	});
 }
 
+#[ignore]
 #[test]
 fn resume_completion() {
 	exclusive(|| {
@@ -94,6 +95,7 @@ fn resume_completion() {
 	});
 }
 
+#[ignore]
 #[test]
 fn resume_completion_drop() {
 	exclusive(|| {
@@ -103,6 +105,7 @@ fn resume_completion_drop() {
 	});
 }
 
+#[ignore]
 #[test]
 fn resume_completion_repeat() {
 	exclusive(|| {
@@ -152,6 +155,7 @@ fn launch_toomany_reinit() {
 	});
 }
 
+#[ignore]
 #[test]
 fn abuse_preemption() {
 	for _ in 0..25 {
