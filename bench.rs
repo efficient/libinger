@@ -4,6 +4,10 @@ use std::os::raw::c_int;
 use test::Bencher;
 use test::nop;
 
+extern {
+	fn free(_: usize);
+}
+
 fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	use std::mem::transmute;
 
@@ -27,6 +31,27 @@ fn with_eager_nop<T: FnMut()>(mut fun: T) {
 	}
 }
 
+fn in_ancillary_group<T: FnMut()>(mut fun: T) {
+	use std::sync::ONCE_INIT;
+	use std::sync::Once;
+	extern {
+		fn libgotcha_group_new();
+		fn libgotcha_group_thread_accessor() -> unsafe extern fn(i64);
+	}
+
+	static INIT: Once = ONCE_INIT;
+	INIT.call_once(|| unsafe {
+		libgotcha_group_new();
+	});
+	unsafe {
+		libgotcha_group_thread_accessor()(1);
+	}
+	fun();
+	unsafe {
+		libgotcha_group_thread_accessor()(0);
+	}
+}
+
 #[bench]
 fn eager(lo: &mut impl Bencher) {
 	with_eager_nop(|| lo.iter(|| unsafe {
@@ -39,6 +64,31 @@ fn lazy(lo: &mut impl Bencher) {
 	lo.iter(|| unsafe {
 		nop()
 	});
+}
+
+#[bench]
+fn whitelist(lo: &mut impl Bencher) {
+	in_ancillary_group(|| lo.iter(|| unsafe {
+		free(0)
+	}));
+}
+
+#[bench]
+fn hook(lo: &mut impl Bencher) {
+	extern {
+		fn libgotcha_shared_hook(_: Option<extern fn()>);
+	}
+
+	extern fn callback() {}
+	unsafe {
+		libgotcha_shared_hook(Some(callback));
+	}
+	in_ancillary_group(|| lo.iter(|| unsafe {
+		free(0)
+	}));
+	unsafe {
+		libgotcha_shared_hook(None);
+	}
 }
 
 #[bench]

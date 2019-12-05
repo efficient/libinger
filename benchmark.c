@@ -137,3 +137,8 @@ void with_eager_nop(void (*fun)(void)) {
 size_t plot_pagesize(void) {
 	return 0;
 }
+
+// Dummy symbols to allow linking without libgotcha.
+void libgotcha_group_new(void) {}
+void (*libgotcha_group_thread_accessor(void))(void) { return nop; }
+void libgotcha_shared_hook(void) {}
