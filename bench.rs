@@ -88,6 +88,19 @@ fn hook(lo: &mut impl Bencher) {
 }
 
 #[bench]
+fn global(lo: &mut impl Bencher) {
+	use std::ptr::read_volatile;
+	use test::black_box;
+	extern {
+		static no: bool;
+	}
+
+	lo.iter(|| unsafe {
+		read_volatile(black_box(&no))
+	});
+}
+
+#[bench]
 fn gettimeofday(lo: &mut impl Bencher) {
 	use test::Timeval;
 	extern {

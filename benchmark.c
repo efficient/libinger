@@ -117,6 +117,8 @@ static void __attribute__((constructor)) ctor(void) {
 	}
 }
 
+const bool no;
+
 void nop(void) {}
 
 static void (*nop_location(void))(void) {
