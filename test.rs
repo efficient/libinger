@@ -1,14 +1,31 @@
 #![crate_type = "lib"]
 #![feature(asm)]
 #![feature(core_intrinsics)]
+#![feature(rustc_private)]
 #![feature(staged_api)]
 #![feature(test)]
 #![stable(feature = "test", since = "0")]
 
+extern crate libc;
 extern crate test;
 
+use libc::timeval;
 #[stable(feature = "test", since = "0")]
 pub use test::*;
+
+#[repr(transparent)]
+#[stable(feature = "test", since = "0")]
+pub struct Timeval (timeval);
+
+#[stable(feature = "test", since = "0")]
+impl Default for Timeval {
+	fn default() -> Self {
+		Self (timeval {
+			tv_sec: 0,
+			tv_usec: 0,
+		})
+	}
+}
 
 #[stable(feature = "test", since = "0")]
 pub trait Bencher {

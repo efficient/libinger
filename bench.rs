@@ -1,5 +1,6 @@
 extern crate test;
 
+use std::os::raw::c_int;
 use test::Bencher;
 use test::nop;
 
@@ -37,5 +38,29 @@ fn eager(lo: &mut impl Bencher) {
 fn lazy(lo: &mut impl Bencher) {
 	lo.iter(|| unsafe {
 		nop()
+	});
+}
+
+#[bench]
+fn gettimeofday(lo: &mut impl Bencher) {
+	use test::Timeval;
+	extern {
+		fn gettimeofday(_: Option<&mut Timeval>, _: usize) -> c_int;
+	}
+
+	let mut tv = Timeval::default();
+	lo.iter(|| unsafe {
+		gettimeofday(Some(&mut tv), 0)
+	});
+}
+
+#[bench]
+fn getpid(lo: &mut impl Bencher) {
+	extern {
+		fn getpid() -> c_int;
+	}
+
+	lo.iter(|| unsafe {
+		getpid()
 	});
 }
