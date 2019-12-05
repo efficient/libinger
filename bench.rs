@@ -54,9 +54,7 @@ fn in_ancillary_group<T: FnMut()>(mut fun: T) {
 
 #[bench]
 fn eager(lo: &mut impl Bencher) {
-	with_eager_nop(|| lo.iter(|| unsafe {
-		nop()
-	}));
+	with_eager_nop(|| lazy(lo));
 }
 
 #[bench]
@@ -83,9 +81,7 @@ fn hook(lo: &mut impl Bencher) {
 	unsafe {
 		libgotcha_shared_hook(Some(callback));
 	}
-	in_ancillary_group(|| lo.iter(|| unsafe {
-		free(0)
-	}));
+	whitelist(lo);
 	unsafe {
 		libgotcha_shared_hook(None);
 	}
