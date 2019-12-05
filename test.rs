@@ -31,6 +31,12 @@ impl Bencher for test::Bencher {
 	}
 }
 
+#[inline]
+pub fn black_box<T>(t: T) -> T {
+	use test::black_box;
+	black_box(t)
+}
+
 /// Like extern, but calls generate lazy JUMP_SLOT relocations rather than eager GLOB_DAT ones.
 macro_rules! lazy_extern {
 	($($(#[$attr:meta])* $vis:vis fn $fun:ident($($argv:tt: $argt:ty),*);)*) => {$(
