@@ -2,10 +2,10 @@
 
 #include "namespace.h"
 
-static void nop(void) {}
+#include <stddef.h>
 
-void (*shared_trampoline)(void) = nop;
+void (*shared_trampoline)(void) = NULL;
 
 void shared_hook(void (*hook)(void)) {
-	shared_trampoline = hook ? hook : nop;
+	shared_trampoline = hook;
 }

@@ -113,14 +113,16 @@ hook_trampoline:
 	mov  (%rax), %cl             // trampolining
 	test %cl, %cl
 	jnz  .Lskip_hook
-	movb $1, (%rax)              // lock ourselves out of here
-
-	lea  hook_ret(%rip), %rcx
-	push %rcx                   // intermediate return address
-.cfi_adjust_cfa_offset -8
-
 	mov  shared_trampoline@gotpcrel(%rip), %rcx
 	mov  (%rcx), %rcx
+	test %rcx, %rcx
+	jz   .Lskip_hook
+	movb $1, (%rax)              // lock ourselves out of here
+
+	lea  hook_ret(%rip), %rdi
+	push %rdi                    // intermediate return address
+.cfi_adjust_cfa_offset -8
+
 	jmp  *%rcx
 .cfi_endproc
 .size hook_trampoline, .-hook_trampoline
