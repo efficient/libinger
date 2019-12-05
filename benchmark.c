@@ -12,7 +12,7 @@
 #include "ancillary.c"
 #undef nop
 
-static inline const ElfW(Rela) *jmprel(const struct link_map *l, const char *s) {
+static inline const ElfW(Rela) *rel(const struct link_map *l, const char *s, bool lazy) {
 	const ElfW(Dyn) *d;
 
 	for(d = l->l_ld; d->d_tag != DT_STRTAB; ++d)
@@ -25,12 +25,14 @@ static inline const ElfW(Rela) *jmprel(const struct link_map *l, const char *s) 
 			return NULL;
 	const ElfW(Sym) *st = (ElfW(Sym) *) d->d_un.d_ptr;
 
-	for(d = l->l_ld; d->d_tag != DT_JMPREL; ++d)
+	ElfW(Sxword) reltag = lazy ? DT_JMPREL : DT_RELA;
+	for(d = l->l_ld; d->d_tag != reltag; ++d)
 		if(d->d_tag == DT_NULL)
 			return NULL;
 	const ElfW(Rela) *rel = (ElfW(Rela) *) d->d_un.d_ptr;
 
-	for(d = l->l_ld; d->d_tag != DT_PLTRELSZ; ++d)
+	ElfW(Sxword) endtag = lazy ? DT_PLTRELSZ : DT_RELASZ;
+	for(d = l->l_ld; d->d_tag != endtag; ++d)
 		if(d->d_tag == DT_NULL)
 			return NULL;
 	const ElfW(Rela) *end = (ElfW(Rela) *) ((uintptr_t) rel + d->d_un.d_val);
@@ -42,16 +44,20 @@ static inline const ElfW(Rela) *jmprel(const struct link_map *l, const char *s) 
 	return r;
 }
 
-static bool unmemoize(void (**shadow)(void), const struct link_map *l, const ElfW(Rela) *r) {
+static inline bool pageprot(const void *addr, int prot) {
 	size_t pgsz = sysconf(_SC_PAGESIZE);
-	void *page = (void *) ((uintptr_t) &r->r_offset & ~(pgsz - 1));
-	if(mprotect(page, pgsz, PROT_READ | PROT_WRITE))
+	void *page = (void *) ((uintptr_t) addr & ~(pgsz - 1));
+	return !mprotect(page, pgsz, prot);
+}
+
+static inline bool unmemoize(void (**shadow)(void), const struct link_map *l, const ElfW(Rela) *r) {
+	if(!pageprot(&r->r_offset, PROT_READ | PROT_WRITE))
 		return false;
 
 	// Trick future calls to the PLT trampoline into updating mem in lieu of the GOT entry.
 	((ElfW(Rela) *) r)->r_offset = (uintptr_t) shadow - l->l_addr;
 
-	if(mprotect(page, pgsz, PROT_READ))
+	if(!pageprot(&r->r_offset, PROT_READ))
 		return false;
 
 	return true;
@@ -59,6 +65,11 @@ static bool unmemoize(void (**shadow)(void), const struct link_map *l, const Elf
 
 static inline void (**addr(const struct link_map *l, const ElfW(Rela) *r))(void) {
 	return (void (**)(void)) (l->l_addr + r->r_offset);
+}
+
+static inline void (**dataddr(const struct link_map *l, const char *sym))(void) {
+	const ElfW(Rela) *r = rel(l, sym, false);
+	return addr(l, r);
 }
 
 static void (**got)(void);
@@ -72,7 +83,12 @@ static void __attribute__((constructor)) ctor(void) {
 	const struct link_map *l = dlopen(NULL, RTLD_LAZY);
 	assert(l);
 
-	const ElfW(Rela) *r = jmprel(l, "nop");
+	void (*clock_gettime)(void);
+	void (**clock)(void) = dataddr(l, "clock_gettime");
+	assert(clock);
+	clock_gettime = *clock;
+
+	const ElfW(Rela) *r = rel(l, "nop", true);
 	assert(r);
 
 	// Save the address of the GOT entry containing the address of the PL(O)T trampoline.
@@ -83,13 +99,22 @@ static void __attribute__((constructor)) ctor(void) {
 	// latter case thanks to libpthread.  However, dlopen()'ing libgotcha here appears to
 	// call its constructor immediately, even though it was already open.  We've already saved
 	// the address of the (real) GOT entry, so let's go ahead and do that now!
-	dlopen("libgotcha.so", RTLD_LAZY | RTLD_NOLOAD);
+	bool gotme = dlopen("libgotcha.so", RTLD_LAZY | RTLD_NOLOAD);
 
 	// Save the shadow GOT entry, which will be the GOT entry itself unless libgotcha is loaded.
 	sgot = addr(l, r);
 
 	if(!unmemoize(&nope, l, r))
 		abort();
+
+	if(gotme) {
+		assert(*clock != clock_gettime);
+
+		// Roll back libgotcha's changes to clock_gettime() to exempt measurement from overheads.
+		pageprot(clock, PROT_READ | PROT_WRITE);
+		*clock = clock_gettime;
+		pageprot(clock, PROT_READ);
+	}
 }
 
 void nop(void) {}
