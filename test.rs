@@ -1,23 +1,17 @@
 #![crate_type = "lib"]
 #![feature(asm)]
-#![feature(core_intrinsics)]
 #![feature(rustc_private)]
-#![feature(staged_api)]
 #![feature(test)]
-#![stable(feature = "test", since = "0")]
 
 extern crate libc;
 extern crate test;
 
 use libc::timeval;
-#[stable(feature = "test", since = "0")]
 pub use test::*;
 
 #[repr(transparent)]
-#[stable(feature = "test", since = "0")]
 pub struct Timeval (timeval);
 
-#[stable(feature = "test", since = "0")]
 impl Default for Timeval {
 	fn default() -> Self {
 		Self (timeval {
@@ -27,13 +21,10 @@ impl Default for Timeval {
 	}
 }
 
-#[stable(feature = "test", since = "0")]
 pub trait Bencher {
-	#[stable(feature = "test", since = "0")]
 	fn iter<T>(&mut self, _: impl FnMut() -> T);
 }
 
-#[stable(feature = "test", since = "0")]
 impl Bencher for test::Bencher {
 	fn iter<T>(&mut self, fun: impl FnMut() -> T) {
 		self.iter(fun);
@@ -52,6 +43,5 @@ macro_rules! lazy_extern {
 
 lazy_extern! {
 	#[inline]
-	#[stable(feature = "test", since = "0")]
 	pub fn nop();
 }
