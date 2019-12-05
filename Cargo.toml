@@ -26,3 +26,4 @@ harness = false
 bencher = "*"
 
 [workspace]
+exclude =  ["external/libgotcha/examples/cargo"]
