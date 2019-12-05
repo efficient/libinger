@@ -132,10 +132,13 @@ fn setup_only() {
 #[test]
 fn launch_toomany() {
 	exclusive(|| {
-		let _thing_one = launch(|| timeout(1_000_000), 0).unwrap();
-		let _thing_two = launch(|| timeout(1_000_000), 0).unwrap();
-		let _thing_three = launch(|| timeout(1_000_000), 0).unwrap();
-		// Lock becomes poisoned.
+		use std::collections::LinkedList;
+
+		let mut orphans = LinkedList::default();
+		loop {
+			orphans.push_back(launch(|| timeout(1_000_000), 0).unwrap());
+			// Lock becomes poisoned.
+		}
 	});
 }
 
