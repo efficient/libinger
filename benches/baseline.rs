@@ -1,20 +1,16 @@
 #[macro_use]
 extern crate bencher;
+extern crate libc;
 
 use bencher::Bencher;
-use std::os::raw::c_int;
-
-extern {
-		fn exit(_: c_int) -> !;
-		fn waitpid(_: c_int, _: usize, _: c_int);
-}
+use libc::exit;
+use libc::waitpid;
+use std::ptr::null_mut;
 
 benchmark_group![bench, fork, vfork];
 
 fn fork(lo: &mut Bencher) {
-	extern {
-		fn fork() -> c_int;
-	}
+	use libc::fork;
 
 	lo.iter(|| {
 		let pid = unsafe {
@@ -26,15 +22,13 @@ fn fork(lo: &mut Bencher) {
 			}
 		}
 		unsafe {
-			waitpid(pid, 0, 0);
+			waitpid(pid, null_mut(), 0);
 		}
 	})
 }
 
 fn vfork(lo: &mut Bencher) {
-	extern {
-		fn vfork() -> c_int;
-	}
+	use libc::vfork;
 
 	lo.iter(|| {
 		let pid = unsafe {
@@ -46,7 +40,7 @@ fn vfork(lo: &mut Bencher) {
 			}
 		}
 		unsafe {
-			waitpid(pid, 0, 0);
+			waitpid(pid, null_mut(), 0);
 		}
 	})
 }
