@@ -68,37 +68,40 @@ fn launch(lo: &mut Bencher) {
 fn resume(lo: &mut Bencher) {
 	use inger::launch;
 	use inger::resume;
-	use std::sync::atomic::AtomicBool;
 
-	let run = AtomicBool::from(true);
 	let during = AtomicU64::default();
-	let mut linger = launch(|| while run.load(Ordering::Relaxed) {
+	let mut lingers: Vec<_> = (0..LIBSETS).map(|_| launch(|| {
 		pause();
 		during.store(nsnow(), Ordering::Relaxed);
-	}, u64::max_value()).unwrap();
+	}, u64::max_value()).unwrap()).collect();
 
 	let mut into = 0;
 	let mut outof = 0;
-	let mut count = 0;
+	let mut index = 0;
 	lo.iter(|| {
-		let before = nsnow();
-		resume(&mut linger, u64::max_value()).unwrap();
-		let after = nsnow();
+		assert!(index < lingers.len(), "LIBSETS tunable set too low!");
 
+		let before = nsnow();
+		resume(&mut lingers[index], u64::max_value()).unwrap();
+
+		let after = nsnow();
 		let during = during.load(Ordering::Relaxed);
 		into += during - before;
 		outof += after - during;
-		count += 1;
+
+		index += 1;
 	});
 
 	if let Ok(mut file) = File::create("bench_resume.log") {
-		writeln!(file, "entry resume ... {} ns/iter", into / count).unwrap();
-		writeln!(file, "exit  resume ... {} ns/iter", outof / count).unwrap();
-		writeln!(file, "(ran for {} iterations)", count).unwrap();
+		let index: u64 = index as _;
+		writeln!(file, "entry resume ... {} ns/iter", into / index).unwrap();
+		writeln!(file, "exit  resume ... {} ns/iter", outof / index).unwrap();
+		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
-	run.store(false, Ordering::Relaxed);
-	resume(&mut linger, u64::max_value()).unwrap();
+	for linger in &mut lingers[index..] {
+		resume(linger, u64::max_value()).unwrap();
+	}
 }
 
 fn renew(lo: &mut Bencher) {
