@@ -68,7 +68,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 		case '8':
 		case '9':
 			if(!isalpha(base[1])) {
-				if(!ispunct(base[2])) {
+				if(!ispunct(base[1])) {
 					fputs_unlocked("libgotcha warning: unknown %rN suffix\n",
 						stderr);
 					break;
