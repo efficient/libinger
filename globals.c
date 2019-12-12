@@ -51,14 +51,14 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 		switch(*(base += 3)) {
 		case '1':
 			if(base[1] < '0' || base[1] > '5') {
-				fputs_unlocked("libgotcha warning: unrecognized %r1N register",
+				fputs_unlocked("libgotcha warning: unrecognized %r1N register\n",
 					stderr);
 				break;
 			}
 
 			if(!isalpha(base[2])) {
 				if(!ispunct(base[2])) {
-					fputs_unlocked("libgotcha warning: unknown %rNN suffix",
+					fputs_unlocked("libgotcha warning: unknown %rNN suffix\n",
 						stderr);
 					break;
 				}
@@ -69,7 +69,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 		case '9':
 			if(!isalpha(base[1])) {
 				if(!ispunct(base[2])) {
-					fputs_unlocked("libgotcha warning: unknown %rN suffix",
+					fputs_unlocked("libgotcha warning: unknown %rN suffix\n",
 						stderr);
 					break;
 				}
@@ -78,7 +78,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 			break;
 		case 'a':
 			if(base[1] != 'x') {
-				fputs_unlocked("libgotcha warning: unrecognized %raX register",
+				fputs_unlocked("libgotcha warning: unrecognized %raX register\n",
 					stderr);
 				break;
 			}
@@ -93,14 +93,14 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 				*greg = REG_RBX;
 				break;
 			default:
-				fputs_unlocked("libgotcha warning: unrecognized %rbX register",
+				fputs_unlocked("libgotcha warning: unrecognized %rbX register\n",
 					stderr);
 				break;
 			}
 			break;
 		case 'c':
 			if(base[1] != 'x') {
-				fputs_unlocked("libgotcha warning: unrecognized %rcX register",
+				fputs_unlocked("libgotcha warning: unrecognized %rcX register\n",
 					stderr);
 				break;
 			}
@@ -115,7 +115,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 				*greg = REG_RDX;
 				break;
 			default:
-				fputs_unlocked("libgotcha warning: unrecognized %rdX register",
+				fputs_unlocked("libgotcha warning: unrecognized %rdX register\n",
 					stderr);
 				break;
 			}
@@ -129,7 +129,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 				// Ignore the stack pointer.
 				break;
 			default:
-				fputs_unlocked("libgotcha warning: unrecognized %rsX register",
+				fputs_unlocked("libgotcha warning: unrecognized %rsX register\n",
 					stderr);
 				break;
 			}
