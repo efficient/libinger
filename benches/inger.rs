@@ -28,18 +28,19 @@ fn launch(lo: &mut Bencher) {
 	let mut outof = 0;
 	let mut index = 0;
 	lo.iter(|| {
-		if index < lingers.len() {
-			let before = nsnow();
-			lingers[index] = MaybeUninit::new(launch(|| {
-				during.store(nsnow(), Ordering::Relaxed);
-				pause();
-			}, u64::max_value()).unwrap());
+		assert!(index < lingers.len(), "LIBSETS tunable set too low!");
 
-			let after = nsnow();
-			let during = during.load(Ordering::Relaxed);
-			into += during - before;
-			outof += after - during;
-		}
+		let before = nsnow();
+		lingers[index] = MaybeUninit::new(launch(|| {
+			during.store(nsnow(), Ordering::Relaxed);
+			pause();
+		}, u64::max_value()).unwrap());
+
+		let after = nsnow();
+		let during = during.load(Ordering::Relaxed);
+		into += during - before;
+		outof += after - during;
+
 		index += 1;
 	});
 
@@ -50,10 +51,6 @@ fn launch(lo: &mut Bencher) {
 		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
-	let toofew = index > lingers.len();
-	if toofew {
-		index = lingers.len();
-	}
 	for linger in &mut lingers[..index] {
 		let linger = linger.as_mut_ptr();
 		let linger = unsafe {
@@ -61,8 +58,6 @@ fn launch(lo: &mut Bencher) {
 		};
 		resume(linger, u64::max_value()).unwrap();
 	}
-
-	assert!(! toofew, "LIBSETS tunable set too low!");
 }
 
 fn resume(lo: &mut Bencher) {
