@@ -49,10 +49,20 @@ impl Profiler {
 
 impl Drop for Profiler {
 	fn drop(&mut self) {
+		use std::ffi::CString;
+		use std::os::raw::c_char;
+
+		extern {
+			fn puts(_: *const c_char);
+		}
+
 		let len: f64 = self.past.len() as _;
 		let sum: u64 = self.past.iter().sum();
 		let sum: f64 = sum as _;
-		println!("Profiler ave. = {} us", sum / len / 1_000.0);
+		let msg = CString::new(format!("Profiler ave. = {} us", sum / len / 1_000.0)).unwrap();
+		unsafe {
+			puts(msg.as_ptr());
+		}
 	}
 }
 
