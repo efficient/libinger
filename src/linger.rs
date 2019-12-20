@@ -18,7 +18,7 @@ use timetravel::Context;
 use timetravel::HandlerContext;
 use unfurl::Unfurl;
 
-const QUANTUM_MICROSECS: u64  = 15;
+const QUANTUM_MICROSECS: u64  = 100;
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
 pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
