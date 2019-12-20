@@ -1,11 +1,25 @@
 use signal::Signal;
 use reusable::SyncResult;
 
-static NOTIFICATION_SIGNALS: [Signal; 4] = [
+static NOTIFICATION_SIGNALS: [Signal; 16] = [
 	Signal::Alarm,
 	Signal::VirtualAlarm,
 	Signal::ProfilingTimer,
 	Signal::ProcessorLimit,
+	Signal::FilesystemLimit,
+	Signal::TerminalInput,
+	Signal::TerminalOutput,
+	Signal::PowerFailure,
+	Signal::User1,
+	Signal::User2,
+
+	// A stretch...
+	Signal::Child,
+	Signal::FloatingPoint,
+	Signal::Hangup,
+	Signal::Pollable,
+	Signal::Syscall,
+	Signal::WindowResize,
 ];
 
 pub fn assign_signal() -> SyncResult<'static, Signal> {
