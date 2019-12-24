@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include "namespace.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -7,6 +9,27 @@ bool config_staticlink(void) {
 	#pragma weak libgotcha_staticlink
 	extern const bool libgotcha_staticlink;
 	return &libgotcha_staticlink && libgotcha_staticlink;
+}
+
+ssize_t config_numgroups(void) {
+	static bool memo;
+	static ssize_t res = NUM_SHADOW_NAMESPACES;
+	if(!memo) {
+		const char *req;
+		if((req = getenv("LIBGOTCHA_NUMGROUPS"))) {
+			if(!sscanf(req, "%zd", &res))
+				fputs("libgotcha warning: Ignoring non-numeric number of groups\n",
+					stderr);
+			else if(res == 0 || res > NUM_SHADOW_NAMESPACES) {
+				fprintf(stderr, "libgotcha warning: Ignoring request for a number "
+					"of groups outside the supported range of (0,%d]\n",
+					NUM_SHADOW_NAMESPACES);
+				res = NUM_SHADOW_NAMESPACES;
+			}
+		}
+		memo = true;
+	}
+	return res;
 }
 
 bool config_sharedlibc(void) {

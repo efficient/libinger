@@ -1,5 +1,6 @@
 #include "libgotcha_api.h"
 
+#include "config.h"
 #include "handle.h"
 #include "handles.h"
 #include "namespace.h"
@@ -18,7 +19,7 @@ static libgotcha_group_t namespace_accessor(libgotcha_group_t new) {
 	libgotcha_group_t old = *accessor;
 	if(new != LIBGOTCHA_GROUP_ERROR) {
 		assert(new >= 0);
-		assert(new <= NUM_SHADOW_NAMESPACES);
+		assert(new <= config_numgroups());
 		assert(!new || namespace_locked[new - 1]);
 		*accessor = new;
 	}
@@ -34,7 +35,7 @@ libgotcha_group_t (*libgotcha_group_thread_accessor(void))(libgotcha_group_t) {
 
 static bool namespace_lock(libgotcha_group_t lmid) {
 	assert(lmid > 0);
-	assert(lmid <= NUM_SHADOW_NAMESPACES);
+	assert(lmid <= config_numgroups());
 
 	bool unlocked = false;
 	return atomic_compare_exchange_strong(namespace_locked + lmid - 1, &unlocked, !unlocked);
@@ -42,7 +43,7 @@ static bool namespace_lock(libgotcha_group_t lmid) {
 
 static void namespace_unlock(libgotcha_group_t lmid) {
 	assert(lmid > 0);
-	assert(lmid <= NUM_SHADOW_NAMESPACES);
+	assert(lmid <= config_numgroups());
 
 	atomic_flag_clear(namespace_locked + lmid - 1);
 }
@@ -50,7 +51,7 @@ static void namespace_unlock(libgotcha_group_t lmid) {
 libgotcha_group_t libgotcha_group_new(void) {
 	(void) namespace_unlock;
 
-	for(libgotcha_group_t chosen = 1; chosen <= NUM_SHADOW_NAMESPACES; ++chosen)
+	for(libgotcha_group_t chosen = 1; chosen <= config_numgroups(); ++chosen)
 		if(namespace_lock(chosen))
 			return chosen;
 

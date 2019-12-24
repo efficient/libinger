@@ -1,5 +1,6 @@
 #include "handles.h"
 
+#include "config.h"
 #include "handle.h"
 #include "namespace.h"
 
@@ -116,7 +117,7 @@ enum error handles_shadow(const struct link_map *root) {
 		fputs("libgotcha warning: using workaround on NODELETE file with no/wrong SONAME\n",
 			stderr);
 
-	for(Lmid_t n = 1; n <= NUM_SHADOW_NAMESPACES; ++n)
+	for(Lmid_t n = 1; n <= config_numgroups(); ++n)
 		if(!nodelete_preshadow(libs, n, missing))
 			return ERROR_DLMOPEN;
 
@@ -126,7 +127,7 @@ enum error handles_shadow(const struct link_map *root) {
 			return code;
 	}
 
-	for(Lmid_t n = 1; n <= NUM_SHADOW_NAMESPACES; ++n)
+	for(Lmid_t n = 1; n <= config_numgroups(); ++n)
 		nodelete_postshadow(libs, n, missing);
 
 	return SUCCESS;

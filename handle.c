@@ -562,7 +562,7 @@ static inline void handle_got_whitelist_all(struct handle *h) {
 	size_t len = handle_got_num_entries(h);
 	uintptr_t *proxy = *h->shadow.gots + len;
 	memset(proxy, 0, len * sizeof *proxy);
-	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
+	for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace)
 		h->shadow.gots[namespace] = proxy;
 
 	if(myself(h))
@@ -597,7 +597,7 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 
 // Setup full shadow GOTs for the ancillary namespaces.
 static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uintptr_t base) {
-	assert(n <= NUM_SHADOW_NAMESPACES);
+	assert(n <= config_numgroups());
 
 	// Don't trampoline any calls we ourselves make.  Note that, because calls to us are always
 	// routed to the base namespace, this means that all our calls also run in the base
@@ -737,7 +737,7 @@ enum error handle_got_shadow(struct handle *h) {
 		// the trampoline doesn't crash and knows not to switch namespaces on inbound calls.
 		assert(!h->jmpslots);
 		assert(!h->miscrels);
-		for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace)
+		for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace)
 			h->shadow.gots[namespace] = h->shadow.gots[LM_ID_BASE];
 		return SUCCESS;
 	}
@@ -745,7 +745,7 @@ enum error handle_got_shadow(struct handle *h) {
 	size_t len = handle_got_num_entries(h);
 	if(len) {
 		*h->shadow.gots = realloc(*h->shadow.gots,
-			(NUM_SHADOW_NAMESPACES + 1) * len * sizeof **h->shadow.gots);
+			(config_numgroups() + 1) * len * sizeof **h->shadow.gots);
 		if(!*h->shadow.gots)
 			return ERROR_MALLOC;
 	}
@@ -764,7 +764,7 @@ enum error handle_got_shadow(struct handle *h) {
 	if(!h->globdats)
 		return ERROR_MALLOC;
 	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr);
-	for(size_t namespace = 1; namespace <= NUM_SHADOW_NAMESPACES; ++namespace) {
+	for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace) {
 		if(len)
 			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
 
