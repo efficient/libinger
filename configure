@@ -47,6 +47,19 @@ version nm
 version objcopy
 version git
 
+dir="`dirname "$0"`"
+
+git() {
+	"`which git`" -C "$dir" "$@"
+}
+
+cargo() {
+	local owd="$PWD"
+	cd "$dir"
+	"`which cargo`" "$@"
+	cd "$owd"
+}
+
 echo -n "Checking submodules..."
 if git submodule status | grep '^-' >/dev/null
 then
@@ -60,12 +73,12 @@ else
 fi
 
 echo -n "Configuring toolchain..."
-if [ -e ".cargo/config" ]
+if [ -e "$dir/.cargo/config" ]
 then
 	echo " skipping"
 else
-	cat >.cargo/config <<-tac
-		`cat .cargo/config.toml`
+	cat >"$dir/.cargo/config" <<-tac
+		`cat "$dir/.cargo/config.toml"`
 
 		[target.x86_64-unknown-linux-gnu]
 		linker = ".cargo/cc"
@@ -78,11 +91,11 @@ cargo clean
 echo " done"
 
 echo -n "Cleaning libgotcha build..."
-make -Cexternal/libgotcha clean >/dev/null
+make -C"$dir/external/libgotcha" clean >/dev/null
 echo " done"
 
 echo -n "Removing lockfile..."
-rm -f Cargo.lock
+rm -f "$dir/Cargo.lock"
 echo " done"
 
 echo -n "Detecting interpreter..."
@@ -90,9 +103,9 @@ if [ -n "$LIBINGER_LINKER" ]
 then
 	file -L "$LIBINGER_LINKER" 2>&1 | tee "$PIPE" | grep '\<ELF\>' >/dev/null
 	echo " using $LIBINGER_LINKER"
-elif [ -e ld.so ]
+elif [ -e "$dir/ld.so" ]
 then
-	echo " using `readlink ld.so`"
+	echo " using `readlink "$dir/ld.so"`"
 else
 	echo " define LIBINGER_LINKER to a dynamic linker or place one at ./ld.so" >"$PIPE"
 	false
