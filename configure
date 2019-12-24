@@ -72,7 +72,8 @@ then
 	git submodule update --init --recursive
 elif git submodule status | grep '^+' >/dev/null
 then
-	echo " INCONSISTENT" >&2
+	echo " inconsistent" >"$PIPE.warn"
+	handler
 else
 	echo " consistent"
 fi
