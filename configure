@@ -6,19 +6,24 @@ version() {
 	echo -n "Looking for $1..."
 
 	local version
-	echo -n " broken installation" >"$PIPE"
-	version="`"$1" --version 2>>"$PIPE" | grep -o '[[:digit:].]\+[[:digit:]]'`"
+	echo -n " broken installation" >"$PIPE.err"
+	version="`"$1" --version 2>>"$PIPE.err" | grep -o '[[:digit:].]\+[[:digit:]]'`"
+	rm "$PIPE.err"
 	echo " found `echo "$version" | head -n1`"
 }
 
+helper() {
+	local file="$1"
+	local color="$2"
+	printf %s "[${color}m" >&2
+	tr -d '\n' <"$file" | sed 's/.*://;a\' >&2
+	printf %s "[0m" >&2
+	rm "$file"
+}
+
 handler() {
-	if [ -e "$PIPE" ]
-	then
-		printf %s '[31m' >&2
-		tr -d '\n' <"$PIPE" | sed 's/.*://;a\' >&2
-		printf %s '[0m' >&2
-		rm "$PIPE"
-	fi
+	[ -e "$PIPE.err" ] && helper "$PIPE.err" 31
+	[ -e "$PIPE.warn" ] && helper "$PIPE.warn" 93
 }
 
 set -e
@@ -28,14 +33,14 @@ version cargo
 version rustc
 
 echo -n "Checking Rust 2018 support..."
-echo " not present" >"$PIPE"
+echo " not present" >"$PIPE.err"
 rustc --help -v | grep -- --edition >/dev/null
 echo " present"
 
 version make
 
 echo -n "Checking GNU Make language support..."
-echo " not present" >"$PIPE"
+echo " not present" >"$PIPE.err"
 make --version | grep GNU >/dev/null
 echo " present"
 
@@ -101,14 +106,12 @@ echo " done"
 echo -n "Detecting interpreter..."
 if [ -n "$LIBINGER_LINKER" ]
 then
-	file -L "$LIBINGER_LINKER" 2>&1 | tee "$PIPE" | grep '\<ELF\>' >/dev/null
+	file -L "$LIBINGER_LINKER" 2>&1 | tee "$PIPE.err" | grep '\<ELF\>' >/dev/null
 	echo " using $LIBINGER_LINKER"
 elif [ -e "$dir/ld.so" ]
 then
 	echo " using `readlink "$dir/ld.so"`"
 else
-	echo " define LIBINGER_LINKER to a dynamic linker or place one at ./ld.so" >"$PIPE"
+	echo " define LIBINGER_LINKER to a dynamic linker or place one at ./ld.so" >"$PIPE.err"
 	false
 fi
-
-rm -f "$PIPE"
