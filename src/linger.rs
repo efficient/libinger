@@ -99,6 +99,7 @@ struct Task {
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
 	use groups::assign_group;
+	use preemption::enable_preemption;
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
 
@@ -124,13 +125,22 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	// arising from the former case, we first assert that no one has attempted a nested call.
 	debug_assert!(! is_preemptible(), "launch(): called from preemptible function");
 
+	let group = assign_group().expect("launch(): too many active timed functions");
+	let group_id = *group;
 	let mut fun = Completion::Function(AssertUnwindSafe (fun));
 	let fun = Box::new(move |ret: *mut Option<ThdResult<T>>| {
 		fun = match fun.take() {
-		Completion::Function(fun) =>
+		Completion::Function(fun) => {
 			// We haven't yet moved the closure.  This means schedule() is invoking us
 			// as a *nullary* function, implying ret is undefined and mustn't be used.
-			Completion::Return(catch_unwind(fun)),
+			let res = catch_unwind(|| {
+				stamp();
+				enable_preemption(group_id.into());
+				fun()
+			});
+			disable_preemption();
+			Completion::Return(res)
+		},
 		Completion::Return(val) => {
 			debug_assert!(! ret.is_null());
 			let ret = unsafe {
@@ -145,7 +155,6 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	});
 
 	let checkpoint = setup_stack(STACK_SIZE_BYTES)?;
-	let group = assign_group().expect("launch(): too many active timed functions");
 	let mut linger = Linger::Continuation(Continuation {
 		functional: fun,
 		stateful: Task {
@@ -162,7 +171,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 }
 
 thread_local! {
-	static BOOTSTRAP: Cell<Option<(NonNull<(dyn FnMut() + Send)>, Group)>> = Cell::default();
+	static BOOTSTRAP: Cell<Option<NonNull<(dyn FnMut() + Send)>>> = Cell::default();
 	static TASK: RefCell<Task> = RefCell::default();
 	static DEADLINE: Cell<u64> = Cell::default();
 }
@@ -193,9 +202,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 				// represents our first caller, so we know not to read the argument.
 				let fun: *mut (dyn FnMut(_) + Send) = fun;
 				let fun: *mut (dyn FnMut() + Send) = fun as _;
-				let no_fun = bootstrap.replace(NonNull::new(fun).map(|fun|
-					(fun, group)
-				));
+				let no_fun = bootstrap.replace(NonNull::new(fun));
 				debug_assert!(
 					no_fun.is_none(),
 					"resume(): bootstraps without an intervening schedule()",
@@ -328,18 +335,13 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 
 /// Enable preemption and call the preemptible function.  Runs on the oneshot execution stack.
 fn schedule() {
-	use preemption::enable_preemption;
-
-	let (mut fun, group) = BOOTSTRAP.with(|bootstrap| bootstrap.take()).unwrap_or_else(||
+	let mut fun = BOOTSTRAP.with(|bootstrap| bootstrap.take()).unwrap_or_else(||
 		abort("schedule(): called without bootstrapping")
 	);
 	let fun = unsafe {
 		fun.as_mut()
 	};
-	stamp();
-	enable_preemption(group.into());
 	fun();
-	disable_preemption();
 
 	// It's important that we haven't saved any errno, since we'll check it to determine whether
 	// the preemptible function ran to completion.

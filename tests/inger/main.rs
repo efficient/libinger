@@ -85,7 +85,6 @@ fn launch_continuations() {
 	});
 }
 
-#[ignore]
 #[test]
 fn resume_completion() {
 	exclusive(|| {
