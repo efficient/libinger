@@ -1,5 +1,5 @@
 use id::Id;
-use libc::SIGSTKFLT;
+use libc::SIGWINCH;
 use libc::sigset_t;
 use libc::ucontext_t;
 use stable::StableMutAddr;
@@ -16,7 +16,7 @@ use swap::Swap;
 use uninit::Uninit;
 use void::Void;
 
-const SIGSETCONTEXT: c_int = SIGSTKFLT;
+const SIGSETCONTEXT: c_int = SIGWINCH;
 
 ///! A continuation representing a "snapshot" of this thread's execution at a particular point in time.
 ///!
