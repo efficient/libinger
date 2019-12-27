@@ -11,7 +11,6 @@ use std::io::Result;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::os::raw::c_int;
-use std::result::Result as StdResult;
 use swap::Swap;
 use uninit::Uninit;
 use void::Void;
@@ -178,20 +177,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Conte
 ///! Upon calling this function, the `scope` closure is invoked, which may then choose to invoke `setcontext()` or `sigsetcontext()` on the updated continuation, as appropriate.
 ///! Even if the continuation had previously been invalidated, a valid such call will now succeed, and control will return to the call site of `restorecontext()` upon completion.
 ///! However, once `restorecontext()` returns, the continuation is automatically invalidated once again.
-pub fn restorecontext<S: StableMutAddr<Target = [u8]>>(mut persistent: Context<S>, scope: impl FnOnce(Context<S>)) -> StdResult<(), Option<Error>> {
-	use platform::Stack;
-
-	// Allow use on contexts from swap(), but not those from sigsetcontext(); the latter never
-	// returns successfully, so we don't intend to allow using it as a checkpoint.
-	let stack_ptr = persistent.context.borrow().stack_ptr();
-	{
-		let stack = &*persistent.persistent.as_ref().unwrap().stack;
-		let stack_base = stack as *const _ as *const u8 as _;
-		if stack_ptr < stack_base || stack_ptr > stack_base + stack.len() {
-			Err(None)?;
-		}
-	}
-
+pub fn restorecontext<S: StableMutAddr<Target = [u8]>>(mut persistent: Context<S>, scope: impl FnOnce(Context<S>)) -> Result<()> {
 	getcontext(
 		|successor| {
 			{
@@ -204,7 +190,7 @@ pub fn restorecontext<S: StableMutAddr<Target = [u8]>>(mut persistent: Context<S
 			scope(persistent);
 		},
 		|| (),
-	).map_err(|or| Some(or))
+	)
 	// The inner context's guard is invalidated as collateral damage upon return from this call.
 }
 
