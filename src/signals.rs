@@ -14,12 +14,12 @@ static NOTIFICATION_SIGNALS: [Signal; 16] = [
 	Signal::User2,
 
 	// A stretch...
-	Signal::Child,
-	Signal::FloatingPoint,
-	Signal::Hangup,
+	Signal::UrgentSocket,
 	Signal::Pollable,
 	Signal::Syscall,
-	Signal::UrgentSocket,
+	Signal::FloatingPoint,
+	Signal::Hangup,
+	Signal::Child,
 ];
 
 pub fn assign_signal() -> SyncResult<'static, Signal> {
