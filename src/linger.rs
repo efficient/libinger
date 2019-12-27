@@ -310,7 +310,7 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 			let failure = sigsetcontext(resume);
 			error.replace(failure.expect("resume(): continuation is invalid"));
 		},
-	).map_err(|or| or.expect("resume(): continuation contains invalid stack"))?;
+	)?;
 	if let Some(error) = error {
 		Err(error)?;
 	}
