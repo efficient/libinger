@@ -19,7 +19,7 @@ static NOTIFICATION_SIGNALS: [Signal; 16] = [
 	Signal::Hangup,
 	Signal::Pollable,
 	Signal::Syscall,
-	Signal::WindowResize,
+	Signal::UrgentSocket,
 ];
 
 pub fn assign_signal() -> SyncResult<'static, Signal> {
