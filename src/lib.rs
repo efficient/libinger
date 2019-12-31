@@ -17,5 +17,8 @@ mod unfurl;
 
 pub use linger::*;
 
+const QUANTUM_MICROSECS: u64  = 100;
+const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
+
 #[cfg(test)]
 fn main() {}

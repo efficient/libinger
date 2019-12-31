@@ -7,6 +7,8 @@ use reusable::ReusableSync;
 use signal::Set;
 use signal::Signal;
 use signal::siginfo_t;
+use super::QUANTUM_MICROSECS;
+use super::STACK_SIZE_BYTES;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
@@ -17,9 +19,6 @@ use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
 use unfurl::Unfurl;
-
-const QUANTUM_MICROSECS: u64  = 100;
-const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
 
 pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
 	Completion(T),
