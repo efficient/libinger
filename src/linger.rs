@@ -7,8 +7,8 @@ use reusable::ReusableSync;
 use signal::Set;
 use signal::Signal;
 use signal::siginfo_t;
+use stacks::DerefAdapter;
 use super::QUANTUM_MICROSECS;
-use super::STACK_SIZE_BYTES;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
@@ -87,7 +87,7 @@ struct Task {
 	//  * None at end of resume() means it has completed.
 	//  * Some at either point means it timed out and is currently paused.
 	errno: Option<c_int>,
-	checkpoint: Option<Context<Box<[u8]>>>,
+	checkpoint: Option<Context<DerefAdapter<'static, ReusableSync<'static, Box<[u8]>>>>>,
 	yielded: bool,
 }
 
@@ -153,7 +153,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		}
 	});
 
-	let checkpoint = setup_stack(STACK_SIZE_BYTES)?;
+	let checkpoint = setup_stack()?;
 	let mut linger = Linger::Continuation(Continuation {
 		functional: fun,
 		stateful: Task {
@@ -232,12 +232,14 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 
 /// Set up the oneshot execution stack.  Always returns a Some when things are Ok.
 #[inline(never)]
-fn setup_stack(bytes: usize) -> Result<Option<Context<Box<[u8]>>>> {
+fn setup_stack()
+-> Result<Option<Context<DerefAdapter<'static, ReusableSync<'static, Box<[u8]>>>>>> {
+	use stacks::alloc_stack;
 	use timetravel::makecontext;
 
 	let mut checkpoint = None;
 	makecontext(
-		vec![0; bytes].into_boxed_slice(),
+		DerefAdapter::from(alloc_stack()),
 		|goto| drop(checkpoint.replace(goto)),
 		schedule,
 	)?;

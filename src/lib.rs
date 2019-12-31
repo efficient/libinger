@@ -12,6 +12,7 @@ mod preemption;
 pub mod profiler;
 mod reusable;
 mod signals;
+mod stacks;
 mod timer;
 mod unfurl;
 
