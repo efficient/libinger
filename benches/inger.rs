@@ -63,21 +63,22 @@ fn launch(lo: &mut Bencher) {
 fn resume(lo: &mut Bencher) {
 	use inger::launch;
 	use inger::resume;
+	use std::sync::atomic::AtomicBool;
 
+	let run = AtomicBool::from(true);
 	let during = AtomicU64::default();
-	let mut lingers: Vec<_> = (0..LIBSETS).map(|_| launch(|| {
+	let mut lingers: Vec<_> = (0..LIBSETS).map(|_| launch(|| while run.load(Ordering::Relaxed) {
 		pause();
 		during.store(nsnow(), Ordering::Relaxed);
 	}, u64::max_value()).unwrap()).collect();
+	let nlingers = lingers.len();
 
 	let mut into = 0;
 	let mut outof = 0;
 	let mut index = 0;
 	lo.iter(|| {
-		assert!(index < lingers.len(), "LIBSETS tunable set too low!");
-
 		let before = nsnow();
-		resume(&mut lingers[index], u64::max_value()).unwrap();
+		resume(&mut lingers[index % nlingers], u64::max_value()).unwrap();
 
 		let after = nsnow();
 		let during = during.load(Ordering::Relaxed);
@@ -94,7 +95,8 @@ fn resume(lo: &mut Bencher) {
 		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
-	for linger in &mut lingers[index..] {
+	run.store(false, Ordering::Relaxed);
+	for linger in &mut lingers {
 		resume(linger, u64::max_value()).unwrap();
 	}
 }
