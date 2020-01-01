@@ -3,6 +3,7 @@ extern crate bencher;
 extern crate inger;
 
 use bencher::Bencher;
+use inger::STACK_N_PREALLOC;
 use inger::nsnow;
 use inger::pause;
 use std::fs::File;
@@ -10,7 +11,7 @@ use std::io::Write;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
-const LIBSETS: usize = 511;
+const LIBSETS: usize = STACK_N_PREALLOC;
 
 benchmark_group![bench, launch, resume, renew];
 
@@ -18,7 +19,6 @@ fn launch(lo: &mut Bencher) {
 	use inger::launch;
 	use inger::resume;
 	use std::mem::MaybeUninit;
-
 	let mut lingers: [MaybeUninit<_>; LIBSETS] = unsafe {
 		MaybeUninit::uninit().assume_init()
 	};
