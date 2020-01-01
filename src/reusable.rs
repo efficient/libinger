@@ -87,6 +87,20 @@ where &'a C: SharedMut<Vec<T>> {
 			builder: builder,
 		}
 	}
+
+	pub fn prealloc(&'a self, count: usize)
+	-> StdResult<(), Option<<&'a C as SharedMut<Vec<T>>>::Error>> {
+		use std::collections::LinkedList;
+		use std::convert::TryInto;
+
+		let swap: LinkedList<StdResult<Reusable<_, _>, _>> = (0..count).map(|_|
+			self.try_into()
+		).collect();
+		for temp in swap {
+			temp?;
+		}
+		Ok(())
+	}
 }
 
 impl<'a, T: Default, C: Default + 'a> Default for Pool<T, fn() -> Option<T>, C>
