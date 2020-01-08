@@ -1,51 +1,69 @@
-use std::cell::Cell;
-use std::cell::RefCell;
-use std::marker::PhantomData;
+pub use self::imp::*;
 
-thread_local! {
-	static IDS: RefCell<Vec<usize>> = RefCell::new(Vec::new());
-	static SERIALS: Cell<usize> = Cell::new(0);
-}
+#[cfg(debug_assertions)]
+mod imp {
+	use std::cell::Cell;
+	use std::cell::RefCell;
+	use std::marker::PhantomData;
 
-#[derive(Clone, Copy)]
-pub struct Id {
-	index: usize,
-	serial: usize,
-	nonsend_nonsync: PhantomData<*const ()>,
-}
+	thread_local! {
+		static IDS: RefCell<Vec<usize>> = RefCell::new(Vec::new());
+		static SERIALS: Cell<usize> = Cell::new(0);
+	}
 
-impl Id {
-	pub fn new() -> Self {
-		let serial = SERIALS.with(|serials| {
-			let serial = serials.get();
-			serials.set(serial + 1);
-			serial
-		});
+	#[derive(Clone, Copy)]
+	pub struct Id {
+		index: usize,
+		serial: usize,
+		nonsend_nonsync: PhantomData<*const ()>,
+	}
 
-		let index = IDS.with(|ids| {
-			let mut ids = ids.borrow_mut();
-			let index = ids.len();
-			ids.push(serial);
-			index
-		});
+	impl Id {
+		pub fn new() -> Self {
+			let serial = SERIALS.with(|serials| {
+				let serial = serials.get();
+				serials.set(serial + 1);
+				serial
+			});
 
-		Self {
-			index,
-			serial,
-			nonsend_nonsync: PhantomData::default(),
+			let index = IDS.with(|ids| {
+				let mut ids = ids.borrow_mut();
+				let index = ids.len();
+				ids.push(serial);
+				index
+			});
+
+			Self {
+				index,
+				serial,
+				nonsend_nonsync: PhantomData::default(),
+			}
+		}
+
+		pub fn is_valid(&self) -> bool {
+			let id = IDS.with(|ids| ids.borrow().get(self.index).cloned());
+			id.map(|serial| serial == self.serial).unwrap_or(false)
+		}
+
+		pub fn invalidate(&self) {
+			IDS.with(|ids| ids.borrow_mut().truncate(self.index))
+		}
+
+		pub fn invalidate_subsequent(&self) {
+			IDS.with(|ids| ids.borrow_mut().truncate(self.index + 1))
 		}
 	}
+}
 
-	pub fn is_valid(&self) -> bool {
-		let id = IDS.with(|ids| ids.borrow().get(self.index).cloned());
-		id.map(|serial| serial == self.serial).unwrap_or(false)
-	}
+#[cfg(not(debug_assertions))]
+mod imp {
+	#[derive(Clone, Copy)]
+	pub struct Id ();
 
-	pub fn invalidate(&self) {
-		IDS.with(|ids| ids.borrow_mut().truncate(self.index))
-	}
-
-	pub fn invalidate_subsequent(&self) {
-		IDS.with(|ids| ids.borrow_mut().truncate(self.index + 1))
+	impl Id {
+		pub fn new() -> Self { Self () }
+		pub fn is_valid(&self) -> bool { true }
+		pub fn invalidate(&self) {}
+		pub fn invalidate_subsequent(&self) {}
 	}
 }
