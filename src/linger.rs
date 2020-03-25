@@ -54,6 +54,33 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> Linger<T, F> {
 	}
 }
 
+impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + 'static> Linger<T, F> {
+	#[doc(hidden)]
+	pub fn erase(self) -> Linger<T, dyn FnMut(*mut Option<ThdResult<T>>) + Send> {
+		use std::mem::MaybeUninit;
+
+		if let Linger::Completion(this) = self {
+			Linger::Completion(this)
+		} else if let Linger::Continuation(this) = self {
+			let this = MaybeUninit::new(this);
+			let this = this.as_ptr();
+			unsafe {
+				let functional: *const _ = &(*this).functional;
+				let stateful: *const _ = &(*this).stateful;
+				let group: *const _ = &(*this).group;
+
+				Linger::Continuation(Continuation {
+					functional: functional.read(),
+					stateful: stateful.read(),
+					group: group.read(),
+				})
+			}
+		} else {
+			Linger::Poison
+		}
+	}
+}
+
 pub struct Continuation<T: ?Sized> {
 	// First they called for the preemptible function to be executed, and I did not read the
 	// argument because it was not present.  Then they called for the return value, and I did
@@ -173,8 +200,8 @@ thread_local! {
 ///
 /// If the budget is `0`, this is a no-op; if it is `max_value()`, the timed function is run to
 /// completion.  This function is idempotent once the timed function completes.
-pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>, us: u64)
--> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
+pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>, us: u64)
+-> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>> {
 	use std::panic::resume_unwind;
 
 	// Danger, W.R!  The same disclaimer from launch() applies here.
