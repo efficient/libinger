@@ -20,15 +20,15 @@ use timetravel::Context;
 use timetravel::HandlerContext;
 use unfurl::Unfurl;
 
-pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> {
+pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> {
 	Completion(T),
 	Continuation(Continuation<F>),
 	Poison,
 }
 
-impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Unpin for Linger<T, F> {}
+impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> Unpin for Linger<T, F> {}
 
-impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Linger<T, F> {
+impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> Linger<T, F> {
 	pub fn is_completion(&self) -> bool {
 		if let Linger::Completion(_) = self {
 			true
@@ -54,20 +54,23 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send> Linger<T, F> {
 	}
 }
 
-pub struct Continuation<T> {
+pub struct Continuation<T: ?Sized> {
 	// First they called for the preemptible function to be executed, and I did not read the
 	// argument because it was not present.  Then they called for the return value, and I did
 	// not call the preemptible function because it was not present.  Then they called for me,
 	// and I did not call or return because there was no one left to call and I had nothing left
 	// to give.  (Only call this twice!)
-	functional: T,
+	//
+	// Because the whole Continuation might be moved between this function's preemption and its
+	// resumption, we must heap allocate it so its captured environment has a stable address.
+	functional: Box<T>,
 	stateful: Task,
 	group: ReusableSync<'static, Group>,
 }
 
-unsafe impl<T> Send for Continuation<T> {}
+unsafe impl<T: ?Sized> Send for Continuation<T> {}
 
-impl<T> Drop for Continuation<T> {
+impl<T: ?Sized> Drop for Continuation<T> {
 	fn drop(&mut self) {
 		debug_assert!(! is_preemptible(), "libinger: dropped from preemptible function");
 
