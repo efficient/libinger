@@ -55,3 +55,10 @@ extern fn cancel(timed: Option<&mut Linger>) {
 		abort();
 	}
 }
+
+#[no_mangle]
+extern fn pause() {
+	use linger::pause;
+
+	pause();
+}

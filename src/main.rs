@@ -21,6 +21,8 @@ fn main() {
 		void resume(linger_t *, uint64_t);\n\
 		void cancel(linger_t *);\n\
 		\n\
+		void pause(void);\n\
+		\n\
 		#endif\n\
 		",
 		size_of::<Linger>(),
