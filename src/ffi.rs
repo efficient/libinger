@@ -43,3 +43,15 @@ extern fn resume(timed: Option<&mut Linger>, us: u64) {
 		abort();
 	}
 }
+
+#[no_mangle]
+extern fn cancel(timed: Option<&mut Linger>) {
+	if let Some(timed) = timed {
+		if timed.continuation.is_continuation() {
+			timed.continuation = Lingerer::Completion(());
+			timed.is_complete = true;
+		}
+	} else {
+		abort();
+	}
+}

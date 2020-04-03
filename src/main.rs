@@ -19,6 +19,7 @@ fn main() {
 		\n\
 		linger_t launch(void (*)(void *), uint64_t, void *);\n\
 		void resume(linger_t *, uint64_t);\n\
+		void cancel(linger_t *);\n\
 		\n\
 		#endif\n\
 		",
