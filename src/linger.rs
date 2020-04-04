@@ -54,9 +54,9 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> Linger<T, F> {
 	}
 }
 
-impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + 'static> Linger<T, F> {
+impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>) + Send + 'a> Linger<T, F> {
 	#[doc(hidden)]
-	pub fn erase(self) -> Linger<T, dyn FnMut(*mut Option<ThdResult<T>>) + Send> {
+	pub fn erase(self) -> Linger<T, dyn FnMut(*mut Option<ThdResult<T>>) + Send + 'a> {
 		use std::mem::MaybeUninit;
 
 		if let Linger::Completion(this) = self {
