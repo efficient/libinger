@@ -13,7 +13,9 @@ const char *error_message(enum error error) {
 		res = "Statically linking me into the program executable is unsupported";
 		break;
 	case ERROR_RUNTIME_LOADED:
-		res = "Loading me at runtime via dlopen() is unsupported";
+		res = "Loading me at runtime via dlopen() is unsupported"
+			"\nNOTE: This error can also indicate a mismatch between your ld.so and libc builds."
+			"\n      If suspicious, check your binary's RUNPATH (e.g., link with -Wl,-R not -Crpath)!";
 		break;
 	case ERROR_DLMOPEN:
 		res = "Unable to load ancillary copies of library";
