@@ -599,17 +599,7 @@ static inline uintptr_t sgot_entry(const char *sym, Lmid_t n, uintptr_t defn) {
 static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uintptr_t base) {
 	assert(n <= config_numgroups());
 
-	// Don't trampoline any calls we ourselves make.  Note that, because calls to us are always
-	// routed to the base namespace, this means that all our calls also run in the base
-	// namespace, regardless of the current thread's namespace setting.  This makes namespace
-	// reinitialization easier by eliminating our own dependency on the ancillary namespaces,
-	// keeps our own semantics consistent regardless of whether we were brought in via DT_NEEDED
-	// or LD_PRELOAD, and avoids difficult semantics questions surrounding whitelisted symbols
-	// (e.g., if we interpose a non-whitelisted symbol, do our calls to its real definition
-	// result in a switch back to the base namespace or behave like those we don't interpose?).
-	if(myself(h))
-		return;
-
+	bool self = myself(h);
 	bool partial = whitelist_so_partial(h->path);
 
 	// First, update ancillary namespaces' shadow GOT entries for symbols defined in this same
@@ -662,7 +652,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 					// relocation unless we would have processed it were the
 					// library fully whitelisted.
 					uintptr_t uninterposed = trampolines_get(*got);
-					tramp = redirected ? uninterposed :
+					tramp = self || redirected ? uninterposed :
 						got_trampoline(h->strtab + st->st_name, uninterposed);
 
 					h->globdats[r - h->miscrels] = tramp;
@@ -718,7 +708,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 			// library's relocation unless we would have processed it were the library
 			// fully whitelisted.
 			uintptr_t uninterposed = plot_trampoline(h, tramp);
-			*got = redirected ? uninterposed : got_trampoline(sym, uninterposed);
+			*got = self || redirected ? uninterposed : got_trampoline(sym, uninterposed);
 		}
 	}
 	prot_segment(base, h->lazygot_seg, 0);
