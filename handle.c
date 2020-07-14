@@ -627,45 +627,49 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 			*sgot = sgot_entry(h->strtab + st->st_name, n, defn);
 		}
 
-	// Next, overwrite the GOT entries for GLOB_DAT relocations with trampolines or traps.
-	prot_segment(base, h->eagergot_seg, PROT_WRITE);
-	for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
-		if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
-			const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
-			uintptr_t *got = (uintptr_t *) (base + r->r_offset);
+	// Next, overwrite the GOT entries for GLOB_DAT relocations with trampolines or traps.  Skip
+	// this entire step for *this* library, because we don't want to force any automatic
+	// namespace switches once our own code is already running.
+	if(!self) {
+		prot_segment(base, h->eagergot_seg, PROT_WRITE);
+		for(const ElfW(Rela) *r = h->miscrels; r != h->miscrels_end; ++r)
+			if(ELF64_R_TYPE(r->r_info) == R_X86_64_GLOB_DAT) {
+				const ElfW(Sym) *st = h->symtab + ELF64_R_SYM(r->r_info);
+				uintptr_t *got = (uintptr_t *) (base + r->r_offset);
 
-			// We already know this symbol resolves to a different object file;
-			// therefore, its symbol table entry is an UND and cannot describe an
-			// indirectly-resolved function.
-			assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
+				// We already know this symbol resolves to a different object file;
+				// therefore, its symbol table entry is an UND and cannot describe an
+				// indirectly-resolved function.
+				assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
 
-			bool redirected = false;
-			if(*got && (*got != base + st->st_value || (redirected = partial))) {
-				// This is not an undefined weak symbol, and the reference didn't
-				// resolve back to our own object file.  Let's look up the address
-				// of its program-wide multiplexing address...
-				uintptr_t tramp;
-				if(!n) {
-					// Retrieve the trampoline from the defining library, or
-					// from *this* library if it's an interposed symbol.  But
-					// never do the latter for a partially-whitelisted library's
-					// relocation unless we would have processed it were the
-					// library fully whitelisted.
-					uintptr_t uninterposed = trampolines_get(*got);
-					tramp = self || redirected ? uninterposed :
-						got_trampoline(h->strtab + st->st_name, uninterposed);
+				bool redirected = false;
+				if(*got && (*got != base + st->st_value || (redirected = partial))) {
+					// This is not an undefined weak symbol, and the reference didn't
+					// resolve back to our own object file.  Let's look up the address
+					// of its program-wide multiplexing address...
+					uintptr_t tramp;
+					if(!n) {
+						// Retrieve the trampoline from the defining library, or
+						// from *this* library if it's an interposed symbol.  But
+						// never do the latter for a partially-whitelisted library's
+						// relocation unless we would have processed it were the
+						// library fully whitelisted.
+						uintptr_t uninterposed = trampolines_get(*got);
+						tramp = redirected ? uninterposed :
+							got_trampoline(h->strtab + st->st_name, uninterposed);
 
-					h->globdats[r - h->miscrels] = tramp;
-				} else {
-					tramp = h->globdats[r - h->miscrels];
+						h->globdats[r - h->miscrels] = tramp;
+					} else {
+						tramp = h->globdats[r - h->miscrels];
+					}
+
+					if(tramp && (!redirected || n))
+						// ...and install it over the GOT entry.
+						*got = tramp;
 				}
-
-				if(tramp && (!redirected || n))
-					// ...and install it over the GOT entry.
-					*got = tramp;
 			}
-		}
-	prot_segment(base, h->eagergot_seg, 0);
+		prot_segment(base, h->eagergot_seg, 0);
+	}
 
 	if(!*h->shadow.gots)
 		return;
@@ -702,13 +706,17 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 				// the PLT trampoline is later invoked.
 				((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
-			// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
-			// their reality and substitute the one from *this* library if it's an
-			// interposed symbol.  But never do the latter for a partially-whitelisted
-			// library's relocation unless we would have processed it were the library
-			// fully whitelisted.
-			uintptr_t uninterposed = plot_trampoline(h, tramp);
-			*got = self || redirected ? uninterposed : got_trampoline(sym, uninterposed);
+			// Skip updating the GOT for *this* library, because we don't want to force
+			// any automatic namespace switches once our own code is already running.
+			if(!self) {
+				// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
+				// their reality and substitute the one from *this* library if it's an
+				// interposed symbol.  But never do the latter for a partially-whitelisted
+				// library's relocation unless we would have processed it were the library
+				// fully whitelisted.
+				uintptr_t uninterposed = plot_trampoline(h, tramp);
+				*got = redirected ? uninterposed : got_trampoline(sym, uninterposed);
+			}
 		}
 	}
 	prot_segment(base, h->lazygot_seg, 0);
