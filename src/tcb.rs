@@ -45,9 +45,26 @@ impl ThreadControlBlock {
 		}))
 	}
 
-	pub unsafe fn install(&self) -> Result<()> {
+	pub unsafe fn install(&mut self) -> Result<()> {
+		use std::slice;
+
+		const POINTER_GUARD: usize = 6;
+
 		let Self (fs) = self;
-		let fs = fs.into();
+		if let MaybeMut::Mut(fs) = fs {
+			let fs = unsafe {
+				slice::from_raw_parts_mut(*fs, POINTER_GUARD + 1)
+			};
+			let cur = Self::current()?;
+			let Self (cur) = &cur;
+			let cur: &_ = cur.into();
+			let cur = unsafe {
+				slice::from_raw_parts(cur, POINTER_GUARD + 1)
+			};
+			fs[POINTER_GUARD] = cur[POINTER_GUARD];
+		}
+
+		let fs = (&*fs).into();
 		arch_prctl_set(SetOp::Fs, fs)
 	}
 }

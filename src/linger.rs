@@ -246,7 +246,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 		DEADLINE.with(|deadline| deadline.replace(us));
 		if switch_stack(task, group)? {
 			let tls = TLS.with(|tls| tls.take());
-			let tls = tls.expect("libinger: missing saved TCB at completion");
+			let mut tls = tls.expect("libinger: missing saved TCB at completion");
 			unsafe {
 				tls.install()?;
 			}
@@ -432,7 +432,7 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 
 				// Restore the thread's original thread-control block.
 				let tls = TLS.with(|tls| tls.take());
-				let tls = tls.expect("libinger: missing saved TCB during preemption");
+				let mut tls = tls.expect("libinger: missing saved TCB during preemption");
 				unsafe {
 					tls.install().expect("libinger: failed to restore TCB");
 				}
