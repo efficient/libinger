@@ -22,15 +22,27 @@ impl ThreadControlBlock {
 
 	pub fn new() -> Self {
 		extern {
-			fn _dl_allocate_tls(_: Option<&mut usize>) -> Option<&mut usize>;
+			fn _dl_allocate_tls(_: Option<&mut TCB>) -> Option<&mut TCB>;
+		}
+
+		#[repr(C)]
+		struct TCB {
+			tls_ptr: usize,
+			_unused: usize,
+			self_ptr: usize,
 		}
 
 		let fs = unsafe {
 			_dl_allocate_tls(None)
 		}.expect("libinger: could not allocate thread-control block");
-		let auto: *const _ = fs;
-		*fs = auto as _;
-		Self (MaybeMut::Mut(fs))
+		let auto: *mut _ = fs;
+		fs.tls_ptr = auto as _;
+		fs.self_ptr = auto as _;
+
+		let auto: *mut _ = auto as _;
+		Self (MaybeMut::Mut(unsafe {
+			&mut *auto
+		}))
 	}
 
 	pub unsafe fn install(&self) -> Result<()> {
