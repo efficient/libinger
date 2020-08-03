@@ -15,6 +15,7 @@ use std::io::Result;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 use std::thread::Result as ThdResult;
+use tcb::ThreadControlBlock;
 use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
@@ -68,11 +69,13 @@ impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>) + Send + 'a> Linger<T, F> {
 				let functional: *const _ = &(*this).functional;
 				let stateful: *const _ = &(*this).stateful;
 				let group: *const _ = &(*this).group;
+				let tls: *const _ = &(*this).tls;
 
 				Linger::Continuation(Continuation {
 					functional: functional.read(),
 					stateful: stateful.read(),
 					group: group.read(),
+					tls: tls.read(),
 				})
 			}
 		} else {
@@ -93,6 +96,7 @@ pub struct Continuation<T: ?Sized> {
 	functional: Box<T>,
 	stateful: Task,
 	group: ReusableSync<'static, Group>,
+	tls: ThreadControlBlock,
 }
 
 unsafe impl<T: ?Sized> Send for Continuation<T> {}
@@ -183,6 +187,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			yielded: false,
 		},
 		group,
+		tls: ThreadControlBlock::new(),
 	});
 	if us != 0 {
 		resume(&mut linger, us)?;
@@ -191,6 +196,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 }
 
 thread_local! {
+	static TLS: Cell<Option<ThreadControlBlock>> = Cell::default();
 	static BOOTSTRAP: Cell<Option<(NonNull<(dyn FnMut() + Send)>, Group)>> = Cell::default();
 	static TASK: RefCell<Task> = RefCell::default();
 	static DEADLINE: Cell<u64> = Cell::default();
@@ -210,6 +216,11 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 	if let Linger::Continuation(continuation) = fun {
 		let task = &mut continuation.stateful;
 		let group = *continuation.group;
+		let tls = ThreadControlBlock::current()?;
+		unsafe {
+			continuation.tls.install()?;
+		}
+		TLS.with(|this_thread| this_thread.replace(tls.into()));
 
 		// Are we launching this preemptible function for the first time?
 		if task.errno.is_none() {
@@ -234,6 +245,12 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 
 		DEADLINE.with(|deadline| deadline.replace(us));
 		if switch_stack(task, group)? {
+			let tls = TLS.with(|tls| tls.take());
+			let tls = tls.expect("libinger: missing saved TCB at completion");
+			unsafe {
+				tls.install()?;
+			}
+
 			// The preemptible function finished (either ran to completion or panicked).
 			// Since we know the closure is no longer running concurrently, it's now
 			// safe to call it again to retrieve the return value.
@@ -412,6 +429,13 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 				// Block this signal and disable preemption.
 				uc.uc_sigmask.add(no);
 				disable_preemption();
+
+				// Restore the thread's original thread-control block.
+				let tls = TLS.with(|tls| tls.take());
+				let tls = tls.expect("libinger: missing saved TCB during preemption");
+				unsafe {
+					tls.install().expect("libinger: failed to restore TCB");
+				}
 			});
 		} else {
 			*errno() = erryes;
