@@ -4,12 +4,14 @@
 #include "handle.h"
 #include "handles.h"
 #include "namespace.h"
+#include "repl.h"
 #include "shared.h"
 
 #include <assert.h>
 #include <link.h>
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdint.h>
 
 // Position N corresponds to namespace N+1!
 static bool namespace_locked[NUM_SHADOW_NAMESPACES];
@@ -64,4 +66,16 @@ bool libgotcha_group_renew(libgotcha_group_t which) {
 
 void libgotcha_shared_hook(void (*hook)(void)) {
 	shared_hook(hook);
+}
+
+// The following definitions permit a client libraries to call the wrapper functions associated with
+// our static interpositions, similar to how a statically-linked client library might do with
+// dynamic interpositions via the libgotcha_repl.h interface.
+
+int libgotcha_arch_prctl(int code, uintptr_t addr) {
+	return arch_prctl(code, addr);
+}
+
+void *libgotcha_tls_get_addr(uintptr_t index) {
+	return __tls_get_addr(index);
 }

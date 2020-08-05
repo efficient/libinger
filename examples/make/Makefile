@@ -2,7 +2,7 @@ CFLAGS    := -std=c99 -O2 -Wall -Wextra -Wpedantic
 RUSTFLAGS := --edition 2018 -O
 
 .PHONY: all
-all: libctime.so librstime.so
+all: libctime.so librstime.so libctls.so librstls.so
 
 .PHONY: clean
 clean:
