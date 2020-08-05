@@ -47,10 +47,14 @@ impl ThreadControlBlock {
 
 	pub unsafe fn install(&mut self) -> Result<()> {
 		use std::slice;
+		extern {
+			fn __ctype_init();
+		}
 
 		const POINTER_GUARD: usize = 6;
 
 		let Self (fs) = self;
+		let mut custom = false;
 		if let MaybeMut::Mut(fs) = fs {
 			let fs = unsafe {
 				slice::from_raw_parts_mut(*fs, POINTER_GUARD + 1)
@@ -62,10 +66,15 @@ impl ThreadControlBlock {
 				slice::from_raw_parts(cur, POINTER_GUARD + 1)
 			};
 			fs[POINTER_GUARD] = cur[POINTER_GUARD];
+			custom = true;
 		}
 
 		let fs = (&*fs).into();
-		arch_prctl_set(SetOp::Fs, fs)
+		arch_prctl_set(SetOp::Fs, fs)?;
+		if custom {
+			__ctype_init();
+		}
+		Ok(())
 	}
 }
 
