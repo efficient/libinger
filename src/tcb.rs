@@ -127,11 +127,11 @@ unsafe fn arch_prctl_get<'a>(op: GetOp) -> Result<&'a usize> {
 
 unsafe fn arch_prctl_set(op: SetOp, val: &usize) -> Result<()> {
 	extern {
-		fn arch_prctl(_: c_int, _: c_ulong) -> c_int;
+		fn libgotcha_arch_prctl(_: c_int, _: c_ulong) -> c_int;
 	}
 
 	let val: *const _ = val;
-	if arch_prctl(op as _, val as _) == 0 {
+	if libgotcha_arch_prctl(op as _, val as _) == 0 {
 		Ok(())
 	} else {
 		Err(Error::last_os_error())
