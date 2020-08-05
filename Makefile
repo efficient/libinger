@@ -28,7 +28,7 @@ libgotcha.so: libgotcha.o libgotcha_api.rs
 libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
-libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o segprot.o shared.o whitelist.o
+libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
@@ -76,7 +76,7 @@ handles.o: private CPPFLAGS += -D_GNU_SOURCE
 handles.o: handles.h config.h error.h handle.h namespace.h
 init.o: private CFLAGS += -fpic
 init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h threads.h whitelist.h
+init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h repl.h threads.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
@@ -88,6 +88,9 @@ namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h
+repl.o: private CFLAGS += -fpic -ftls-model=initial-exec
+repl.o: private CPPFLAGS += -D_GNU_SOURCE
+repl.o: namespace.h threads.h
 segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE

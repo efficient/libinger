@@ -5,6 +5,7 @@
 #include "handles.h"
 #include "interpose.h"
 #include "namespace.h"
+#include "repl.h"
 #include "whitelist.h"
 
 #include <sys/mman.h>
@@ -31,6 +32,11 @@ static inline enum error init(void) {
 		// We don't want to initialize any copies of ourself that we may have loaded.
 		return ancillary_disable_ctors_dtors();
 	assert(namespace_self() && "libgotcha clash from already_bootstrapping() false negative");
+
+	// Functions we interpose statically memoize the address of their external definitions when
+	// first called.  This would be disastrous if the first call occurred in our signal handler,
+	// so resolve the addresses eagerly instead where required.
+	repl_init();
 
 	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
 	// will be routed to their external definitions.
