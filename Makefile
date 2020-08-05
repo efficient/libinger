@@ -88,7 +88,7 @@ namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h
-repl.o: private CFLAGS += -fpic -ftls-model=initial-exec
+repl.o: private CFLAGS += -fpic -ftls-model=initial-exec -Og
 repl.o: private CPPFLAGS += -D_GNU_SOURCE
 repl.o: namespace.h threads.h
 segprot.o: segprot.h plot.h
