@@ -27,7 +27,8 @@ static bool libc(const char *sym) {
 	return strstr(sym, "malloc") || strstr(sym, "calloc") || strstr(sym, "realloc") ||
 		strstr(sym, "valloc") || !strcmp(sym, "aligned_alloc") || strstr(sym, "memalign") ||
 		!strcmp(sym, "free") || !strcmp(sym, "__libc_free") || !strcmp(sym, "__free_hook") ||
-		!strcmp(sym, "cfree");
+		!strcmp(sym, "cfree") || strstr(sym, "fork") || strstr(sym, "posix_spawn") ||
+		strstr(sym, "uselocale") || !strcmp(sym, "__cxa_thread_atexit_impl");
 }
 
 static bool libpthread(const char *sym) {
