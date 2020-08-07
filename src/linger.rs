@@ -243,14 +243,18 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 			});
 		}
 
+		// Transfer control into the libinger module before running the function!
 		DEADLINE.with(|deadline| deadline.replace(us));
-		if switch_stack(task, group)? {
-			let tls = TLS.with(|tls| tls.take());
-			let mut tls = tls.expect("libinger: missing saved TCB at completion");
-			unsafe {
-				tls.install()?;
-			}
+		let finished = switch_stack(task, group)?;
 
+		// Restore the thread's original thread-control block.
+		let tls = TLS.with(|tls| tls.take());
+		let mut tls = tls.expect("libinger: missing saved TCB");
+		unsafe {
+			tls.install()?;
+		}
+
+		if finished {
 			// The preemptible function finished (either ran to completion or panicked).
 			// Since we know the closure is no longer running concurrently, it's now
 			// safe to call it again to retrieve the return value.
@@ -371,6 +375,7 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 		// Prevent namespace reinitialization on drop of Continuation containing the Task.
 		task.errno.take();
 	}
+
 	Ok(! preempted)
 }
 
@@ -429,13 +434,6 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 				// Block this signal and disable preemption.
 				uc.uc_sigmask.add(no);
 				disable_preemption();
-
-				// Restore the thread's original thread-control block.
-				let tls = TLS.with(|tls| tls.take());
-				let mut tls = tls.expect("libinger: missing saved TCB during preemption");
-				unsafe {
-					tls.install().expect("libinger: failed to restore TCB");
-				}
 			});
 		} else {
 			*errno() = erryes;
