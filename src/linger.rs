@@ -196,7 +196,6 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 }
 
 thread_local! {
-	static TLS: Cell<Option<ThreadControlBlock>> = Cell::default();
 	static BOOTSTRAP: Cell<Option<(NonNull<(dyn FnMut() + Send)>, Group)>> = Cell::default();
 	static TASK: RefCell<Task> = RefCell::default();
 	static DEADLINE: Cell<u64> = Cell::default();
@@ -216,11 +215,10 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 	if let Linger::Continuation(continuation) = fun {
 		let task = &mut continuation.stateful;
 		let group = *continuation.group;
-		let tls = ThreadControlBlock::current()?;
+		let mut tls = ThreadControlBlock::current()?;
 		unsafe {
 			continuation.tls.install()?;
 		}
-		TLS.with(|this_thread| this_thread.replace(tls.into()));
 
 		// Are we launching this preemptible function for the first time?
 		if task.errno.is_none() {
@@ -248,8 +246,6 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 		let finished = switch_stack(task, group)?;
 
 		// Restore the thread's original thread-control block.
-		let tls = TLS.with(|tls| tls.take());
-		let mut tls = tls.expect("libinger: missing saved TCB");
 		unsafe {
 			tls.install()?;
 		}
