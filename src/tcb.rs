@@ -11,6 +11,7 @@ use std::io::Result;
 use std::os::raw::c_int;
 use std::os::raw::c_ulong;
 
+#[must_use]
 pub struct ThreadControlBlock (MaybeMut<'static>);
 
 impl ThreadControlBlock {
@@ -45,7 +46,15 @@ impl ThreadControlBlock {
 		}))
 	}
 
-	pub unsafe fn install(&mut self) -> Result<()> {
+	pub unsafe fn install(mut self) -> Result<ThreadControlBlockGuard> {
+		let parent = self.install_unguarded()?.ok_or(()).or_else(|_| Self::current())?;
+		Ok(ThreadControlBlockGuard {
+			this: self.into(),
+			parent,
+		})
+	}
+
+	unsafe fn install_unguarded(&mut self) -> Result<Option<Self>> {
 		use std::slice;
 		extern {
 			fn __ctype_init();
@@ -54,12 +63,13 @@ impl ThreadControlBlock {
 		const POINTER_GUARD: usize = 6;
 
 		let Self (fs) = self;
+		let mut cur = None;
 		let mut custom = false;
 		if let MaybeMut::Mut(fs) = fs {
 			let fs = unsafe {
 				slice::from_raw_parts_mut(*fs, POINTER_GUARD + 1)
 			};
-			let cur = Self::current()?;
+			let cur = cur.get_or_insert(Self::current()?);
 			let Self (cur) = &cur;
 			let cur: &_ = cur.into();
 			let cur = unsafe {
@@ -74,7 +84,7 @@ impl ThreadControlBlock {
 		if custom {
 			__ctype_init();
 		}
-		Ok(())
+		Ok(cur)
 	}
 }
 
@@ -89,6 +99,35 @@ impl Drop for ThreadControlBlock {
 			unsafe {
 				_dl_deallocate_tls(fs, true);
 			}
+		}
+	}
+}
+
+#[must_use]
+pub struct ThreadControlBlockGuard {
+	this: Option<ThreadControlBlock>,
+	parent: ThreadControlBlock,
+}
+
+impl ThreadControlBlockGuard {
+	pub unsafe fn uninstall(mut self) -> Result<ThreadControlBlock> {
+		Ok(self.this.take().unwrap())
+	}
+}
+
+impl Drop for ThreadControlBlockGuard {
+	fn drop(&mut self) {
+		extern {
+			fn __call_tls_dtors();
+		}
+
+		if let Some(ThreadControlBlock (MaybeMut::Mut(_))) = &self.this {
+			unsafe {
+				__call_tls_dtors();
+			}
+		}
+		unsafe {
+			self.parent.install_unguarded().unwrap();
 		}
 	}
 }

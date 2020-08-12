@@ -96,7 +96,7 @@ pub struct Continuation<T: ?Sized> {
 	functional: Box<T>,
 	stateful: Task,
 	group: ReusableSync<'static, Group>,
-	tls: ThreadControlBlock,
+	tls: Option<ThreadControlBlock>,
 }
 
 unsafe impl<T: ?Sized> Send for Continuation<T> {}
@@ -187,7 +187,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 			yielded: false,
 		},
 		group,
-		tls: ThreadControlBlock::new(),
+		tls: Some(ThreadControlBlock::new()),
 	});
 	if us != 0 {
 		resume(&mut linger, us)?;
@@ -215,10 +215,10 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 	if let Linger::Continuation(continuation) = fun {
 		let task = &mut continuation.stateful;
 		let group = *continuation.group;
-		let mut tls = ThreadControlBlock::current()?;
-		unsafe {
-			continuation.tls.install()?;
-		}
+		let tls = continuation.tls.take().expect("libinger: continuation with missing TCB");
+		let tls = unsafe {
+			tls.install()?
+		};
 
 		// Are we launching this preemptible function for the first time?
 		if task.errno.is_none() {
@@ -243,19 +243,15 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 
 		// Transfer control into the libinger module before running the function!
 		DEADLINE.with(|deadline| deadline.replace(us));
-		let finished = switch_stack(task, group)?;
-
-		// Restore the thread's original thread-control block.
-		unsafe {
-			tls.install()?;
-		}
-
-		if finished {
+		if switch_stack(task, group)? {
 			// The preemptible function finished (either ran to completion or panicked).
 			// Since we know the closure is no longer running concurrently, it's now
 			// safe to call it again to retrieve the return value.
 			let mut retval = None;
 			(continuation.functional)(&mut retval);
+
+			// Call TLS destructors and restore the original thread-control block.
+			drop(tls);
 
 			match retval.expect("resume(): return value was already retrieved") {
 				Ok(retval) => *fun = Linger::Completion(retval),
@@ -264,6 +260,12 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 					resume_unwind(panic);
 				},
 			}
+		} else {
+			// Restore the original thread-control block *without* tearing down the TLS!
+			let tls = unsafe {
+				tls.uninstall()?
+			};
+			continuation.tls.replace(tls);
 		}
 	}
 
