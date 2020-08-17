@@ -28,7 +28,7 @@ libgotcha.so: libgotcha.o libgotcha_api.rs
 libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
-libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o whitelist.o
+libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o tcb.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
@@ -88,13 +88,14 @@ namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h
-repl.o: private CFLAGS += -fpic -ftls-model=initial-exec -Og
 repl.o: private CPPFLAGS += -D_GNU_SOURCE
-repl.o: namespace.h threads.h
+repl.o: namespace.h tcb.h
 segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
 shared.o: shared.h namespace.h
+tcb.o: private CFLAGS += -fpic -ftls-model=initial-exec
+tcb.o: tcb.h threads.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
 whitelist.o: whitelist.h config.h handle.h namespace.h
 
