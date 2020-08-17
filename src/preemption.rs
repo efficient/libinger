@@ -8,7 +8,7 @@ use signal::Signal;
 use signal::Sigset;
 use std::cell::Cell;
 use std::cell::RefCell;
-use std::io::Result;
+use std::io::Result as IoResult;
 
 thread_local! {
 	static SIGNAL: RefCell<Option<ReusableSync<'static, Signal>>> = RefCell::new(None);
@@ -17,18 +17,19 @@ thread_local! {
 	static DEFERRED: Cell<bool> = Cell::new(false);
 }
 
-pub fn thread_signal() -> Option<Signal> {
+pub fn thread_signal() -> Result<Signal, ()> {
 	// Because this is called from signal handlers, it might happen during thread teardown, when
 	// the thread-local variable is being/has been destructed.  In such a case, we simply report
 	// that the current thread has no preemption signal assigned (any longer).
-	SIGNAL.try_with(|signal| signal.borrow().as_ref().map(|signal| **signal)).unwrap_or(None)
+	SIGNAL.try_with(|signal| signal.borrow().as_ref().map(|signal| **signal)).unwrap_or(None).ok_or(())
 }
 
 extern fn resume_preemption() {
-	enable_preemption(None);
+	// Skip if this trampoline is running in a destructor during thread teardown.
+	drop(enable_preemption(None));
 }
 
-pub fn enable_preemption(group: Option<Group>) {
+pub fn enable_preemption(group: Option<Group>) -> Result<(), ()> {
 	use signal::pthread::pthread_kill;
 	use signal::pthread::pthread_self;
 
@@ -41,8 +42,7 @@ pub fn enable_preemption(group: Option<Group>) {
 	}
 	// else the caller is asserting the group change has already been performed.
 
-	let signal = thread_signal()
-		.expect("libinger: tried to enable preemption before setting up thread preemption");
+	let signal = thread_signal()?;
 	if DEFERRED.with(|deferred| deferred.replace(false)) {
 		drop(pthread_kill(pthread_self(), signal));
 		unblock = true;
@@ -51,6 +51,8 @@ pub fn enable_preemption(group: Option<Group>) {
 	if unblock {
 		drop(mask(Operation::Unblock, signal));
 	}
+
+	Ok(())
 }
 
 pub fn disable_preemption() {
@@ -68,7 +70,7 @@ pub fn defer_preemption() {
 	DEFERRED.with(|deferred| deferred.replace(true));
 }
 
-pub fn thread_setup(handler: Handler, quantum: u64) -> Result<()> {
+pub fn thread_setup(handler: Handler, quantum: u64) -> IoResult<()> {
 	use gotcha::shared_hook;
 	use libc::SA_RESTART;
 	use libc::SA_SIGINFO;
@@ -124,7 +126,7 @@ pub fn thread_setup(handler: Handler, quantum: u64) -> Result<()> {
 	Ok(())
 }
 
-fn mask(un: Operation, no: Signal) -> Result<()> {
+fn mask(un: Operation, no: Signal) -> IoResult<()> {
 	use signal::pthread_sigmask;
 
 	let mut set = Sigset::empty();

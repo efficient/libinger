@@ -19,7 +19,6 @@ use tcb::ThreadControlBlock;
 use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
-use unfurl::Unfurl;
 
 pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> {
 	Completion(T),
@@ -329,10 +328,9 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 				// jumps into the continuation.
 				let mut old = Sigset::empty();
 				let mut new = Sigset::empty();
-				let sig = thread_signal();
-				let sig = unsafe {
-					sig.unfurl()
-				};
+				let sig = thread_signal().unwrap_or_else(|_|
+					abort("switch_stack(): error accessing TLS variable")
+				);
 				new.add(sig);
 				if let Err(or) = pthread_sigmask(
 					Operation::Block,
@@ -388,7 +386,9 @@ fn schedule() {
 		fun.as_mut()
 	};
 	stamp();
-	enable_preemption(group.into());
+	if enable_preemption(group.into()).is_err() {
+		abort("schedule(): error accessing TLS variable");
+	}
 	fun();
 	disable_preemption();
 
@@ -403,6 +403,7 @@ fn schedule() {
 /// Signal handler that pauses the preemptible function on timeout.  Runs on the oneshot stack.
 extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerContext>) {
 	use timetravel::Swap;
+	use unfurl::Unfurl;
 
 	let erryes = *errno();
 	let uc = unsafe {
