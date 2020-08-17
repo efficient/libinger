@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+int arch_prctl(int, uintptr_t);
+void *__tls_get_addr(uintptr_t);
+
 // Position N corresponds to namespace N+1!
 static bool namespace_locked[NUM_SHADOW_NAMESPACES];
 
