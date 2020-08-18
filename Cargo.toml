@@ -15,9 +15,11 @@ path = "external/libgotcha"
 
 [dependencies.signal]
 path = "internal/libsignal"
+features = ["libgotcha"]
 
 [dependencies.timetravel]
 path = "external/libtimetravel"
+features = ["libgotcha"]
 
 [[bench]]
 name = "inger"

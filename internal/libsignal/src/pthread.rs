@@ -7,10 +7,10 @@ use std::io::Result;
 pub struct PThread (pthread_t);
 
 pub fn pthread_kill(thread: PThread, signal: Signal) -> Result<()> {
-	use libc::pthread_kill;
+	use libgotcha::libgotcha_pthread_kill;
 
 	let code = unsafe {
-		pthread_kill(thread.0, signal as c_int)
+		libgotcha_pthread_kill(thread.0, signal as c_int)
 	};
 	if code == 0 {
 		Ok(())
