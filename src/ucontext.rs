@@ -266,6 +266,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	use libc::pthread_kill;
 	use libc::pthread_self;
 	use std::mem::transmute;
+	use std::process::abort;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
@@ -295,6 +296,10 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 		pthread_kill(pthread_self(), SIGSETCONTEXT);
 	}
 
+	if cfg!(debug_assertions) {
+		eprintln!("sigsetcontext(): signaling own thread did not trigger context switch!");
+		abort();
+	}
 	Some(Error::last_os_error())
 }
 
