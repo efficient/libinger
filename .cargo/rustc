@@ -1,0 +1,3 @@
+#!/bin/sh
+
+LIBGOTCHA_SYMBOLS="--globalize-symbol libgotcha_arch_prctl" exec rustc "$@"
