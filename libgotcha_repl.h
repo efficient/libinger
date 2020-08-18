@@ -28,6 +28,7 @@ extern "C" {
 
 #include <features.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 // Special build-time configuration flag.  If a program defines this symbol and sets it to true,
 // statically linking its executable against libgotcha will be permitted.  Note that, in this case,
@@ -40,6 +41,8 @@ extern const bool libgotcha_staticlink;
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
 int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
 #endif
+
+int libgotcha_arch_prctl(int, uintptr_t);
 
 #ifdef __USE_POSIX
 #include <signal.h>

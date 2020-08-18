@@ -80,16 +80,16 @@ init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h re
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h repl.h shared.h
+libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h shared.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE -Wno-missing-attributes
-libgotcha_repl.o: libgotcha_repl.h config.h globals.h namespace.h threads.h
+libgotcha_repl.o: libgotcha_repl.h config.h globals.h namespace.h tcb.h threads.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h
 repl.o: private CPPFLAGS += -D_GNU_SOURCE
-repl.o: repl.h namespace.h tcb.h
+repl.o: repl.h tcb.h
 segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
