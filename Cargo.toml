@@ -4,3 +4,6 @@ version = "0.0.0"
 
 [dependencies]
 libc = "*"
+
+[features]
+libgotcha = []

@@ -9,6 +9,7 @@ pub mod id;
 #[cfg(not(debug_assertions))]
 mod id;
 mod invar;
+mod libgotcha;
 mod platform;
 pub mod stable;
 mod swap;

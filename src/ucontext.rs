@@ -263,8 +263,8 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 #[must_use]
 pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context<S>) -> Option<Error> {
 	use errno::errno;
-	use libc::pthread_kill;
 	use libc::pthread_self;
+	use libgotcha::libgotcha_pthread_kill;
 	use std::mem::transmute;
 	use std::process::abort;
 	use std::sync::ONCE_INIT;
@@ -293,7 +293,7 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 		transmute(continuation)
 	}, erryes))));
 	unsafe {
-		pthread_kill(pthread_self(), SIGSETCONTEXT);
+		libgotcha_pthread_kill(pthread_self(), SIGSETCONTEXT);
 	}
 
 	if cfg!(debug_assertions) {
