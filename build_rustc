@@ -18,4 +18,8 @@ outdir() {
 
 export PATH="`echo "$PATH" | cut -d: -f2-`"
 rustc "$@"
+if [ -n "$LIBGOTCHA_SYMBOLS" ]
+then
+	objcopy $LIBGOTCHA_SYMBOLS "$OUT_DIR/libgotcha.o"
+fi
 ar rs "`outdir "$@"`"/libgotcha-*.rlib "$OUT_DIR/libgotcha.o"
