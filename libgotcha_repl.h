@@ -47,6 +47,8 @@ int libgotcha_arch_prctl(int, uintptr_t);
 #ifdef __USE_POSIX
 #include <signal.h>
 
+int libgotcha_pthread_kill(pthread_t, int);
+
 int libgotcha_sigaction(int, const struct sigaction *, struct sigaction *);
 
 int libgotcha_sigprocmask(int, const sigset_t *, sigset_t *);

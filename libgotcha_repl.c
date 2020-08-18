@@ -120,6 +120,14 @@ int arch_prctl(int code, uintptr_t addr) {
 	return stat;
 }
 
+#pragma weak libgotcha_pthread_kill = pthread_kill
+int pthread_kill(pthread_t thread, int sig) {
+	uintptr_t repl = *tcb_parent();
+	if(!repl)
+		repl = thread;
+	return pthread_kill(repl, sig);
+}
+
 static thread_local bool segv_masked;
 static void (*segv_handler)(int, siginfo_t *, void *);
 
