@@ -1,3 +1,5 @@
+#include "repl.h"
+
 #include "namespace.h"
 #include "tcb.h"
 

@@ -89,7 +89,7 @@ namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
 plot.o: plot.h
 repl.o: private CPPFLAGS += -D_GNU_SOURCE
-repl.o: namespace.h tcb.h
+repl.o: repl.h namespace.h tcb.h
 segprot.o: segprot.h plot.h
 shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
