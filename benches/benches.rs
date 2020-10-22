@@ -458,6 +458,5 @@ fn cswitch_handler(lo: &mut Bencher) {
 
 trait ContextRefMut {}
 impl<'a> ContextRefMut for &'a mut HandlerContext {}
-impl<'a> ContextRefMut for &'a mut ucontext_t {}
 
 type Handler = extern "C" fn(c_int, Option<&mut siginfo_t>, Option<&mut ucontext_t>);
