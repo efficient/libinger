@@ -389,12 +389,11 @@ fn cswitch_yield(lo: &mut Bencher) {
 	use libc::sched_getcpu;
 	use libc::sched_yield;
 	use std::mem::size_of_val;
-	use std::sync::atomic::ATOMIC_BOOL_INIT;
 	use std::sync::atomic::AtomicBool;
 	use std::sync::atomic::Ordering;
 	use std::thread::spawn;
 
-	static FINISHED: AtomicBool = ATOMIC_BOOL_INIT;
+	static FINISHED: AtomicBool = AtomicBool::new(false);
 	static mut ONE_WAY: Latency = Latency::NEW;
 
 	let mut cpus = unsafe {
