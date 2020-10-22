@@ -247,7 +247,7 @@ fn swapsig_native(lo: &mut Bencher) {
 	}
 
 	let reset: Option<Handler> = None;
-	swapsig_helper(reset);
+	drop(swapsig_helper(reset));
 
 	let mut swapsig_helper = swapsig_helper(Some(restore));
 	unsafe {
@@ -294,7 +294,7 @@ fn swapsig_timetravel(lo: &mut Bencher) {
 	}
 
 	let reset: Option<Handler> = None;
-	swapsig_helper(reset);
+	drop(swapsig_helper(reset));
 
 	let stack: Box<[_]> = Box::new([0u8; SIGSTKSZ]);
 	drop(makecontext(
@@ -441,7 +441,7 @@ fn cswitch_handler(lo: &mut Bencher) {
 	}
 
 	let reset: Option<Handler> = None;
-	swapsig_helper(reset);
+	drop(swapsig_helper(reset));
 
 	let mut swapsig_helper = swapsig_helper(Some(handler));
 	lo.iter(|| {
