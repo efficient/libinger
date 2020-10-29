@@ -41,8 +41,14 @@ static inline enum error init(void) {
 	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
 	// will be routed to their external definitions.
 	interpose_init();
-	root = dlopen(NULL, RTLD_LAZY);
 
+	if(config_skip(handle_progname())) {
+		fprintf(stderr, "libgotcha notice: Going dormant in skipped executable %s\n",
+			handle_progname());
+		return SUCCESS;
+	}
+
+	root = dlopen(NULL, RTLD_LAZY);
 	if(!config_staticlink() && namespace_self() == root)
 		// Eek!  Someone statically linked us into this executable.  Not cool: aside from
 		// confining their code to run in the base namespace, that means we just gave them

@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 bool config_staticlink(void);
+bool config_skip(const char *);
 ssize_t config_numgroups(void);
 bool config_sharedlibc(void);
 bool config_noglobals(void);

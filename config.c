@@ -11,6 +11,18 @@ bool config_staticlink(void) {
 	return &libgotcha_staticlink && libgotcha_staticlink;
 }
 
+bool config_skip(const char *progname) {
+	static bool memo;
+	static const char *list;
+	if(!memo) {
+		list = getenv("LIBGOTCHA_SKIP");
+		memo = true;
+	}
+	if(!list)
+		return false;
+	return strstr(list, progname);
+}
+
 ssize_t config_numgroups(void) {
 	static bool memo;
 	static ssize_t res = NUM_SHADOW_NAMESPACES;
