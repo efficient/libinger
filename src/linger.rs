@@ -176,15 +176,10 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		}
 	});
 
-	let checkpoint = setup_stack()?;
 	let group = assign_group().expect("launch(): too many active timed functions");
 	let mut linger = Linger::Continuation(Continuation {
 		functional: fun,
-		stateful: Task {
-			errno: None,
-			checkpoint,
-			yielded: false,
-		},
+		stateful: Task::default(),
 		group,
 		tls: Some(ThreadControlBlock::new()),
 	});
@@ -222,6 +217,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 		// Are we launching this preemptible function for the first time?
 		if task.errno.is_none() {
 			let fun = &mut continuation.functional;
+			task.checkpoint = setup_stack()?;
 			BOOTSTRAP.with(|bootstrap| {
 				// The schedule() function is polymorphic across "return" types, but
 				// we expect a storage area appropriate for our own type.  To remove
