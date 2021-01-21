@@ -202,6 +202,8 @@ thread_local! {
 pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>, us: u64)
 -> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>> {
 	use std::panic::resume_unwind;
+	use preemption::RealThreadId;
+	use preemption::thread_setup;
 
 	// Danger, W.R!  The same disclaimer from launch() applies here.
 	debug_assert!(! is_preemptible(), "resume(): called from preemptible function");
@@ -209,10 +211,16 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 	if let Linger::Continuation(continuation) = fun {
 		let task = &mut continuation.stateful;
 		let group = *continuation.group;
+		let thread = RealThreadId::current();
+
 		let tls = continuation.tls.take().expect("libinger: continuation with missing TCB");
 		let tls = unsafe {
 			tls.install()?
 		};
+
+		if let Err(or) = thread_setup(thread, preempt, QUANTUM_MICROSECS) {
+			abort(&format!("resume(): failure in thread_setup(): {}", or));
+		}
 
 		// Are we launching this preemptible function for the first time?
 		if task.errno.is_none() {
@@ -294,11 +302,6 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 	use signal::pthread_sigmask;
 	use timetravel::restorecontext;
 	use timetravel::sigsetcontext;
-	use preemption::thread_setup;
-
-	if let Err(or) = thread_setup(preempt, QUANTUM_MICROSECS) {
-		abort(&format!("switch_stack(): failure in thread_setup(): {}", or));
-	}
 
 	let mut error = None;
 	restorecontext(

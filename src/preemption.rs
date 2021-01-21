@@ -6,12 +6,14 @@ use signal::Operation;
 use signal::Set;
 use signal::Signal;
 use signal::Sigset;
+use signal::sigaction;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result as IoResult;
+use timer::Timer;
 
 thread_local! {
-	static SIGNAL: RefCell<Option<ReusableSync<'static, Signal>>> = RefCell::new(None);
+	static SIGNAL: RefCell<Option<RealThreadId>> = RefCell::default();
 
 	// Whether we had to delay preemption checks until the end of a nonpreemptible call.
 	static DEFERRED: Cell<bool> = Cell::new(false);
@@ -21,7 +23,14 @@ pub fn thread_signal() -> Result<Signal, ()> {
 	// Because this is called from signal handlers, it might happen during thread teardown, when
 	// the thread-local variable is being/has been destructed.  In such a case, we simply report
 	// that the current thread has no preemption signal assigned (any longer).
-	SIGNAL.try_with(|signal| signal.borrow().as_ref().map(|signal| **signal)).unwrap_or(None).ok_or(())
+	SIGNAL.try_with(|signal|
+		signal.borrow().as_ref().map(|signal| {
+			let RealThreadId (signal) = signal;
+			signal.borrow().as_ref().map(|signal|
+				*signal.signal
+			)
+		}).unwrap_or(None).ok_or(())
+	).unwrap_or(Err(()))
 }
 
 extern fn resume_preemption() {
@@ -57,6 +66,7 @@ pub fn enable_preemption(group: Option<Group>) -> Result<(), ()> {
 
 pub fn disable_preemption() {
 	group_thread_set!(Group::SHARED);
+	SIGNAL.with(|signal| signal.replace(None));
 	DEFERRED.with(|deferred| deferred.replace(false));
 }
 
@@ -70,55 +80,14 @@ pub fn defer_preemption() {
 	DEFERRED.with(|deferred| deferred.replace(true));
 }
 
-pub fn thread_setup(handler: Handler, quantum: u64) -> IoResult<()> {
+pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoResult<()> {
 	use gotcha::shared_hook;
-	use libc::SA_RESTART;
-	use libc::SA_SIGINFO;
-	use libc::timespec;
-	use signal::Action;
-	use signal::Sigaction;
-	use signals::assign_signal;
-	use signal::sigaction;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
-	use timer::Clock;
-	use timer::Sigevent;
-	use timer::Timer;
-	use timer::itimerspec;
-	use timer::timer_create;
-	use timer::timer_settime;
 
-	thread_local! {
-		static TIMER: Cell<Option<Timer>> = Cell::default();
-	}
-	if TIMER.with(|timer| timer.get()).is_none() {
-		let signal = SIGNAL.with(|signal|
-			**signal.borrow_mut().get_or_insert(assign_signal()
-				.expect("libinger: no available signal for preempting this thread")
-			)
-		);
-
-		let sa = Sigaction::new(handler, Sigset::empty(), SA_SIGINFO | SA_RESTART);
-		sigaction(signal, &sa, None)?;
-		mask(Operation::Block, signal)?;
-
-		let mut se = Sigevent::signal(signal);
-		let alarm = timer_create(Clock::Real, &mut se)?;
-		TIMER.with(|timer| timer.replace(alarm.into()));
-
-		let quantum: i64 = quantum as _;
-		let mut it = itimerspec {
-			it_interval: timespec {
-				tv_sec: 0,
-				tv_nsec: quantum * 1_000,
-			},
-			it_value: timespec {
-				tv_sec: 0,
-				tv_nsec: quantum * 1_000,
-			},
-		};
-		timer_settime(alarm, false, &mut it, None)?;
-	}
+	let RealThreadId (signal) = thread;
+	signal.replace(Some(PreemptionSignal::new(handler, quantum)?));
+	SIGNAL.with(|signal| signal.replace(Some(thread)));
 
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| shared_hook(resume_preemption));
@@ -133,3 +102,79 @@ fn mask(un: Operation, no: Signal) -> IoResult<()> {
 	set.add(no);
 	pthread_sigmask(un, &set, None)
 }
+
+pub struct RealThreadId (&'static RefCell<Option<PreemptionSignal>>);
+
+impl RealThreadId {
+	pub fn current() -> Self {
+		use lifetime::unbound;
+
+		thread_local! {
+			static SIGNALER: RefCell<Option<PreemptionSignal>> = RefCell::default();
+		}
+
+		Self (SIGNALER.with(|signaler| unsafe {
+			unbound(signaler)
+		}))
+	}
+}
+
+struct PreemptionSignal {
+	signal: ReusableSync<'static, Signal>,
+	timer: Timer,
+}
+
+impl PreemptionSignal {
+	fn new(handler: Handler, quantum: u64) -> IoResult<Self> {
+		use libc::SA_RESTART;
+		use libc::SA_SIGINFO;
+		use libc::timespec;
+		use signal::Action;
+		use signal::Sigaction;
+		use signals::assign_signal;
+		use timer::Clock;
+		use timer::Sigevent;
+		use timer::itimerspec;
+		use timer::timer_create;
+		use timer::timer_settime;
+
+		let signal = assign_signal().expect("libinger: no available signal for preempting this thread");
+		let sa = Sigaction::new(handler, Sigset::empty(), SA_SIGINFO | SA_RESTART);
+		sigaction(*signal, &sa, None)?;
+		mask(Operation::Block, *signal)?;
+
+		let mut se = Sigevent::signal(*signal);
+		let timer = timer_create(Clock::Real, &mut se)?;
+		let quantum: i64 = quantum as _;
+		let mut it = itimerspec {
+			it_interval: timespec {
+				tv_sec: 0,
+				tv_nsec: quantum * 1_000,
+			},
+			it_value: timespec {
+				tv_sec: 0,
+				tv_nsec: quantum * 1_000,
+			},
+		};
+		timer_settime(timer, false, &mut it, None)?;
+
+		Ok(Self {
+			signal,
+			timer,
+		})
+	}
+}
+
+impl Drop for PreemptionSignal {
+	fn drop(&mut self) {
+		use timer::timer_delete;
+
+		if let Err(or) = timer_delete(self.timer) {
+			eprintln!("libinger: unable to delete POSIX timer: {}", or);
+		}
+		if let Err(or) = sigaction(*self.signal, &(), None) {
+			eprintln!("libinger: unable to unregister signal handler: {}", or);
+		}
+	}
+}
+
