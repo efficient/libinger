@@ -12,12 +12,12 @@ use std::os::raw::c_int;
 use std::os::raw::c_ulong;
 
 #[must_use]
-pub struct ThreadControlBlock (MaybeMut<'static>);
+pub struct ThreadControlBlock (Option<MaybeMut<'static>>);
 
 impl ThreadControlBlock {
 	pub fn current() -> Result<Self> {
 		unsafe {
-			arch_prctl_get(GetOp::Fs).map(|fs| Self (MaybeMut::Ref(fs)))
+			arch_prctl_get(GetOp::Fs).map(|fs| Self (Some(MaybeMut::Ref(fs))))
 		}
 	}
 
@@ -41,15 +41,15 @@ impl ThreadControlBlock {
 		fs.self_ptr = auto as _;
 
 		let auto: *mut _ = auto as _;
-		Self (MaybeMut::Mut(unsafe {
+		Self (Some(MaybeMut::Mut(unsafe {
 			&mut *auto
-		}))
+		})))
 	}
 
 	pub unsafe fn install(mut self) -> Result<ThreadControlBlockGuard> {
-		let parent = self.install_unguarded()?.ok_or(()).or_else(|_| Self::current())?;
+		let parent = unguarded_parent(self.install_unguarded())?;
 		Ok(ThreadControlBlockGuard {
-			this: self.into(),
+			this: self,
 			parent,
 		})
 	}
@@ -63,6 +63,7 @@ impl ThreadControlBlock {
 		const POINTER_GUARD: usize = 6;
 
 		let Self (fs) = self;
+		let fs = fs.as_mut().unwrap();
 		let mut cur = None;
 		let mut custom = false;
 		if let MaybeMut::Mut(fs) = fs {
@@ -71,7 +72,7 @@ impl ThreadControlBlock {
 			};
 			let cur = cur.get_or_insert(Self::current()?);
 			let Self (cur) = &cur;
-			let cur: &_ = cur.into();
+			let cur: &_ = cur.as_ref().unwrap().into();
 			let cur = unsafe {
 				slice::from_raw_parts(cur, POINTER_GUARD + 1)
 			};
@@ -86,32 +87,45 @@ impl ThreadControlBlock {
 		}
 		Ok(cur)
 	}
+
+	fn take(&mut self) -> Option<MaybeMut<'static>> {
+		let Self (this) = self;
+		this.take()
+	}
 }
 
 impl Drop for ThreadControlBlock {
 	fn drop(&mut self) {
-		extern {
-			fn _dl_deallocate_tls(_: &mut usize, _: bool);
-		}
-
-		let Self (fs) = self;
-		if let MaybeMut::Mut(fs) = fs {
-			unsafe {
-				_dl_deallocate_tls(fs, true);
+		let Self (this) = self;
+		if let Some(MaybeMut::Mut(_)) = this.as_mut() {
+			if let Ok (parent) = unguarded_parent(unsafe {
+				self.install_unguarded()
+			}) {
+				drop(ThreadControlBlockGuard {
+					this: ThreadControlBlock (self.take()),
+					parent,
+				});
+			} else {
+				eprintln!("libinger: could not install TCB to run TLS destructors");
 			}
 		}
+		let Self (fs) = self;
 	}
+}
+
+fn unguarded_parent(this: Result<Option<ThreadControlBlock>>) -> Result<ThreadControlBlock> {
+	this?.ok_or(()).or_else(|_| ThreadControlBlock::current())
 }
 
 #[must_use]
 pub struct ThreadControlBlockGuard {
-	this: Option<ThreadControlBlock>,
+	this: ThreadControlBlock,
 	parent: ThreadControlBlock,
 }
 
 impl ThreadControlBlockGuard {
 	pub unsafe fn uninstall(mut self) -> Result<ThreadControlBlock> {
-		Ok(self.this.take().unwrap())
+		Ok(ThreadControlBlock (self.this.take()))
 	}
 }
 
@@ -119,15 +133,23 @@ impl Drop for ThreadControlBlockGuard {
 	fn drop(&mut self) {
 		extern {
 			fn __call_tls_dtors();
+			fn _dl_deallocate_tls(_: &mut usize, _: bool);
 		}
 
-		if let Some(ThreadControlBlock (MaybeMut::Mut(_))) = &self.this {
+		let mut dealloc = None;
+		if let Some(MaybeMut::Mut(fs)) = self.this.take() {
 			unsafe {
 				__call_tls_dtors();
 			}
+			dealloc = Some(fs);
 		}
 		unsafe {
 			self.parent.install_unguarded().unwrap();
+		}
+		if let Some(fs) = dealloc {
+			unsafe {
+				_dl_deallocate_tls(fs, true);
+			}
 		}
 	}
 }
