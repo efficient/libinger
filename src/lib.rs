@@ -10,6 +10,7 @@ pub mod future;
 mod groups;
 mod lifetime;
 mod linger;
+mod localstores;
 mod preemption;
 pub mod profiler;
 mod reusable;

@@ -95,7 +95,7 @@ pub struct Continuation<T: ?Sized> {
 	functional: Box<T>,
 	stateful: Task,
 	group: ReusableSync<'static, Group>,
-	tls: Option<ThreadControlBlock>,
+	tls: ReusableSync<'static, Option<ThreadControlBlock>>,
 }
 
 unsafe impl<T: ?Sized> Send for Continuation<T> {}
@@ -130,6 +130,7 @@ struct Task {
 /// it is run to completion.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
+	use localstores::alloc_localstore;
 	use groups::assign_group;
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
@@ -181,7 +182,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 		functional: fun,
 		stateful: Task::default(),
 		group,
-		tls: Some(ThreadControlBlock::new()),
+		tls: alloc_localstore(),
 	});
 	if us != 0 {
 		resume(&mut linger, us)?;
@@ -246,15 +247,17 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 
 		// Transfer control into the libinger module before running the function!
 		DEADLINE.with(|deadline| deadline.replace(us));
-		if switch_stack(task, group)? {
+
+		let finished = switch_stack(task, group)?;
+		continuation.tls.replace(unsafe {
+			tls.uninstall()?
+		});
+		if finished {
 			// The preemptible function finished (either ran to completion or panicked).
 			// Since we know the closure is no longer running concurrently, it's now
 			// safe to call it again to retrieve the return value.
 			let mut retval = None;
 			(continuation.functional)(&mut retval);
-
-			// Call TLS destructors and restore the original thread-control block.
-			drop(tls);
 
 			match retval.expect("resume(): return value was already retrieved") {
 				Ok(retval) => *fun = Linger::Completion(retval),
@@ -263,12 +266,6 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 					resume_unwind(panic);
 				},
 			}
-		} else {
-			// Restore the original thread-control block *without* tearing down the TLS!
-			let tls = unsafe {
-				tls.uninstall()?
-			};
-			continuation.tls.replace(tls);
 		}
 	}
 
