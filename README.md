@@ -154,9 +154,11 @@ repository:
  1. Clone the glibc source code: `$ git clone git://sourceware.org/git/glibc`.  I'll assume you put
     it in `../glibc`, and have checked out whatever version you want to use.
  1. Edit `TLS_STATIC_SURPLUS` in `../glibc/elf/dl-tls.c` to raise the multiplier on `DL_NNS` by at
-    least two orders of magnitude*.
+    least two orders of magnitude*.  Our current recommendation is a multiplier of 2000.
  1. Change `DL_NNS` in `../glibc/sysdeps/generic/ldsodefs.h` to exceed by at least one the maximum
-    number of simultaneous preemptible functions your program will need*.
+    number of simultaneous preemptible functions your program will need*.  The default value of 16
+    should be fine for use cases with low parallelism and where preemptible functions are usually
+    allowed to run to completion before launching others; we have not tested values above 512.
  1. Make a new empty directory to use for the build and `cd` into it.  Let's say this is located at
     `../rtld`.
  1. Decide where you want to place your new glibc "installation."  I'll be using `../rtld/usr`.
