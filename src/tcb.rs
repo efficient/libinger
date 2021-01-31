@@ -1,11 +1,11 @@
 #![allow(unused)]
 
-use self::imp::ARCH_GET_CPUID;
-use self::imp::ARCH_GET_FS;
-use self::imp::ARCH_GET_GS;
-use self::imp::ARCH_SET_CPUID;
-use self::imp::ARCH_SET_FS;
-use self::imp::ARCH_SET_GS;
+use gotcha::prctl::ARCH_GET_CPUID;
+use gotcha::prctl::ARCH_GET_FS;
+use gotcha::prctl::ARCH_GET_GS;
+use gotcha::prctl::ARCH_SET_CPUID;
+use gotcha::prctl::ARCH_SET_FS;
+use gotcha::prctl::ARCH_SET_GS;
 use std::io::Error;
 use std::io::Result;
 use std::os::raw::c_int;
@@ -206,8 +206,4 @@ unsafe fn arch_prctl_set(op: SetOp, val: &usize) -> Result<()> {
 	} else {
 		Err(Error::last_os_error())
 	}
-}
-
-mod imp {
-	include!(concat!(env!("OUT_DIR"), "/tcb.rs"));
 }

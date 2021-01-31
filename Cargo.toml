@@ -1,7 +1,6 @@
 [package]
 name = "inger"
 version = "0.0.0"
-build = "build.rs"
 
 [lib]
 crate-type = ["dylib"]
@@ -28,9 +27,6 @@ harness = false
 [[bench]]
 name = "baseline"
 harness = false
-
-[build-dependencies]
-bindgen = "*"
 
 [dev-dependencies]
 bencher = "*"
