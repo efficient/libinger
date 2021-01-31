@@ -479,7 +479,8 @@ pub fn nsnow() -> u64 {
 	sum
 }
 
-fn abort(err: &str) -> ! {
+#[doc(hidden)]
+pub fn abort(err: &str) -> ! {
 	use std::process::abort;
 
 	let abort: fn() -> _ = abort;

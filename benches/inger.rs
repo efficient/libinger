@@ -8,6 +8,7 @@ use inger::nsnow;
 use inger::pause;
 use std::fs::File;
 use std::io::Write;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
@@ -16,6 +17,7 @@ const LIBSETS: usize = STACK_N_PREALLOC;
 benchmark_group![bench, launch, resume, renew];
 
 fn launch(lo: &mut Bencher) {
+	use inger::abort;
 	use inger::launch;
 	use inger::resume;
 	use std::mem::MaybeUninit;
@@ -27,6 +29,7 @@ fn launch(lo: &mut Bencher) {
 	let mut into = 0;
 	let mut outof = 0;
 	let mut index = 0;
+	let paused = AtomicBool::from(false);
 	lo.iter(|| {
 		assert!(index < lingers.len(), "LIBSETS tunable set too low!");
 
@@ -34,6 +37,9 @@ fn launch(lo: &mut Bencher) {
 		lingers[index] = MaybeUninit::new(launch(|| {
 			during.store(nsnow(), Ordering::Relaxed);
 			pause();
+			if ! paused.load(Ordering::Relaxed) {
+				abort("pause() did not context switch!");
+			}
 		}, u64::max_value()).unwrap());
 
 		let after = nsnow();
@@ -51,6 +57,7 @@ fn launch(lo: &mut Bencher) {
 		writeln!(file, "(ran for {} iterations)", index).unwrap();
 	}
 
+	paused.store(true, Ordering::Relaxed);
 	for linger in &mut lingers[..index] {
 		let linger = linger.as_mut_ptr();
 		let linger = unsafe {
@@ -63,7 +70,6 @@ fn launch(lo: &mut Bencher) {
 fn resume(lo: &mut Bencher) {
 	use inger::launch;
 	use inger::resume;
-	use std::sync::atomic::AtomicBool;
 
 	let run = AtomicBool::from(true);
 	let during = AtomicU64::default();
