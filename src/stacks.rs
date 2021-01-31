@@ -1,24 +1,24 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
-use super::STACK_N_PREALLOC;
-use super::STACK_SIZE_BYTES;
 use timetravel::stable::StableAddr;
 use timetravel::stable::StableMutAddr;
 use reusable::ReusableSync;
 
 pub fn alloc_stack() -> ReusableSync<'static, Box<[u8]>> {
 	use compile_assert::assert_sync;
+	use gotcha::Group;
 	use reusable::SyncPool;
 	use std::convert::TryInto;
 	use std::sync::Once;
+	use super::STACK_SIZE_BYTES;
 
 	static mut STACKS: Option<SyncPool<Box<[u8]>>> = None;
 	static INIT: Once = Once::new();
 	INIT.call_once(|| {
 		let stacks: fn() -> _ = || Some(vec![0; STACK_SIZE_BYTES].into_boxed_slice());
 		let stacks = SyncPool::new(stacks);
-		stacks.prealloc(STACK_N_PREALLOC)
+		stacks.prealloc(Group::limit())
 			.expect("libinger: stack allocator lock was poisoned during init");
 		unsafe {
 			STACKS.replace(stacks);

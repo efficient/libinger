@@ -3,7 +3,7 @@ extern crate bencher;
 extern crate inger;
 
 use bencher::Bencher;
-use inger::STACK_N_PREALLOC;
+use inger::concurrency_limit;
 use inger::nsnow;
 use inger::pause;
 use std::fs::File;
@@ -12,16 +12,15 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
-const LIBSETS: usize = STACK_N_PREALLOC;
-
 benchmark_group![bench, launch, resume, renew];
 
 fn launch(lo: &mut Bencher) {
+	use inger::STACK_N_PREALLOC;
 	use inger::abort;
 	use inger::launch;
 	use inger::resume;
 	use std::mem::MaybeUninit;
-	let mut lingers: [MaybeUninit<_>; LIBSETS] = unsafe {
+	let mut lingers: [MaybeUninit<_>; STACK_N_PREALLOC] = unsafe {
 		MaybeUninit::uninit().assume_init()
 	};
 	let during = AtomicU64::default();
@@ -31,7 +30,7 @@ fn launch(lo: &mut Bencher) {
 	let mut index = 0;
 	let paused = AtomicBool::from(false);
 	lo.iter(|| {
-		assert!(index < lingers.len(), "LIBSETS tunable set too low!");
+		assert!(index < concurrency_limit(), "LIBSETS tunable set too low!");
 
 		let before = nsnow();
 		lingers[index] = MaybeUninit::new(launch(|| {
@@ -73,7 +72,7 @@ fn resume(lo: &mut Bencher) {
 
 	let run = AtomicBool::from(true);
 	let during = AtomicU64::default();
-	let mut lingers: Vec<_> = (0..LIBSETS).map(|_| launch(|| while run.load(Ordering::Relaxed) {
+	let mut lingers: Vec<_> = (0..concurrency_limit()).map(|_| launch(|| while run.load(Ordering::Relaxed) {
 		pause();
 		during.store(nsnow(), Ordering::Relaxed);
 	}, u64::max_value()).unwrap()).collect();
@@ -110,7 +109,7 @@ fn resume(lo: &mut Bencher) {
 fn renew(lo: &mut Bencher) {
 	use inger::launch;
 
-	let lingers: Vec<_> = (0..LIBSETS).map(|_| launch(pause, u64::max_value()).unwrap()).collect();
+	let lingers: Vec<_> = (0..concurrency_limit()).map(|_| launch(pause, u64::max_value()).unwrap()).collect();
 	let mut lingers = lingers.into_iter();
 	lo.iter(||
 		drop(lingers.next())

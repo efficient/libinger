@@ -20,13 +20,18 @@ mod tcb;
 mod timer;
 mod unfurl;
 
+use gotcha::Group;
 pub use linger::*;
 
 const QUANTUM_MICROSECS: u64  = 100;
 
 #[doc(hidden)]
-pub const STACK_N_PREALLOC: usize = 511;
+pub const STACK_N_PREALLOC: usize = Group::LIMIT;
 const STACK_SIZE_BYTES: usize = 2 * 1_024 * 1_024;
+
+pub fn concurrency_limit() -> usize {
+	Group::limit()
+}
 
 #[cfg(test)]
 fn main() {}

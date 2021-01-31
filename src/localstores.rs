@@ -1,9 +1,9 @@
 use tcb::ThreadControlBlock;
 use reusable::ReusableSync;
-use super::STACK_N_PREALLOC;
 
 pub fn alloc_localstore() -> ReusableSync<'static, Option<ThreadControlBlock>> {
 	use compile_assert::assert_sync;
+	use gotcha::Group;
 	use reusable::SyncPool;
 	use std::convert::TryInto;
 	use std::sync::ONCE_INIT;
@@ -14,7 +14,7 @@ pub fn alloc_localstore() -> ReusableSync<'static, Option<ThreadControlBlock>> {
 	INIT.call_once(|| {
 		let localstores: fn() -> _ = || Some(Some(ThreadControlBlock::new()));
 		let localstores = SyncPool::new(localstores);
-		localstores.prealloc(STACK_N_PREALLOC)
+		localstores.prealloc(Group::limit())
 			.expect("libinger: TCB allocator lock was poisoned during init");
 		unsafe {
 			LOCALSTORES.replace(localstores);
