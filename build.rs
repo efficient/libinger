@@ -9,6 +9,7 @@ fn main() -> Result {
 	make.arg("libgotcha.o");
 	make.arg("libgotcha_api.rs");
 	make.arg("namespace.rs");
+	make.arg("prctl.rs");
 	if var("DEBUG")?.parse()? {
 		make.arg("ASFLAGS=-g");
 		make.arg("CFLAGS=-g3 -Og");

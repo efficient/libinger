@@ -1,5 +1,6 @@
 mod libgotcha_api;
 mod namespace;
+pub mod prctl;
 
 use crate::libgotcha_api::LIBGOTCHA_GROUP_ERROR;
 use crate::libgotcha_api::LIBGOTCHA_GROUP_SHARED;

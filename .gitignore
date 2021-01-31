@@ -3,9 +3,10 @@
 /ctests
 /goot.rs
 /handle.rs
-/namespace.rs
 /libgotcha.mk
 /libgotcha_api.rs
+/namespace.rs
+/prctl.rs
 
 target/
 *.a
