@@ -1,8 +1,10 @@
 mod libgotcha_api;
+mod namespace;
 
 use crate::libgotcha_api::LIBGOTCHA_GROUP_ERROR;
 use crate::libgotcha_api::LIBGOTCHA_GROUP_SHARED;
 use crate::libgotcha_api::libgotcha_group_t;
+use crate::namespace::NUM_SHADOW_NAMESPACES;
 use std::ops::Deref;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -14,6 +16,8 @@ impl Group {
 
 	#[doc(hidden)]
 	pub const _ERROR: Self = Self (LIBGOTCHA_GROUP_ERROR as _);
+
+	pub const LIMIT: usize = NUM_SHADOW_NAMESPACES as _;
 
 	pub fn limit() -> usize {
 		use crate::libgotcha_api::libgotcha_group_limit;
