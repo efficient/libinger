@@ -1,4 +1,5 @@
 use gotcha::Group;
+use preemption::RealThreadId;
 use preemption::defer_preemption;
 use preemption::disable_preemption;
 use preemption::is_preemptible;
@@ -8,7 +9,6 @@ use signal::Set;
 use signal::Signal;
 use signal::siginfo_t;
 use stacks::DerefAdapter;
-use super::QUANTUM_MICROSECS;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
@@ -190,6 +190,7 @@ pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 	Ok(linger)
 }
 
+// Note that it is only safe to use these while the virtual thread-control block is installed!
 thread_local! {
 	static BOOTSTRAP: Cell<Option<(NonNull<(dyn FnMut() + Send)>, Group)>> = Cell::default();
 	static TASK: RefCell<Task> = RefCell::default();
@@ -203,8 +204,6 @@ thread_local! {
 pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>, us: u64)
 -> Result<&mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized>> {
 	use std::panic::resume_unwind;
-	use preemption::RealThreadId;
-	use preemption::thread_setup;
 
 	// Danger, W.R!  The same disclaimer from launch() applies here.
 	debug_assert!(! is_preemptible(), "resume(): called from preemptible function");
@@ -214,12 +213,14 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 		let group = *continuation.group;
 		let thread = RealThreadId::current();
 
+		// Install the virtual thread-control block.  It is only safe to use thread-locals
+		// between the end of this block and when we uninstall it again!
 		let tls = continuation.tls.take().expect("libinger: continuation with missing TCB");
 		let tls = unsafe {
 			tls.install()?
 		};
 
-		if let Err(or) = thread_setup(thread, preempt, QUANTUM_MICROSECS) {
+		if let Err(or) = setup_thread(thread) {
 			abort(&format!("resume(): failure in thread_setup(): {}", or));
 		}
 
@@ -245,9 +246,9 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 			});
 		}
 
-		// Transfer control into the libinger module before running the function!
 		DEADLINE.with(|deadline| deadline.replace(us));
 
+		// Transfer control into the libinger module before running the function!
 		let finished = switch_stack(task, group)?;
 		continuation.tls.replace(unsafe {
 			tls.uninstall()?
@@ -270,6 +271,14 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 	}
 
 	Ok(fun)
+}
+
+/// Set up preemption for a kernel execution thread.  Call after installing a virtual TCB!
+#[inline(never)]
+fn setup_thread(thread: RealThreadId) -> Result<()> {
+	use preemption::thread_setup;
+	use super::QUANTUM_MICROSECS;
+	thread_setup(thread, preempt, QUANTUM_MICROSECS)
 }
 
 /// Set up the oneshot execution stack.  Always returns a Some when things are Ok.
