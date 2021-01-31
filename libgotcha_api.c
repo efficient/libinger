@@ -65,6 +65,10 @@ bool libgotcha_group_renew(libgotcha_group_t which) {
 	return handles_reshadow(dlopen(NULL, RTLD_LAZY), which);
 }
 
+size_t libgotcha_group_limit(void) {
+	return config_numgroups();
+}
+
 void libgotcha_shared_hook(void (*hook)(void)) {
 	shared_hook(hook);
 }

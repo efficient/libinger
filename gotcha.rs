@@ -15,6 +15,13 @@ impl Group {
 	#[doc(hidden)]
 	pub const _ERROR: Self = Self (LIBGOTCHA_GROUP_ERROR as _);
 
+	pub fn limit() -> usize {
+		use crate::libgotcha_api::libgotcha_group_limit;
+		unsafe {
+			libgotcha_group_limit()
+		}
+	}
+
 	pub fn new() -> Option<Self> {
 		use crate::libgotcha_api::libgotcha_group_new;
 		let this = Self (unsafe {

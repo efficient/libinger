@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define LIBGOTCHA_GROUP_ERROR -1
@@ -50,6 +51,10 @@ libgotcha_group_t libgotcha_group_new(void);
 // Reinitialize a previously allocated group, closing and reopening all deletable objects therein,
 // but leaving it marked as allocated.  Returns whether it succeeded and left the group usable.
 bool libgotcha_group_renew(libgotcha_group_t);
+
+// Disclose the maximum supported number of concurrent groups, as determined by the compile-time
+// configuration, further capped by the LIBGOTCHA_NUMGROUPS environment variable.
+size_t libgotcha_group_limit(void);
 
 // Install a function to be invoked each time a call resolving to the shared group is finished.
 // Note that this callback runs in the preceding group, and that any explicit group switches it
