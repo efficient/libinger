@@ -142,7 +142,7 @@ pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Conte
 					makecontext(
 						&mut *context,
 						transmute(trampoline as extern "C" fn(c_uint, c_uint, c_uint, c_uint)),
-						2,
+						4,
 						call,
 						call >> 32,
 						successor,
