@@ -42,22 +42,27 @@ pub fn enable_preemption(group: Option<Group>) -> Result<(), ()> {
 	use signal::pthread::pthread_kill;
 	use signal::pthread::pthread_self;
 
-	let mut unblock = false;
+	// We can only call thread_signal() if the preemption signal is already blocked; otherwise,
+	// the signal handler might race on the thread-local SIGNAL variable.  It's fine to do when:
+	//  * We have been passed a group, because in this case preemption was previously disabled.
+	//    - OR -
+	//  * Preemption has been deferred, because when setting the flag, the signal handler will
+	//    have masked out the signal.
+	let mut unblock = None;
 	if let Some(group) = group {
 		// It's important we don't unmask the preemption signal until we've switched groups;
 		// otherwise, its handler may run immediately and remask it!
 		group_thread_set!(group);
-		unblock = true;
+		unblock.replace(thread_signal()?);
 	}
 	// else the caller is asserting the group change has already been performed.
 
-	let signal = thread_signal()?;
 	if DEFERRED.with(|deferred| deferred.replace(false)) {
-		drop(pthread_kill(pthread_self(), signal));
-		unblock = true;
+		let signal = unblock.get_or_insert(thread_signal()?);
+		drop(pthread_kill(pthread_self(), *signal));
 	}
 
-	if unblock {
+	if let Some(signal) = unblock {
 		drop(mask(Operation::Unblock, signal));
 	}
 
