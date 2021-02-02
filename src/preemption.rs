@@ -86,7 +86,9 @@ pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoR
 	use std::sync::Once;
 
 	let RealThreadId (signal) = thread;
-	signal.replace(Some(PreemptionSignal::new(handler, quantum)?));
+	if signal.borrow().is_none() {
+		signal.replace(Some(PreemptionSignal::new(handler, quantum)?));
+	}
 	SIGNAL.with(|signal| signal.replace(Some(thread)));
 
 	static INIT: Once = ONCE_INIT;
