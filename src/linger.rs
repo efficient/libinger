@@ -391,11 +391,14 @@ fn schedule() {
 		fun.as_mut()
 	};
 	stamp();
-	if enable_preemption(group.into()).is_err() {
+	if let Ok(signal) = enable_preemption(group.into()) {
+		debug_assert!(signal.is_some());
+
+		fun();
+		disable_preemption(signal);
+	} else {
 		abort("schedule(): error accessing TLS variable");
 	}
-	fun();
-	disable_preemption();
 
 	// It's important that we haven't saved any errno, since we'll check it to determine whether
 	// the preemptible function ran to completion.
@@ -437,7 +440,7 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 
 				// Block this signal and disable preemption.
 				uc.uc_sigmask.add(no);
-				disable_preemption();
+				disable_preemption(None);
 			});
 		} else {
 			*errno() = erryes;

@@ -1,6 +1,8 @@
 use gotcha::Group;
 use gotcha::group_thread_set;
 use reusable::ReusableSync;
+use signal::pthread::pthread_kill;
+use signal::pthread::pthread_self;
 use signal::Handler;
 use signal::Operation;
 use signal::Set;
@@ -38,10 +40,7 @@ extern fn resume_preemption() {
 	drop(enable_preemption(None));
 }
 
-pub fn enable_preemption(group: Option<Group>) -> Result<(), ()> {
-	use signal::pthread::pthread_kill;
-	use signal::pthread::pthread_self;
-
+pub fn enable_preemption(group: Option<Group>) -> Result<Option<Signal>, ()> {
 	// We can only call thread_signal() if the preemption signal is already blocked; otherwise,
 	// the signal handler might race on the thread-local SIGNAL variable.  It's fine to do when:
 	//  * We have been passed a group, because in this case preemption was previously disabled.
@@ -66,11 +65,16 @@ pub fn enable_preemption(group: Option<Group>) -> Result<(), ()> {
 		drop(mask(Operation::Unblock, signal));
 	}
 
-	Ok(())
+	Ok(unblock)
 }
 
-pub fn disable_preemption() {
+pub fn disable_preemption(block: Option<Signal>) {
 	group_thread_set!(Group::SHARED);
+	if let Some(signal) = block {
+		// Mask the preemption signal without calling thread_signal(), which would by racy.
+		drop(mask(Operation::Block, signal));
+	}
+
 	SIGNAL.with(|signal| signal.replace(None));
 	DEFERRED.with(|deferred| deferred.replace(false));
 }
