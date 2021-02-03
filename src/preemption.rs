@@ -56,6 +56,7 @@ pub fn enable_preemption(group: Option<Group>) -> Result<Option<Signal>, ()> {
 	}
 	// else the caller is asserting the group change has already been performed.
 
+	// It is safe to access DEFERRED here: we are not in the shared group, so we will not defer.
 	if DEFERRED.with(|deferred| deferred.replace(false)) {
 		let signal = unblock.get_or_insert(thread_signal()?);
 		drop(pthread_kill(pthread_self(), *signal));
@@ -85,7 +86,19 @@ pub fn is_preemptible() -> bool {
 	! group_thread_get!().is_shared()
 }
 
-pub fn defer_preemption() {
+// It is only safe to call this function while preemption is (temporarily) disabled!
+pub fn defer_preemption(signum: Option<(&mut Sigset, Signal)>) {
+	debug_assert!(! is_preemptible());
+
+	// We must first mask the signal so no attempted preemption races on DEFERRED!
+	if let Some((sigmask, signo)) = signum {
+		// Caller is asserting we are beneath a signal handler, so we should only update the
+		// outside world's mask.
+		sigmask.add(signo);
+	} else {
+		drop(mask(Operation::Block, thread_signal().unwrap()));
+	}
+
 	DEFERRED.with(|deferred| deferred.replace(true));
 }
 

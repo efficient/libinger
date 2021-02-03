@@ -449,11 +449,11 @@ extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerCont
 		if relevant {
 			// The timed function has called into a nonpreemptible library function.
 			// We'll need to intercept it immediately upon the function's return.
-			defer_preemption();
+			defer_preemption((&mut uc.uc_sigmask, no).into());
+		} else {
+			// We still want to block this signal so it doesn't disturb us again.
+			uc.uc_sigmask.add(no);
 		}
-
-		// Block this signal so it doesn't disturb us again.
-		uc.uc_sigmask.add(no);
 
 		*errno() = erryes;
 	}
@@ -476,7 +476,7 @@ pub fn pause() {
 	DEADLINE.with(|deadline| deadline.take());
 
 	// Get preempted when we return.
-	defer_preemption();
+	defer_preemption(None);
 }
 
 /// Read the current wall-clock time, in nanoseconds.
