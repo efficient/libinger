@@ -9,16 +9,17 @@ use signal::Set;
 use signal::Signal;
 use signal::Sigset;
 use signal::sigaction;
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result as IoResult;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use timer::Timer;
 
 thread_local! {
 	static SIGNAL: RefCell<Option<RealThreadId>> = RefCell::default();
 
 	// Whether we had to delay preemption checks until the end of a nonpreemptible call.
-	static DEFERRED: Cell<bool> = Cell::new(false);
+	static DEFERRED: AtomicBool = AtomicBool::new(false);
 }
 
 pub fn thread_signal() -> Result<Signal, ()> {
@@ -56,8 +57,7 @@ pub fn enable_preemption(group: Option<Group>) -> Result<Option<Signal>, ()> {
 	}
 	// else the caller is asserting the group change has already been performed.
 
-	// It is safe to access DEFERRED here: we are not in the shared group, so we will not defer.
-	if DEFERRED.with(|deferred| deferred.replace(false)) {
+	if DEFERRED.with(|deferred| deferred.swap(false, Ordering::Relaxed)) {
 		let signal = unblock.get_or_insert(thread_signal()?);
 		drop(pthread_kill(pthread_self(), *signal));
 	}
@@ -77,7 +77,7 @@ pub fn disable_preemption(block: Option<Signal>) {
 	}
 
 	SIGNAL.with(|signal| signal.replace(None));
-	DEFERRED.with(|deferred| deferred.replace(false));
+	DEFERRED.with(|deferred| deferred.store(false, Ordering::Relaxed));
 }
 
 pub fn is_preemptible() -> bool {
@@ -99,7 +99,7 @@ pub fn defer_preemption(signum: Option<(&mut Sigset, Signal)>) {
 		drop(mask(Operation::Block, thread_signal().unwrap()));
 	}
 
-	DEFERRED.with(|deferred| deferred.replace(true));
+	DEFERRED.with(|deferred| deferred.store(true, Ordering::Relaxed));
 }
 
 pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoResult<()> {
