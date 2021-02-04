@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ "$#" -eq "0" ]
+then
+	echo "$0: missing file arguments"
+	exit 1
+fi
+
+while [ "$#" -ne "0" ]
+do
+	prog="$1"
+	shift
+
+	echo "$prog:"
+	case "$prog" in
+	/*)
+		;;
+	*)
+		prog="./$prog"
+	esac
+	LD_TRACE_LOADED_OBJECTS= "$prog"
+done
