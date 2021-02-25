@@ -302,3 +302,12 @@ instruct `gdb` to ignore segmentation faults like so:
 ```
 $ gdb -ex handle\ SIGSEGV\ noprint ./yourprogram
 ```
+
+If you step into code located outside the main libset, GDB will be missing symbol information, and
+therefore unable to display backtraces or source code, or apply your symbol breakpoints.  Luckily,
+_libgotcha_ includes a debugger script to fix this problem.  You must have the glibc sources
+corresponding to the `ld.so` build you are using.  Add the following to your GDB arguments however
+you are invoking it (via `gdb`, `rr replay`, etc.):
+```
+-x .../path/to/libinger/external/libgotcha/libgotcha.gdb -ex dir\ .../path/to/glibc/dlfcn:.../path/to/glibc/elf
+```
