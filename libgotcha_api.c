@@ -69,6 +69,18 @@ size_t libgotcha_group_limit(void) {
 	return config_numgroups();
 }
 
+void *libgotcha_group_symbol(libgotcha_group_t which, const char *symbol) {
+	assert(symbol);
+
+	struct link_map *l = dlopen(NULL, RTLD_LAZY);
+	if(which) {
+		l = namespace_get(which, handle_progname(), RTLD_LAZY);
+		if(!l)
+			return NULL;
+	}
+	return dlsym(l, symbol);
+}
+
 void libgotcha_shared_hook(void (*hook)(void)) {
 	shared_hook(hook);
 }
