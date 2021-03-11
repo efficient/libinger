@@ -1,3 +1,4 @@
+mod dlfcn;
 mod libgotcha_api;
 mod namespace;
 pub mod prctl;
@@ -50,6 +51,38 @@ impl Group {
 
 	pub fn is_shared(&self) -> bool {
 		self == &Self::SHARED
+	}
+
+	pub fn lookup_symbol<T>(&self, decl: &T) -> Option<&T> {
+		unsafe {
+			self.lookup_symbol_impl(decl)
+		}.map(|defn| unsafe {
+			&*defn
+		})
+	}
+
+	pub unsafe fn lookup_symbol_mut<T>(&self, decl: &T) -> Option<&mut T> {
+		self.lookup_symbol_impl(decl).map(|defn| &mut *defn)
+	}
+
+	unsafe fn lookup_symbol_impl<T>(&self, rfc: &T) -> Option<*mut T> {
+		use crate::libgotcha_api::libgotcha_group_symbol;
+		use crate::dlfcn::dladdr;
+		use std::mem::MaybeUninit;
+
+		let mut dli = MaybeUninit::uninit();
+		let ptr: *const _ = rfc;
+		if dladdr(ptr as *const _, dli.as_mut_ptr()) == 0 {
+			None?;
+		}
+
+		let dli = dli.assume_init();
+		if dli.dli_sname.is_null() {
+			None?;
+		}
+
+		let Self (this) = self;
+		Some(libgotcha_group_symbol(*this, dli.dli_sname) as *mut _)
 	}
 }
 

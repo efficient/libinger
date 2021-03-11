@@ -1,6 +1,7 @@
 /libgotcha/
 /bench
 /ctests
+/dlfcn.rs
 /goot.rs
 /handle.rs
 /libgotcha.mk
