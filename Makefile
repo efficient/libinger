@@ -18,12 +18,12 @@ CGLOBALS := $(wildcard libgotcha_*.c)
 .PHONY: all
 all: libgotcha.a libgotcha.rlib libgotcha.so libgotcha.mk
 
-libgotcha.a: libgotcha.o libgotcha_api.rs dlfcn.rs namespace.rs prctl.rs
-libgotcha.rlib: libgotcha.o libgotcha_api.rs dlfcn.rs namespace.rs prctl.rs
+libgotcha.a: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
+libgotcha.rlib: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 
 libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -Wl,-zlazy
 libgotcha.so: private LDFLAGS += libgotcha.o -ldl -lpthread -lc -lasm -lebl_x86_64 -lunwind
-libgotcha.so: libgotcha.o libgotcha_api.rs dlfcn.rs namespace.rs prctl.rs
+libgotcha.so: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 
 libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
@@ -42,8 +42,6 @@ bench: libbenchmark.so libtest.rlib
 libbenchmark.so: private LDLIBS += -ldl
 libtest.rlib: private RUSTC := RUSTC_BOOTSTRAP= $(RUSTC)
 
-dlfcn.rs: private BINDFLAGS += --raw-line "\#![allow(dead_code, non_camel_case_types, non_upper_case_globals)]"
-dlfcn.rs: private CPPFLAGS += -D_GNU_SOURCE
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h
 handle.rs: private BINDFLAGS += --no-rustfmt-bindings --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]" --blacklist-type La_x86_64_regs --blacklist-function la_x86_64_gnu_pltenter --blacklist-function la_x86_64_gnu_pltexit --blacklist-function la_x32_gnu_pltenter --blacklist-function la_x32_gnu_pltexit

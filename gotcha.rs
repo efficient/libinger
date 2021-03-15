@@ -1,4 +1,3 @@
-mod dlfcn;
 mod libgotcha_api;
 mod namespace;
 pub mod prctl;
@@ -53,7 +52,8 @@ impl Group {
 		self == &Self::SHARED
 	}
 
-	pub fn lookup_symbol<T>(&self, decl: &T) -> Option<&T> {
+	#[doc(hidden)]
+	pub fn lookup_symbol<T>(&self, decl: &str, _: &T) -> Option<&T> {
 		unsafe {
 			self.lookup_symbol_impl(decl)
 		}.map(|defn| unsafe {
@@ -61,28 +61,18 @@ impl Group {
 		})
 	}
 
-	pub unsafe fn lookup_symbol_mut<T>(&self, decl: &T) -> Option<&mut T> {
+	#[doc(hidden)]
+	pub unsafe fn lookup_symbol_mut<T>(&self, decl: &str, _: &T) -> Option<&mut T> {
 		self.lookup_symbol_impl(decl).map(|defn| &mut *defn)
 	}
 
-	unsafe fn lookup_symbol_impl<T>(&self, rfc: &T) -> Option<*mut T> {
+	unsafe fn lookup_symbol_impl<T>(&self, sym: &str) -> Option<*mut T> {
 		use crate::libgotcha_api::libgotcha_group_symbol;
-		use crate::dlfcn::dladdr;
-		use std::mem::MaybeUninit;
-
-		let mut dli = MaybeUninit::uninit();
-		let ptr: *const _ = rfc;
-		if dladdr(ptr as *const _, dli.as_mut_ptr()) == 0 {
-			None?;
-		}
-
-		let dli = dli.assume_init();
-		if dli.dli_sname.is_null() {
-			None?;
-		}
+		use std::ffi::CString;
 
 		let Self (this) = self;
-		Some(libgotcha_group_symbol(*this, dli.dli_sname) as *mut _)
+		let sym = CString::new(sym).ok()?;
+		Some(libgotcha_group_symbol(*this, sym.into_raw()) as *mut _)
 	}
 }
 
@@ -103,6 +93,16 @@ macro_rules! group_thread_get {
 #[macro_export]
 macro_rules! group_thread_set {
 	( $group:expr ) => (crate::gotcha::_group_thread_accessor()($group));
+}
+
+#[macro_export]
+macro_rules! group_lookup_symbol {
+	( $group:expr, $symbol:ident ) => ($group.lookup_symbol(stringify!($symbol), &$symbol));
+}
+
+#[macro_export]
+macro_rules! group_lookup_symbol_mut {
+	( $group:expr, $symbol:ident ) => ($group.lookup_symbol_mut(stringify!($symbol), &$symbol));
 }
 
 #[doc(hidden)]

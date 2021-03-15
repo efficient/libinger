@@ -8,7 +8,6 @@ fn main() -> Result {
 	let mut make = Command::new("make");
 	make.arg("libgotcha.o");
 	make.arg("libgotcha_api.rs");
-	make.arg("dlfcn.rs");
 	make.arg("namespace.rs");
 	make.arg("prctl.rs");
 	if var("DEBUG")?.parse()? {
