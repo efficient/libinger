@@ -105,6 +105,15 @@ macro_rules! group_lookup_symbol_mut {
 	( $group:expr, $symbol:ident ) => ($group.lookup_symbol_mut(stringify!($symbol), &$symbol));
 }
 
+#[macro_export]
+macro_rules! group_lookup_symbol_fn {
+	( $group:expr, $symbol:ident ) => ({
+		let mut symbol = Some($symbol as _);
+		symbol = crate::std::mem::transmute($group.lookup_symbol(stringify!($symbol), &$symbol));
+		symbol
+	});
+}
+
 #[doc(hidden)]
 pub fn _group_thread_accessor() -> extern fn(Group) -> Group {
 	use std::mem::transmute;
