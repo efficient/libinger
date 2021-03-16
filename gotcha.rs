@@ -2,10 +2,10 @@ mod libgotcha_api;
 mod namespace;
 pub mod prctl;
 
-use crate::libgotcha_api::LIBGOTCHA_GROUP_ERROR;
-use crate::libgotcha_api::LIBGOTCHA_GROUP_SHARED;
-use crate::libgotcha_api::libgotcha_group_t;
-use crate::namespace::NUM_SHADOW_NAMESPACES;
+use libgotcha_api::LIBGOTCHA_GROUP_ERROR;
+use libgotcha_api::LIBGOTCHA_GROUP_SHARED;
+use libgotcha_api::libgotcha_group_t;
+use namespace::NUM_SHADOW_NAMESPACES;
 use std::ops::Deref;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -21,14 +21,14 @@ impl Group {
 	pub const LIMIT: usize = NUM_SHADOW_NAMESPACES as _;
 
 	pub fn limit() -> usize {
-		use crate::libgotcha_api::libgotcha_group_limit;
+		use libgotcha_api::libgotcha_group_limit;
 		unsafe {
 			libgotcha_group_limit()
 		}
 	}
 
 	pub fn new() -> Option<Self> {
-		use crate::libgotcha_api::libgotcha_group_new;
+		use libgotcha_api::libgotcha_group_new;
 		let this = Self (unsafe {
 			libgotcha_group_new()
 		});
@@ -41,7 +41,7 @@ impl Group {
 
 	#[must_use]
 	pub fn renew(&self) -> bool {
-		use crate::libgotcha_api::libgotcha_group_renew;
+		use libgotcha_api::libgotcha_group_renew;
 		let Self (this) = self;
 		unsafe {
 			libgotcha_group_renew(*this)
@@ -67,7 +67,7 @@ impl Group {
 	}
 
 	unsafe fn lookup_symbol_impl<T>(&self, sym: &str) -> Option<*mut T> {
-		use crate::libgotcha_api::libgotcha_group_symbol;
+		use libgotcha_api::libgotcha_group_symbol;
 		use std::ffi::CString;
 
 		let Self (this) = self;
@@ -87,12 +87,12 @@ impl Deref for Group {
 
 #[macro_export]
 macro_rules! group_thread_get {
-	() => (crate::gotcha::_group_thread_accessor()(crate::gotcha::Group::_ERROR));
+	() => ($crate::_group_thread_accessor()($crate::Group::_ERROR));
 }
 
 #[macro_export]
 macro_rules! group_thread_set {
-	( $group:expr ) => (crate::gotcha::_group_thread_accessor()($group));
+	( $group:expr ) => ($crate::_group_thread_accessor()($group));
 }
 
 #[macro_export]
@@ -126,7 +126,7 @@ pub fn _group_thread_accessor() -> extern fn(Group) -> Group {
 }
 
 pub fn shared_hook(callback: extern fn()) {
-	use crate::libgotcha_api::libgotcha_shared_hook;
+	use libgotcha_api::libgotcha_shared_hook;
 	unsafe {
 		libgotcha_shared_hook(Some(callback));
 	}
