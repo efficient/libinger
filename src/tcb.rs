@@ -6,6 +6,7 @@ use gotcha::prctl::ARCH_GET_GS;
 use gotcha::prctl::ARCH_SET_CPUID;
 use gotcha::prctl::ARCH_SET_FS;
 use gotcha::prctl::ARCH_SET_GS;
+use gotcha::Group;
 use std::io::Error;
 use std::io::Result;
 use std::os::raw::c_int;
@@ -46,15 +47,17 @@ impl ThreadControlBlock {
 		})))
 	}
 
-	pub unsafe fn install(mut self) -> Result<ThreadControlBlockGuard> {
-		let parent = unguarded_parent(self.install_unguarded())?;
+	pub unsafe fn install(mut self, group: Group) -> Result<ThreadControlBlockGuard> {
+		let parent = unguarded_parent(self.install_unguarded(group.into()))?;
 		Ok(ThreadControlBlockGuard {
 			this: self,
 			parent,
 		})
 	}
 
-	unsafe fn install_unguarded(&mut self) -> Result<Option<Self>> {
+	unsafe fn install_unguarded(&mut self, group: Option<Group>) -> Result<Option<Self>> {
+		use gotcha::group_lookup_symbol_fn;
+		use linger::abort;
 		use std::slice;
 		extern {
 			fn __ctype_init();
@@ -84,6 +87,14 @@ impl ThreadControlBlock {
 		arch_prctl_set(SetOp::Fs, fs)?;
 		if custom {
 			__ctype_init();
+			if let Some(group) = group {
+				let __ctype_init: Option<unsafe extern fn()> = group_lookup_symbol_fn!(group, __ctype_init);
+				if let Some(__ctype_init) = __ctype_init {
+					__ctype_init();
+				} else {
+					abort("install(): could not get address of __ctype_init()");
+				}
+			}
 		}
 		Ok(cur)
 	}
@@ -99,7 +110,7 @@ impl Drop for ThreadControlBlock {
 		let Self (this) = self;
 		if let Some(MaybeMut::Mut(_)) = this.as_mut() {
 			if let Ok (parent) = unguarded_parent(unsafe {
-				self.install_unguarded()
+				self.install_unguarded(None)
 			}) {
 				drop(ThreadControlBlockGuard {
 					this: ThreadControlBlock (self.take()),
@@ -144,7 +155,7 @@ impl Drop for ThreadControlBlockGuard {
 			dealloc = Some(fs);
 		}
 		unsafe {
-			self.parent.install_unguarded().unwrap();
+			self.parent.install_unguarded(None).unwrap();
 		}
 		if let Some(fs) = dealloc {
 			unsafe {

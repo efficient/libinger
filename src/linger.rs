@@ -217,7 +217,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 		// between the end of this block and when we uninstall it again!
 		let tls = continuation.tls.take().expect("libinger: continuation with missing TCB");
 		let tls = unsafe {
-			tls.install()?
+			tls.install(group)?
 		};
 
 		if let Err(or) = setup_thread(thread) {
