@@ -9,7 +9,7 @@ fi
 set -ve
 [ ! -e libtestinger.so ] && ./build release
 [ ! -e gnulib/configure ] && "$GNULIB/gnulib-tool" --create-testdir --dir gnulib --single-configure `"$GNULIB/posix-modules"`
-[ ! -e Makefile ] && gnulib/configure
+[ ! -e Makefile ] && gnulib/configure CFLAGS="-fpic"
 make
 make check LD_PRELOAD="$PWD/libtestinger.so" LIBGOTCHA_NUMGROUPS="1" LIBGOTCHA_SKIP="`cat <<-tac
 	/bin/bash
