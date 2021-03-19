@@ -1,0 +1,34 @@
+#!/bin/sh
+
+GNULIB="$*"
+if [ -z "$GNULIB" ]
+then
+	GNULIB="/usr/share/gnulib"
+fi
+
+set -ve
+[ ! -e libtestinger.so ] && ./build release
+[ ! -e gnulib/configure ] && "$GNULIB/gnulib-tool" --create-testdir --dir gnulib --single-configure `"$GNULIB/posix-modules"`
+[ ! -e Makefile ] && gnulib/configure
+make
+make check LD_PRELOAD="$PWD/libtestinger.so" LIBGOTCHA_NUMGROUPS="1" LIBGOTCHA_SKIP="`cat <<-tac
+	/bin/bash
+	/usr/bin/cat
+	/usr/bin/chmod
+	/usr/bin/cmp
+	/usr/bin/diff
+	/usr/bin/env
+	/usr/bin/expr
+	/usr/bin/gawk
+	/usr/bin/grep
+	/usr/bin/head
+	/usr/bin/make
+	/usr/bin/mkdir
+	/usr/bin/mv
+	/usr/bin/sed
+	/usr/bin/sh
+	/usr/bin/sleep
+	/usr/bin/rm
+	/usr/bin/tr
+	/usr/bin/wc
+tac`"
