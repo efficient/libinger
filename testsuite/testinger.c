@@ -49,9 +49,3 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char**argv, 
 	mainfunc = main;
 	return __libc_start_main(testinger, argc, argv, init, fini, rtld_fini, stack_end);
 }
-
-#pragma weak libtestinger_signal = signal
-void (*signal(int signum, void (*handler)(int)))(int) {
-	(void) signum;
-	return handler;
-}

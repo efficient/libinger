@@ -25,7 +25,6 @@ set -ve
 mkdir -p "target/$buildtype"
 cargo run $cargoflags >"target/$buildtype/libinger.h"
 rm "target/$buildtype/deps/libinger.so"
-objcopy -Wsignal "target/$buildtype/deps/libgotcha-"*.rlib 2>/dev/null
 cd -
 c99 $cflags -Wall -Wextra -Wpedantic -Werror "$@" -c -fpic -fno-optimize-sibling-calls -I"$OLDPWD/target/$buildtype" testinger.c
 cd -
