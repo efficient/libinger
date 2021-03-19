@@ -1,0 +1,38 @@
+#!/bin/sh
+
+readonly LIBINGER=".."
+
+if [ "$#" -eq "0" -o \( "$1" != "release" -a "$1" != "debug" \) ]
+then
+	echo "USAGE: $0 <release|debug> [compilation flag]..."
+	exit 1
+fi
+buildtype="$1"
+shift
+cargoflags="--release"
+cflags="-O2"
+if [ "$buildtype" = "debug" ]
+then
+	cargoflags=""
+	cflags="-g3 -Og"
+fi
+
+cd "`dirname "$0"`"
+cd "$LIBINGER"
+
+set -ve
+./configure || true
+mkdir -p "target/$buildtype"
+cargo run $cargoflags >"target/$buildtype/libinger.h"
+rm "target/$buildtype/deps/libinger.so"
+objcopy -Wsignal "target/$buildtype/deps/libgotcha-"*.rlib 2>/dev/null
+cd -
+c99 $cflags -Wall -Wextra -Wpedantic -Werror "$@" -c -fpic -fno-optimize-sibling-calls -I"$OLDPWD/target/$buildtype" testinger.c
+cd -
+cargo rustc $cargoflags --lib -- -Clink-arg="$OLDPWD/testinger.o"
+cd -
+mv "$OLDPWD/target/$buildtype/libinger.so" libtestinger.so
+rm "$OLDPWD/target/$buildtype/deps/libinger.so"
+rm testinger.o
+cd -
+./configure >/dev/null || true
