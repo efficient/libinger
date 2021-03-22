@@ -6,6 +6,9 @@ version = "0.0.0"
 crate-type = ["dylib"]
 harness = false
 
+[features]
+notls = []
+
 [dependencies]
 libc = "*"
 

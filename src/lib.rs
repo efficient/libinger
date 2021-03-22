@@ -16,9 +16,17 @@ pub mod profiler;
 mod reusable;
 mod signals;
 mod stacks;
+#[cfg(not(feature = "notls"))]
 mod tcb;
 mod timer;
 mod unfurl;
+
+#[cfg(feature = "notls")]
+mod tcbstub;
+#[cfg(feature = "notls")]
+mod tcb {
+	pub use tcbstub::*;
+}
 
 use gotcha::Group;
 pub use linger::*;
