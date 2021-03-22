@@ -2,19 +2,30 @@
 
 readonly LIBINGER=".."
 
-if [ "$#" -eq "0" -o \( "$1" != "release" -a "$1" != "debug" \) ]
+if [ "$#" -eq "0" -o \( "$1" != "release" -a "$1" != "debug" -a -z "`echo "$1" | grep ^-`" \) ]
 then
-	echo "USAGE: $0 <release|debug> [compilation flag]..."
+	echo "USAGE: $0 <release|debug|\"<cargo flag>...\"> [cc flag]..."
 	exit 1
 fi
-buildtype="$1"
+cargoflags="$1"
 shift
-cargoflags="--release"
-cflags="-O2"
-if [ "$buildtype" = "debug" ]
-then
+buildtype="debug"
+cflags="-g3 -Og"
+case "$cargoflags" in
+-*-release*)
+	buildtype="release"
+	;;
+release)
+	buildtype="release"
+	cargoflags="--$cargoflags"
+	;;
+debug)
 	cargoflags=""
-	cflags="-g3 -Og"
+	;;
+esac
+if [ "$buildtype" = "release" ]
+then
+	cflags="-O2"
 fi
 
 cd "`dirname "$0"`"
