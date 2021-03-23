@@ -68,8 +68,6 @@ const struct handle *handle_get(
 
 enum error handle_update(const struct link_map *, enum error (*)(struct handle *));
 
-const ElfW(Sym) *handle_symbol(const struct handle *, const char *);
-
 enum error handle_got_shadow(struct handle *);
 bool handle_got_reshadow(const struct handle *h, Lmid_t n);
 
