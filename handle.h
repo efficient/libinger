@@ -33,6 +33,9 @@ struct handle {
 	bool sonamed;
 	void (*ldaccess)(void);
 
+	const ElfW(Phdr) *phdr;
+	const ElfW(Phdr) *phdr_end;
+
 	const ElfW(Sym) *symtab;
 	const ElfW(Sym) *symtab_end;
 	const char *strtab;

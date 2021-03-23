@@ -271,15 +271,14 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 	const ElfW(Ehdr) *e = (ElfW(Ehdr) *) h->baseaddr;
 	assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "ELF header not loaded into process image");
-
-	const ElfW(Phdr) *p = (ElfW(Phdr) *) (h->baseaddr + e->e_phoff);
-	const ElfW(Phdr) *p_end = p + e->e_phnum;
+	h->phdr = (ElfW(Phdr) *) (h->baseaddr + e->e_phoff);
+	h->phdr_end = h->phdr + e->e_phnum;
 	if(h->jmpslots) {
 		assert(ELF64_R_TYPE(h->jmpslots->r_info) == R_X86_64_JUMP_SLOT &&
 			"JMPREL table with non-JUMP_SLOT relocation entry");
 		h->jmpslots_seg = segment_unwritable((uintptr_t) h->jmpslots - h->baseaddr,
-			p, p_end);
-		h->lazygot_seg = segment_unwritable(h->jmpslots->r_offset, p, p_end);
+			h->phdr, h->phdr_end);
+		h->lazygot_seg = segment_unwritable(h->jmpslots->r_offset, h->phdr, h->phdr_end);
 	}
 	if(h->miscrels) {
 		const ElfW(Rela) *globdat = NULL;
@@ -306,7 +305,8 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 				break;
 			}
 		if(globdat)
-			h->eagergot_seg = segment_unwritable(globdat->r_offset, p, p_end);
+			h->eagergot_seg = segment_unwritable(globdat->r_offset,
+				h->phdr, h->phdr_end);
 	}
 
 	if(h->lazygot_seg || flags & DF_BIND_NOW || flags & DF_1_NOW)
@@ -361,7 +361,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 			const ElfW(Sym) *ol = &h->symtab[h->tramps[tramp]];
 			if(ol->st_value == st->st_value) {
 				if(config_noglobals() ||
-					segment_unwritable(st->st_value, p, p_end)) {
+					segment_unwritable(st->st_value, h->phdr, h->phdr_end)) {
 					// The symbol is read-only, so we'll assume it is going to
 					// match across copies of this object file.  Forget about
 					// it, annulling the request to multiplex accesses.
@@ -404,7 +404,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 				// this relocation entry so we will not install a trampoline.
 				continue;
 
-			if(!h->eager && segment(*gotent, p, p_end)) {
+			if(!h->eager && segment(*gotent, h->phdr, h->phdr_end)) {
 				// The lazy GOT is writable and its corresponding entry points
 				// somewhere in this same object file.  We already know that isn't
 				// the local definition, so it must be a PLT trampoline and the
