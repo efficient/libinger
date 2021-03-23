@@ -870,8 +870,7 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map
 	if(!h->globdats)
 		return true;
 
-	// Ensure this is not the vdso or the dynamic linker.
-	if(h->vdso || !strcmp(h->path, interp_path()))
+	if(!handle_is_get_safe(h))
 		return true;
 
 	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
@@ -884,6 +883,11 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map
 	if(m)
 		*m = l;
 	return true;
+}
+
+bool handle_is_get_safe(const struct handle *h) {
+	// Ensure this is not the vdso or the dynamic linker.
+	return !h->vdso && strcmp(h->path, interp_path());
 }
 
 size_t handle_nodelete_pathlen(void) {

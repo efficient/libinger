@@ -83,6 +83,9 @@ enum error handle_update(const struct link_map *, enum error (*)(struct handle *
 enum error handle_got_shadow(struct handle *);
 bool handle_got_reshadow(const struct handle *, Lmid_t, const struct link_map **);
 
+// Whether it is safe to pass this to namespace_get() to retrieve info about a specific instance.
+bool handle_is_get_safe(const struct handle *);
+
 size_t handle_nodelete_pathlen(void);
 bool handle_is_nodelete(const struct handle *);
 
