@@ -22,6 +22,12 @@ struct shadow_gots {
 	uintptr_t *gots[NUM_SHADOW_NAMESPACES + 1];
 };
 
+struct restore {
+	size_t size;
+	uintptr_t off_loaded;
+	void *addrs_stored[NUM_SHADOW_NAMESPACES];
+};
+
 struct handle {
 	struct shadow_gots shadow; // Must be the first member so the trampoline can find it.
 
@@ -56,6 +62,9 @@ struct handle {
 	size_t *tramps; // Only present if ntramps is nonzero.  Owned.
 
 	struct plot **plots; // Only present when tramps is.  Owned.
+
+	size_t nrdwrs;
+	struct restore *rdwrs; // Only present if multiplexed between multiple namespaces.
 };
 
 enum error handle_init(struct handle *, const struct link_map *, struct link_map *);
@@ -72,7 +81,7 @@ const struct handle *handle_get(
 enum error handle_update(const struct link_map *, enum error (*)(struct handle *));
 
 enum error handle_got_shadow(struct handle *);
-bool handle_got_reshadow(const struct handle *h, Lmid_t n);
+bool handle_got_reshadow(const struct handle *, Lmid_t, const struct link_map **);
 
 size_t handle_nodelete_pathlen(void);
 bool handle_is_nodelete(const struct handle *);

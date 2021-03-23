@@ -167,7 +167,7 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 	if(!nodelete_preshadow(libs, namespace, missing))
 		goto drat;
 	for(const struct link_map *l = root; l; l = l->l_next)
-		if(!handle_got_reshadow(handle_get(l, NULL, NULL), namespace))
+		if(!handle_got_reshadow(handle_get(l, NULL, NULL), namespace, NULL))
 			goto drat;
 	nodelete_postshadow(libs, namespace, missing);
 

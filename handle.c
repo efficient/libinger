@@ -539,6 +539,13 @@ void handle_cleanup(struct handle *h) {
 
 	free(*h->shadow.gots);
 	memset(h->shadow.gots, 0, sizeof h->shadow.gots);
+
+	for(size_t seg = 0; seg < h->nrdwrs; ++seg)
+		for(ssize_t ns = 0; ns < config_numgroups(); ++ns)
+			free(h->rdwrs[seg].addrs_stored[ns]);
+	free(h->rdwrs);
+	h->rdwrs = NULL;
+	h->nrdwrs = 0;
 }
 
 static inline bool myself(const struct handle *h) {
@@ -761,12 +768,45 @@ enum error handle_got_shadow(struct handle *h) {
 	h->globdats = malloc((h->miscrels_end - h->miscrels) * sizeof *h->globdats);
 	if(!h->globdats)
 		return ERROR_MALLOC;
+
+	struct restore rdwrs[h->phdr_end - h->phdr];
+	size_t nrdwrs = 0;
+	const ElfW(Phdr) *relro = NULL;
+	for(const ElfW(Phdr) *p = h->phdr; p != h->phdr_end; ++p)
+		if(p->p_type == PT_GNU_RELRO) {
+			relro = p;
+			break;
+		}
+	for(const ElfW(Phdr) *p = h->phdr; p != h->phdr_end; ++p)
+		if(p->p_type == PT_LOAD && p->p_flags & PF_W) {
+			uintptr_t offset = p->p_vaddr;
+			size_t size = p->p_memsz;
+			if(relro) {
+				uintptr_t relend = relro->p_vaddr + relro->p_memsz;
+				if(relro->p_vaddr <= offset && offset + size <= relend)
+					continue;
+				else if(offset < relro->p_vaddr && relro->p_vaddr < offset + size) {
+					assert(offset + size <= relend && "split segment!");
+					size = relro->p_vaddr - offset;
+				} else if(offset < relend && relend < offset + size) {
+					size -= relend - offset;
+					offset = relend;
+				}
+			}
+
+			struct restore *rdwr = rdwrs + nrdwrs++;
+			rdwr->size = size;
+			rdwr->off_loaded = offset;
+			memset(rdwr->addrs_stored, 0, sizeof rdwr->addrs_stored);
+		}
+
 	handle_got_shadow_init(h, LM_ID_BASE, h->baseaddr);
 	for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace) {
 		if(len)
 			h->shadow.gots[namespace] = *h->shadow.gots + len * namespace;
 
-		if(!handle_got_reshadow(h, namespace)) {
+		const struct link_map *l = NULL;
+		if(!handle_got_reshadow(h, namespace, &l)) {
 			// The dynamic linker does not consider preloaded object files to be
 			// dependencies, so although we see them as not owned, they (and *their*
 			// dependencies) are absent from ancillary namespaces.  Since such object
@@ -799,12 +839,33 @@ enum error handle_got_shadow(struct handle *h) {
 			handle_got_whitelist_all(h);
 			return SUCCESS;
 		}
+
+		if(l) {
+			size_t idx = namespace - 1;
+			for(struct restore *seg = rdwrs; seg != rdwrs + nrdwrs; ++seg)
+				if((seg->addrs_stored[idx] = malloc(seg->size)))
+					memcpy(seg->addrs_stored[idx],
+						(void *) (l->l_addr + seg->off_loaded), seg->size);
+				else
+					goto oom;
+		}
 	}
 
+	if(!(h->rdwrs = malloc(nrdwrs * sizeof *h->rdwrs)))
+		goto oom;
+	h->nrdwrs = nrdwrs;
+	memcpy(h->rdwrs, rdwrs, nrdwrs * sizeof *h->rdwrs);
+
 	return SUCCESS;
+
+oom:
+	for(size_t seg = 0; seg < nrdwrs; ++seg)
+		for(ssize_t ns = 0; ns < config_numgroups(); ++ns)
+			free(rdwrs[seg].addrs_stored[ns]);
+	return ERROR_MALLOC;
 }
 
-bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
+bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map **m) {
 	// Ignore objects that are not already multiplexed.
 	if(!h->globdats)
 		return true;
@@ -820,6 +881,8 @@ bool handle_got_reshadow(const struct handle *h, Lmid_t n) {
 
 	handle_got_shadow_init(h, n, l->l_addr);
 
+	if(m)
+		*m = l;
 	return true;
 }
 
