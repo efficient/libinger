@@ -273,6 +273,12 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	assert(!memcmp(e->e_ident, ELFMAG, SELFMAG) && "ELF header not loaded into process image");
 	h->phdr = (ElfW(Phdr) *) (h->baseaddr + e->e_phoff);
 	h->phdr_end = h->phdr + e->e_phnum;
+	for(const ElfW(Phdr) *p = h->phdr; p != h->phdr_end; ++p)
+		if(p->p_type == PT_TLS) {
+			h->tls = p;
+			break;
+		}
+
 	if(h->jmpslots) {
 		assert(ELF64_R_TYPE(h->jmpslots->r_info) == R_X86_64_JUMP_SLOT &&
 			"JMPREL table with non-JUMP_SLOT relocation entry");

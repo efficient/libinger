@@ -46,6 +46,8 @@ struct handle {
 	const ElfW(Sym) *symtab_end;
 	const char *strtab;
 
+	const ElfW(Phdr) *tls; // Not always present.
+
 	uintptr_t *globdats; // Only present if multiplexed between multiple namspaces.
 
 	const ElfW(Rela) *jmpslots; // Not always present.
