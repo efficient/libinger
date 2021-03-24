@@ -92,11 +92,9 @@ int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void
 
 #pragma weak libgotcha_arch_prctl = arch_prctl
 int arch_prctl(int code, uintptr_t addr) {
-	Lmid_t nspc;
 	uintptr_t prev = 0;
 	const uintptr_t *before = NULL;
 	if(code == ARCH_SET_FS) {
-		nspc = *namespace_thread();
 		before = tcb_parent();
 		if(!*before) {
 			int stat = arch_prctl(ARCH_GET_FS, (uintptr_t) &prev);
@@ -112,7 +110,6 @@ int arch_prctl(int code, uintptr_t addr) {
 	if(code == ARCH_SET_FS) {
 		uintptr_t *parent_tcb = tcb_parent();
 		assert(parent_tcb != before);
-		*namespace_thread() = nspc;
 		*tcb_custom() = addr;
 		if(prev)
 			*parent_tcb = prev;

@@ -5,8 +5,17 @@
 #include <pthread.h>
 #include <threads.h>
 
-// NB: Unlike other modules, the TLS variables defined herein only persist across TCB switches if
-//     explicitly propagated during a call to arch_prctl().
+// NB: Unlike other modules, the thread_local variables defined herein do not persist across TCB
+//     switches.  The backing store for namespace_thread() is sort of an exception: since we can
+//     only run our own code in the shared namespace and all manual TCB switches occur within our
+//     code, the PLOT trampoline always restores an accurate accounting of the namespace to the
+//     *current* TCB on the way back out of any call into us from a non-shared namespace.  Another
+//     weird case is the namespace_trampolining() backing store: although declared as a global, it
+//     is actually an emulated TCB-agnostic thread-local variable, which is necessary because we
+//     cannot affort __tls_get_addr() calls from the injected procedure_linkage_override() code.
+//     (If we ever want to support pthread_create() or clone() calls from a non-shared namespace,
+//     we'll either need to revisit the latter design or assign a new namespace to the child;
+//     otherwise, the control library loses the assurance that its trampoline hook will run.)
 
 Lmid_t *namespace_thread(void) {
 	static thread_local Lmid_t namespace = LM_ID_BASE;
