@@ -12,7 +12,9 @@ struct link_map;
 // provided library *root* (e.g., as obtained from dlopen(NULL, RTLD_LAZY)).
 enum error handles_shadow(const struct link_map *);
 
-// Deinitialize then reinitialize the specified namespace from the given library *root*.
+// Restore the writeable (sub)segments of all libraries in the specified namespace and reachable
+// from the given library *root*.  The source data is snapshots taken just after each library was
+// initialized.
 bool handles_reshadow(const struct link_map *, Lmid_t);
 
 #endif

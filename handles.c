@@ -136,47 +136,21 @@ enum error handles_shadow(const struct link_map *root) {
 bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 	assert(namespace);
 
-	const struct handle *bin = NULL;
-	for(const struct link_map *l = root; l; l = l->l_next) {
-		const struct handle *h = handle_get(l, NULL, NULL);
+	for(const struct link_map *b = root; b; b = b->l_next) {
+		const struct handle *h = handle_get(b, NULL, NULL);
 		assert(h);
-		if(!bin)
-			bin = h;
 
-		if(h->owned) {
-			struct link_map *n = namespace_get(namespace, h->path, RTLD_LAZY);
-			assert(n);
-			dlclose(n);
+		if(handle_is_get_safe(h)) {
+			const struct link_map *l = namespace_get(namespace, h->path, RTLD_LAZY);
+			assert(l);
+			for(const struct restore *seg = h->rdwrs; seg != h->rdwrs + h->nrdwrs; ++seg)
+				memcpy((void *) (l->l_addr + seg->off_loaded),
+					seg->addrs_stored[namespace - 1], seg->size);
 		}
 	}
-
-	// The namespace should now be empty (and nonexistent by the dynamic linker's definition)!
-	assert(!namespace_get(namespace, bin->path, RTLD_LAZY) && dlerror());
-
-	const char *libs[count_libs(root)];
-	memset(libs, 0, sizeof libs);
-
-	bool missing = false;
-	enum error code = sort_libs(libs, &missing, root);
-	if(code != SUCCESS) {
-		fprintf(stderr, "libgotcha warning: %s: %s\n",
-			error_message(code), error_explanation(code));
-		return false;
-	}
-
-	if(!nodelete_preshadow(libs, namespace, missing))
-		goto drat;
-	for(const struct link_map *l = root; l; l = l->l_next)
-		if(!handle_got_reshadow(handle_get(l, NULL, NULL), namespace, NULL))
-			goto drat;
-	nodelete_postshadow(libs, namespace, missing);
 
 	// Unlock the shared code callback, in case it was running when we were canceled.
 	*namespace_trampolining(namespace) = false;
 
 	return true;
-
-drat:
-	fprintf(stderr, "libgotcha warning: %s (ld.so TLS_STATIC_SURPLUS too low?)\n", dlerror());
-	return false;
 }
