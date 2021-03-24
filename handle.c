@@ -731,6 +731,22 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 		prot_segment(base, h->jmpslots_seg, 0);
 }
 
+static inline bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map **m) {
+	if(!handle_is_get_safe(h))
+		return true;
+
+	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
+	const struct link_map *l = open(n, h->path, RTLD_LAZY);
+	if(!l)
+		return false;
+
+	handle_got_shadow_init(h, n, l->l_addr);
+
+	if(m)
+		*m = l;
+	return true;
+}
+
 enum error handle_got_shadow(struct handle *h) {
 	assert(h);
 
@@ -863,26 +879,6 @@ oom:
 		for(ssize_t ns = 0; ns < config_numgroups(); ++ns)
 			free(rdwrs[seg].addrs_stored[ns]);
 	return ERROR_MALLOC;
-}
-
-bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map **m) {
-	// Ignore objects that are not already multiplexed.
-	if(!h->globdats)
-		return true;
-
-	if(!handle_is_get_safe(h))
-		return true;
-
-	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
-	const struct link_map *l = open(n, h->path, RTLD_LAZY);
-	if(!l)
-		return false;
-
-	handle_got_shadow_init(h, n, l->l_addr);
-
-	if(m)
-		*m = l;
-	return true;
 }
 
 bool handle_is_get_safe(const struct handle *h) {
