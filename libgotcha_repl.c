@@ -1,5 +1,6 @@
 #include "config.h"
 #include "globals.h"
+#include "handles.h"
 #include "namespace.h"
 #include "tcb.h"
 
@@ -115,6 +116,9 @@ int arch_prctl(int code, uintptr_t addr) {
 		*tcb_custom() = addr;
 		if(prev)
 			*parent_tcb = prev;
+
+		for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace)
+			handles_restoretls(namespace);
 	}
 
 	return stat;

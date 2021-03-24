@@ -148,9 +148,36 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 					seg->addrs_stored[namespace - 1], seg->size);
 		}
 	}
+	++*namespace_curversion(namespace);
 
 	// Unlock the shared code callback, in case it was running when we were canceled.
 	*namespace_trampolining(namespace) = false;
 
 	return true;
+}
+
+void handles_restoretls(Lmid_t namespace) {
+	assert(namespace);
+
+	version_t *version = namespace_tlsversion(namespace);
+	version_t watermark = *namespace_curversion(namespace);
+	if(*version == watermark)
+		return;
+	assert(*version < watermark);
+
+	for(const struct link_map *b = dlopen(NULL, RTLD_LAZY); b; b = b->l_next) {
+		const struct handle *h = handle_get(b, NULL, NULL);
+		assert(h);
+
+		if(handle_is_get_safe(h) && h->tls) {
+			struct link_map *l = namespace_get(namespace, h->path, RTLD_LAZY);
+			assert(l);
+
+			void *tls = NULL;
+			dlinfo(l, RTLD_DI_TLS_DATA, &tls);
+			assert(tls);
+			memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_memsz);
+		}
+	}
+	*version = watermark;
 }

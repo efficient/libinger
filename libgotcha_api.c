@@ -24,6 +24,9 @@ static libgotcha_group_t namespace_accessor(libgotcha_group_t new) {
 		assert(new >= 0);
 		assert(new <= config_numgroups());
 		assert(!new || namespace_locked[new - 1]);
+
+		if(new)
+			handles_restoretls(new);
 		*accessor = new;
 	}
 	return old;
