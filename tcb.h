@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+int tcb_prctl(int, uintptr_t);
+
 // Unlike other TLS variables, these must *not* persist when the TCB is manually switched.  As such,
 // they must be resolved via segment selector, not the __tls_get_addr() helper!
 
