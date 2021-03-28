@@ -8,6 +8,7 @@
 #include <link.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static inline size_t find_lib(const char *const *deps, const char *name) {
@@ -142,10 +143,12 @@ bool handles_reshadow(const struct link_map *root, Lmid_t namespace) {
 
 		if(handle_is_get_safe(h)) {
 			const struct link_map *l = namespace_get(namespace, h->path, RTLD_LAZY);
-			assert(l);
-			for(const struct restore *seg = h->rdwrs; seg != h->rdwrs + h->nrdwrs; ++seg)
-				memcpy((void *) (l->l_addr + seg->off_loaded),
-					seg->addrs_stored[namespace - 1], seg->size);
+			if(l)
+				for(const struct restore *seg = h->rdwrs; seg != h->rdwrs + h->nrdwrs; ++seg)
+					memcpy((void *) (l->l_addr + seg->off_loaded),
+						seg->addrs_stored[namespace - 1], seg->size);
+			else
+				assert(getenv("LD_PRELOAD"));
 		}
 	}
 	++*namespace_curversion(namespace);
@@ -171,12 +174,13 @@ void handles_restoretls(Lmid_t namespace) {
 
 		if(handle_is_get_safe(h) && h->tls) {
 			struct link_map *l = namespace_get(namespace, h->path, RTLD_LAZY);
-			assert(l);
-
-			void *tls = NULL;
-			dlinfo(l, RTLD_DI_TLS_DATA, &tls);
-			assert(tls);
-			memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_memsz);
+			if(l) {
+				void *tls = NULL;
+				dlinfo(l, RTLD_DI_TLS_DATA, &tls);
+				assert(tls);
+				memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_memsz);
+			} else
+				assert(getenv("LD_PRELOAD"));
 		}
 	}
 	*version = watermark;
