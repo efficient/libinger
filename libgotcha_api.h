@@ -52,6 +52,10 @@ libgotcha_group_t libgotcha_group_new(void);
 // but leaving it marked as allocated.  Returns whether it succeeded and left the group usable.
 bool libgotcha_group_renew(libgotcha_group_t);
 
+// Set the thread pointer to the specified value.  Optimized version of arch_prctl(ARCH_SET_FS)
+// where the caller specifies the selected namespace; this must match libgotcha_group_thread_get()!
+int libgotcha_install_tcb(uintptr_t, libgotcha_group_t);
+
 // Disclose the maximum supported number of concurrent groups, as determined by the compile-time
 // configuration, further capped by the LIBGOTCHA_NUMGROUPS environment variable.
 size_t libgotcha_group_limit(void);

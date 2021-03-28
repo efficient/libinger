@@ -7,6 +7,7 @@ use libgotcha_api::LIBGOTCHA_GROUP_SHARED;
 use libgotcha_api::libgotcha_group_t;
 use namespace::NUM_SHADOW_NAMESPACES;
 use std::ops::Deref;
+use std::os::raw::c_int;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
@@ -53,6 +54,13 @@ impl Group {
 	}
 
 	#[doc(hidden)]
+	pub unsafe fn install_tcb(&self, tcb: usize) -> c_int {
+		use libgotcha_api::libgotcha_install_tcb;
+		let Self (this) = self;
+		libgotcha_install_tcb(tcb, *this)
+	}
+
+	#[doc(hidden)]
 	pub fn lookup_symbol<T>(&self, decl: &str, _: &T) -> Option<&T> {
 		unsafe {
 			self.lookup_symbol_impl(decl)
@@ -93,6 +101,11 @@ macro_rules! group_thread_get {
 #[macro_export]
 macro_rules! group_thread_set {
 	( $group:expr ) => ($crate::_group_thread_accessor()($group));
+}
+
+#[macro_export]
+macro_rules! install_tcb {
+	( $tcb:expr ) => ($crate::group_thread_get!().install_tcb($tcb));
 }
 
 #[macro_export]

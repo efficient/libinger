@@ -1,10 +1,12 @@
 #include "libgotcha_api.h"
 
+#include <asm/prctl.h>
 #include "config.h"
 #include "handle.h"
 #include "handles.h"
 #include "namespace.h"
 #include "shared.h"
+#include "tcb.h"
 
 #include <assert.h>
 #include <link.h>
@@ -66,6 +68,18 @@ libgotcha_group_t libgotcha_group_new(void) {
 
 bool libgotcha_group_renew(libgotcha_group_t which) {
 	return handles_reshadow(dlopen(NULL, RTLD_LAZY), which);
+}
+
+int libgotcha_install_tcb(uintptr_t which, libgotcha_group_t group) {
+	int stat = tcb_prctl(ARCH_SET_FS, which);
+	if(stat)
+		return stat;
+
+	if(group)
+		handles_restoretls(group);
+	// else we are in group 0 and will do this on the next libgotcha_group_thread_set()
+
+	return stat;
 }
 
 size_t libgotcha_group_limit(void) {

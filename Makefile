@@ -82,7 +82,7 @@ init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h re
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h shared.h
+libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h shared.h tcb.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE -Wno-missing-attributes
 libgotcha_repl.o: libgotcha_repl.h config.h globals.h handles.h namespace.h tcb.h threads.h
