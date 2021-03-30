@@ -3,6 +3,7 @@
 #include "config.h"
 #include "handle.h"
 #include "namespace.h"
+#include "repl.h"
 
 #include <assert.h>
 #include <link.h>
@@ -177,6 +178,18 @@ void handles_restoretls(Lmid_t namespace) {
 			if(l) {
 				void *tls = NULL;
 				dlinfo(l, RTLD_DI_TLS_DATA, &tls);
+				if(!tls) {
+					size_t mod = 0;
+					dlinfo(l, RTLD_DI_TLS_MODID, &mod);
+					assert(mod);
+
+					struct tls_symbol module = {
+						.modid = mod,
+						.index = -1,
+					};
+					__tls_get_addr(&module);
+					dlinfo(l, RTLD_DI_TLS_DATA, &tls);
+				}
 				assert(tls);
 				memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_memsz);
 			} else

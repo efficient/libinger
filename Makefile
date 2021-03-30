@@ -75,7 +75,7 @@ handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
 handles.o: private CFLAGS += -fpic
 handles.o: private CPPFLAGS += -D_GNU_SOURCE
-handles.o: handles.h config.h error.h handle.h namespace.h
+handles.o: handles.h config.h error.h handle.h namespace.h repl.h
 init.o: private CFLAGS += -fpic
 init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h repl.h threads.h whitelist.h
