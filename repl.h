@@ -7,6 +7,15 @@
 #ifndef REPL_H_
 #define REPL_H_
 
+#include <stdint.h>
+
+struct tls_symbol {
+	uint64_t modid;
+	int64_t index;
+};
+
 void repl_init(void);
+
+void *__tls_get_addr(struct tls_symbol *);
 
 #endif
