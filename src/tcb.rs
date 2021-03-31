@@ -185,6 +185,7 @@ enum GetOp {
 	Gs = ARCH_GET_GS as _,
 }
 
+#[derive(PartialEq)]
 enum SetOp {
 	Cpuid = ARCH_SET_CPUID as _,
 	Fs = ARCH_SET_FS as _,
@@ -207,14 +208,21 @@ unsafe fn arch_prctl_get<'a>(op: GetOp) -> Result<&'a usize> {
 }
 
 unsafe fn arch_prctl_set(op: SetOp, val: &usize) -> Result<()> {
+	use gotcha::install_tcb;
 	extern {
 		fn libgotcha_arch_prctl(_: c_int, _: c_ulong) -> c_int;
 	}
 
 	let val: *const _ = val;
-	if libgotcha_arch_prctl(op as _, val as _) == 0 {
-		Ok(())
+	if op == SetOp::Fs {
+		if install_tcb!(val as _) != 0 {
+			Err(Error::last_os_error())?;
+		}
 	} else {
-		Err(Error::last_os_error())
+		if libgotcha_arch_prctl(op as _, val as _) != 0 {
+			Err(Error::last_os_error())?;
+		}
 	}
+
+	Ok(())
 }
