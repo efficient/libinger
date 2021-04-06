@@ -52,6 +52,14 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char**argv, 
 	return __libc_start_main(testinger, argc, argv, init, fini, rtld_fini, stack_end);
 }
 
+static bool intrsleep;
+
+#pragma weak libtestinger_alarm = alarm
+unsigned int alarm(unsigned int seconds) {
+	intrsleep = true;
+	return alarm(seconds);
+}
+
 #pragma weak libtestinger_nanosleep = nanosleep
 int nanosleep(const struct timespec *req, struct timespec *rem) {
 	struct timespec ours;
@@ -59,6 +67,10 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
 		rem = &ours;
 
 	int stat = nanosleep(req, rem);
+	if(intrsleep) {
+		intrsleep = false;
+		return stat;
+	}
 	while(stat && errno == EINTR) {
 		struct timespec next;
 		memcpy(&next, rem, sizeof next);
