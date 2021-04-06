@@ -1,7 +1,9 @@
 #include "libinger.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 struct inout {
 	int argc;
@@ -48,4 +50,19 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char**argv, 
 
 	mainfunc = main;
 	return __libc_start_main(testinger, argc, argv, init, fini, rtld_fini, stack_end);
+}
+
+#pragma weak libtestinger_nanosleep = nanosleep
+int nanosleep(const struct timespec *req, struct timespec *rem) {
+	struct timespec ours;
+	if(!rem)
+		rem = &ours;
+
+	int stat = nanosleep(req, rem);
+	while(stat && errno == EINTR) {
+		struct timespec next;
+		memcpy(&next, rem, sizeof next);
+		stat = nanosleep(&next, rem);
+	}
+	return stat;
 }
