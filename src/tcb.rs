@@ -64,6 +64,7 @@ impl ThreadControlBlock {
 		}
 
 		const POINTER_GUARD: usize = 6;
+		const KERNEL_THREAD: usize = 90;
 
 		let Self (fs) = self;
 		let fs = fs.as_mut().unwrap();
@@ -71,15 +72,16 @@ impl ThreadControlBlock {
 		let mut custom = false;
 		if let MaybeMut::Mut(fs) = fs {
 			let fs = unsafe {
-				slice::from_raw_parts_mut(*fs, POINTER_GUARD + 1)
+				slice::from_raw_parts_mut(*fs, KERNEL_THREAD + 1)
 			};
 			let cur = cur.get_or_insert(Self::current()?);
 			let Self (cur) = &cur;
 			let cur: &_ = cur.as_ref().unwrap().into();
 			let cur = unsafe {
-				slice::from_raw_parts(cur, POINTER_GUARD + 1)
+				slice::from_raw_parts(cur, KERNEL_THREAD + 1)
 			};
 			fs[POINTER_GUARD] = cur[POINTER_GUARD];
+			fs[KERNEL_THREAD] = cur[KERNEL_THREAD];
 			custom = true;
 		}
 
