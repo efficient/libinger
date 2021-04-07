@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -27,12 +28,6 @@ static int testinger(int argc, char **argv, char **envp) {
 	};
 	launch(testinging, UINT64_MAX, &argret);
 	return argret.retval;
-}
-
-#pragma weak libtestinger_getenv = getenv
-const char *getenv(const char *name) {
-	(void) name;
-	return "libtestinger.so";
 }
 
 #pragma weak libtestinger_libc_start_main = __libc_start_main
