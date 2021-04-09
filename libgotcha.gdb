@@ -1,4 +1,4 @@
-w br p on -- tb _dl_open if nsid
+w br p on -- tb _dl_open if nsid == -1
 comm
 	silent
 
