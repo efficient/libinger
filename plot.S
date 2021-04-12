@@ -61,8 +61,7 @@ procedure_linkage_override:
 	mov  %rdx,  32(%rsp)         // save namespace
 	lea  hook_trampoline(%rip), %rdx
 	mov  %rdx,  24(%rsp)         // intermediate return address
-	xor  %rdx, %rdx
-	mov  %rdx, (%rax)            // clear namespace
+	movq $0, (%rax)              // clear namespace
 	mov    (%rsp), %rdx          // saved %rdx
 	mov  %rdx, -16(%rsp)         // save %rdx
 	mov   8(%rsp), %rdx          // saved %rcx
