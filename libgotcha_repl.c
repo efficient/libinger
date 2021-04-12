@@ -96,9 +96,12 @@ int arch_prctl(int code, uintptr_t addr) {
 	if(stat)
 		return stat;
 
-	if(code == ARCH_SET_FS)
-		for(Lmid_t namespace = 1; namespace <= config_numgroups(); ++namespace)
-			handles_restoretls(namespace);
+	if(code == ARCH_SET_FS) {
+		Lmid_t group = *namespace_caller();
+		if(group)
+			handles_restoretls(group);
+		// else we are in group 0 and will do this on the next libgotcha_group_thread_set()
+	}
 
 	return stat;
 }
