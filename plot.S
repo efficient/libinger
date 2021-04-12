@@ -58,10 +58,11 @@ procedure_linkage_override:
 	mov  (%rcx), %rcx            // got address: gots[BASE]
 	mov  (%rcx, %rdx, 8), %rcx   // symbol address
 	mov  (%rax), %rdx            // namespace
-	mov  %rdx,  32(%rsp)         // save namespace
+	movq $0, (%rax)              // clear namespace
+	call namespace_caller        // caller address
+	mov  %rdx, (%rax)            // save namespace
 	lea  hook_trampoline(%rip), %rdx
 	mov  %rdx,  24(%rsp)         // intermediate return address
-	movq $0, (%rax)              // clear namespace
 	mov    (%rsp), %rdx          // saved %rdx
 	mov  %rdx, -16(%rsp)         // save %rdx
 	mov   8(%rsp), %rdx          // saved %rcx
@@ -87,7 +88,7 @@ procedure_linkage_override:
 // Stack at entry:
 //  offset contents
 //  ===============
-//     0   saved namespace
+//     0   (alignment gap)
 //     8   preserved return address
 //
 // Stack during execution:
@@ -101,11 +102,13 @@ procedure_linkage_override:
 hook_trampoline:
 .cfi_startproc
 .cfi_adjust_cfa_offset 8
-	mov  (%rsp), %rcx            // namespace
 	mov  %rax, (%rsp)            // save %rax
 	push %rdx                    // save %rdx
 	sub  $8, %rsp                // alignment
 
+	call namespace_caller        // caller address
+	mov  (%rax), %rcx            // namespace
+	movq $0, (%rax)              // clear caller
 	call namespace_thread        // namespace address
 	mov  %rcx, (%rax)            // restore namespace
 

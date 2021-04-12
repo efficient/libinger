@@ -6,7 +6,7 @@
 #include <threads.h>
 
 // NB: Unlike other modules, the thread_local variables defined herein do not persist across TCB
-//     switches.  The backing store for namespace_thread() is sort of an exception: since we can
+//     switches.  The backing stores for namespace_{thread,caller}() are "exceptions": since we can
 //     only run our own code in the shared namespace and all manual TCB switches occur within our
 //     code, the PLOT trampoline always restores an accurate accounting of the namespace to the
 //     *current* TCB on the way back out of any call into us from a non-shared namespace.  Another
@@ -18,6 +18,11 @@
 //     otherwise, the control library loses the assurance that its trampoline hook will run.)
 
 Lmid_t *namespace_thread(void) {
+	static thread_local Lmid_t namespace = LM_ID_BASE;
+	return &namespace;
+}
+
+Lmid_t *namespace_caller(void) {
 	static thread_local Lmid_t namespace = LM_ID_BASE;
 	return &namespace;
 }

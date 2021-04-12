@@ -13,6 +13,9 @@ typedef unsigned version_t;
 // Guarantees its *only* side effect is to clobber the return register.
 Lmid_t *namespace_thread(void);
 
+// Guarantees its *only* side effect is to clobber the return register.
+Lmid_t *namespace_caller(void);
+
 // Check whether the current namespace is currently executing the shared-code completion trampoline.
 bool *namespace_trampolining(Lmid_t);
 
