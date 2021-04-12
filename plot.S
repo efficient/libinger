@@ -94,8 +94,10 @@ procedure_linkage_override:
 // Stack during execution:
 //  offset contents
 //  ===============
-//     0   saved %rax
-//     8   preserved return address
+//     0   (alignment gap)
+//     8   saved %rdx
+//    16   saved %rax
+//    24   preserved return address
 .type hook_trampoline, @function
 hook_trampoline:
 .cfi_startproc
@@ -130,8 +132,10 @@ hook_trampoline:
 // Stack at entry:
 //  offset contents
 //  ===============
-//     0   saved %rax
-//     8   return address
+//     0   (alignment gap)
+//     8   saved %rdx
+//    16   saved %rax
+//    24   return address
 .type hook_ret, @function
 hook_ret:
 .cfi_startproc
