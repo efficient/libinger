@@ -61,8 +61,10 @@ procedure_linkage_override:
 	movq $0, (%rax)              // clear namespace
 	call namespace_caller        // caller address
 	mov  %rdx, (%rax)            // save namespace
+	lea  hook_retpoline(%rip), %rdx
+	mov  %rdx,  24(%rsp)         // stack alignment fixup "return" address
 	lea  hook_trampoline(%rip), %rdx
-	mov  %rdx,  24(%rsp)         // intermediate return address
+	mov  %rdx,  32(%rsp)         // callback hook trampoline "return" address
 	mov    (%rsp), %rdx          // saved %rdx
 	mov  %rdx, -16(%rsp)         // save %rdx
 	mov   8(%rsp), %rdx          // saved %rcx
@@ -88,8 +90,21 @@ procedure_linkage_override:
 // Stack at entry:
 //  offset contents
 //  ===============
-//     0   (alignment gap)
+//     0   return address (hook_trampoline() function)
 //     8   preserved return address
+//    --   (alignment reference point)
+.type hook_retpoline, @function
+hook_retpoline:
+.cfi_startproc
+	// Fix stack alignment
+	ret
+.cfi_endproc
+.size hook_retpoline, .-hook_retpoline
+
+// Stack at entry:
+//  offset contents
+//  ===============
+//     0   preserved return address
 //
 // Stack during execution:
 //  offset contents
@@ -101,10 +116,12 @@ procedure_linkage_override:
 .type hook_trampoline, @function
 hook_trampoline:
 .cfi_startproc
+	push %rax
 .cfi_adjust_cfa_offset 8
-	mov  %rax, (%rsp)            // save %rax
-	push %rdx                    // save %rdx
-	sub  $8, %rsp                // alignment
+	push %rdx
+.cfi_adjust_cfa_offset 8
+	sub $8, %rsp                 // alignment
+.cfi_adjust_cfa_offset 8
 
 	call namespace_caller        // caller address
 	mov  (%rax), %rcx            // namespace
@@ -122,38 +139,23 @@ hook_trampoline:
 	test %rcx, %rcx
 	jz   .Lskip_hook
 	movb $1, (%rax)              // lock ourselves out of here
+	mov  %rax, (%rsp)            // save trampolining address
 
-	lea  hook_ret(%rip), %rdi
-	push %rdi                    // intermediate return address
-.cfi_adjust_cfa_offset -8
+	call  *%rcx
 
-	jmp  *%rcx
-.cfi_endproc
-.size hook_trampoline, .-hook_trampoline
-
-// Stack at entry:
-//  offset contents
-//  ===============
-//     0   (alignment gap)
-//     8   saved %rdx
-//    16   saved %rax
-//    24   return address
-.type hook_ret, @function
-hook_ret:
-.cfi_startproc
-.cfi_adjust_cfa_offset 8
-	xor  %rdi, %rdi              // sentinel to look up namespace
-	call namespace_trampolining  // trampolining address
+	mov  (%rsp), %rax            // trampolining address
 	movb $0, (%rax)              // "unlock," as John Bercow would say
 .Lskip_hook:
 
 	add  $8, %rsp
+.cfi_adjust_cfa_offset -8
 	pop  %rdx
+.cfi_adjust_cfa_offset -8
 	pop  %rax
 .cfi_adjust_cfa_offset -8
-	ret                          // preserved return address
+	ret
 .cfi_endproc
-.size hook_ret, .-hook_ret
+.size hook_trampoline, .-hook_trampoline
 
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.
