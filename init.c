@@ -1,5 +1,6 @@
 #include "ancillary.h"
 #include "config.h"
+#include "dynamic.h"
 #include "globals.h"
 #include "handle.h"
 #include "handles.h"
@@ -65,6 +66,9 @@ static inline enum error init(void) {
 		l = l->l_next);
 	if((signed) fresh > SUCCESS)
 		return fresh;
+
+	// Begin intercepting all calls into the dynamic linker.  Must not precede interpose_init()!
+	dynamic_init();
 
 	// Populate the symbol whitelist, which determines which dynamic calls and accesses result
 	// in a namespace switch.  And setup forced interposition, so that any calls to library

@@ -40,6 +40,9 @@ extern const bool libgotcha_staticlink;
 
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
 int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
+
+void *libgotcha_dl_open(const char *, int, uintptr_t, Lmid_t, int, char **, char **);
+void libgotcha_dl_close(void *);
 #endif
 
 int libgotcha_arch_prctl(int, uintptr_t);

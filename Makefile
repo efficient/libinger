@@ -28,7 +28,7 @@ libgotcha.so: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
-libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o tcb.o whitelist.o
+libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o dynamic.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o tcb.o whitelist.o
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
 
 gotcha.abi: $(CGLOBALS:.c=.o)
@@ -60,6 +60,9 @@ config.o: private CFLAGS += -fpic
 config.o: private CPPFLAGS += -D_GNU_SOURCE
 config.o: config.h namespace.h
 ctestfuns.o: ctestfuns.h
+dynamic.o: private CFLAGS += -fpic
+dynamic.o: private CPPFLAGS += -D_GNU_SOURCE
+dynamic.o: handle.h segprot.h
 error.o: private CPPFLAGS += -isystem .
 error.o: error.h
 globals.o: private CFLAGS += -fpic
@@ -78,14 +81,14 @@ handles.o: private CPPFLAGS += -D_GNU_SOURCE
 handles.o: handles.h config.h error.h handle.h namespace.h repl.h
 init.o: private CFLAGS += -fpic
 init.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
-init.o: config.h error.h globals.h handle.h handles.h interpose.h namespace.h repl.h threads.h whitelist.h
+init.o: config.h error.h dynamic.h globals.h handle.h handles.h interpose.h namespace.h repl.h threads.h whitelist.h
 interpose.o: private CPPFLAGS += -D_GNU_SOURCE
 interpose.o: interpose.h segprot.h
 libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h repl.h shared.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE -Wno-missing-attributes
-libgotcha_repl.o: libgotcha_repl.h config.h globals.h handles.h namespace.h tcb.h threads.h
+libgotcha_repl.o: libgotcha_repl.h config.h dynamic.h globals.h handles.h namespace.h tcb.h threads.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h

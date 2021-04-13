@@ -1,4 +1,5 @@
 #include "config.h"
+#include "dynamic.h"
 #include "globals.h"
 #include "handles.h"
 #include "namespace.h"
@@ -88,6 +89,17 @@ int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void
 		++structure->namespace;
 		return ns_iterate_phdr(structure);
 	}
+}
+
+void *libgotcha_dl_open(
+	const char *filename, int flags, uintptr_t caller, Lmid_t lmid,
+	int argc, char **argv, char **env
+) {
+	return dynamic_open(filename, flags, caller, lmid, argc, argv, env);
+}
+
+void libgotcha_dl_close(void *handle) {
+	dynamic_close(handle);
 }
 
 #pragma weak libgotcha_arch_prctl = arch_prctl
