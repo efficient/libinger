@@ -34,14 +34,14 @@ static inline enum error init(void) {
 		return ancillary_disable_ctors_dtors();
 	assert(namespace_self() && "libgotcha clash from already_bootstrapping() false negative");
 
+	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
+	// will be routed to their external definitions.
+	interpose_init();
+
 	// Functions we interpose statically memoize the address of their external definitions when
 	// first called.  This would be disastrous if the first call occurred in our signal handler,
 	// so resolve the addresses eagerly instead where required.
 	repl_init();
-
-	// Start by rewriting our own GOT.  After this, any local calls to functions we interpose
-	// will be routed to their external definitions.
-	interpose_init();
 
 	if(config_skip(handle_progname())) {
 		fprintf(stderr, "libgotcha notice: Going dormant in skipped executable %s\n",
