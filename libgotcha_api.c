@@ -4,6 +4,7 @@
 #include "handle.h"
 #include "handles.h"
 #include "namespace.h"
+#include "repl.h"
 #include "shared.h"
 
 #include <assert.h>
@@ -11,8 +12,6 @@
 #include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
-
-void *__tls_get_addr(uintptr_t);
 
 // Position N corresponds to namespace N+1!
 static bool namespace_locked[NUM_SHADOW_NAMESPACES];
@@ -88,10 +87,11 @@ void libgotcha_shared_hook(void (*hook)(void)) {
 	shared_hook(hook);
 }
 
-// The following definitions permit a client libraries to call the wrapper functions associated with
+// The following definitions permit control libraries to call the wrapper functions associated with
 // our static interpositions, similar to how a statically-linked client library might do with
-// dynamic interpositions via the libgotcha_repl.h interface.
+// dynamic interpositions via the libgotcha_repl.h interface.  Their signatures are a platform ABI
+// implementation detail, so such a control library must forward-declare them in order to use.
 
-void *libgotcha_tls_get_addr(uintptr_t index) {
+void *libgotcha_tls_get_addr(struct tls_symbol *index) {
 	return __tls_get_addr(index);
 }
