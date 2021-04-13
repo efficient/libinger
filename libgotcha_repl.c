@@ -23,7 +23,7 @@
 #pragma weak libgotcha_dlmopen = dlmopen
 void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
 	if(lmid == LM_ID_BASE)
-		return dlmopen(lmid, filename, flags);
+		return dlopen(filename, flags);
 
 	// Trick dlerror() into reporting "invalid target namespace for dlmopen()."
 	void *null = dlmopen(NUM_SHADOW_NAMESPACES + 1, "", RTLD_LAZY);
