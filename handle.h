@@ -97,4 +97,7 @@ static inline size_t handle_got_num_entries(const struct handle *h) {
 // Get the name of the executing program.  Returns NULL on error.
 const char *handle_progname(void);
 
+// Get the path to the interpreter (dynamic linker/loader).
+const char *handle_interp_path(void);
+
 #endif

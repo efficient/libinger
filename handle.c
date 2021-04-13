@@ -60,21 +60,6 @@ static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
 	return (uintptr_t) page + plot_pagesize() + entry;
 }
 
-static const char *interp_path(void) {
-	static const char *interp;
-	if(!interp) {
-		const struct link_map *l = dlopen(NULL, RTLD_LAZY);
-		const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
-		const ElfW(Phdr) *ph = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
-		const ElfW(Phdr) *pe = ph + e->e_phnum;
-		const ElfW(Phdr) *p;
-		for(p = ph; p->p_type != PT_INTERP; ++p)
-			assert(p + 1 != pe);
-		interp = (char *) (l->l_addr + p->p_vaddr);
-	}
-	return interp;
-}
-
 static enum error nodelete_clear_flag(struct handle *h) {
 	if(!strcmp(nodelete + sizeof nodelete - 7, "XXXXXX"))
 		mkdtemp(nodelete);
@@ -180,6 +165,21 @@ const char *handle_progname(void) {
 	}
 
 	return progname;
+}
+
+const char *handle_interp_path(void) {
+	static const char *interp;
+	if(!interp) {
+		const struct link_map *l = dlopen(NULL, RTLD_LAZY);
+		const ElfW(Ehdr) *e = (ElfW(Ehdr) *) l->l_addr;
+		const ElfW(Phdr) *ph = (ElfW(Phdr) *) (l->l_addr + e->e_phoff);
+		const ElfW(Phdr) *pe = ph + e->e_phnum;
+		const ElfW(Phdr) *p;
+		for(p = ph; p->p_type != PT_INTERP; ++p)
+			assert(p + 1 != pe);
+		interp = (char *) (l->l_addr + p->p_vaddr);
+	}
+	return interp;
 }
 
 enum error handle_init(struct handle *h, const struct link_map *l, struct link_map *owner) {
@@ -343,7 +343,7 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 
 		if(!h->ldaccess && !strcmp(h->strtab + st->st_name, "_rtld_global")) {
 			// This object file accesses the dynamic linker's mutable global storage.
-			if(!whitelist_so_contains(h->path) && strcmp(h->path, interp_path()))
+			if(!whitelist_so_contains(h->path) && strcmp(h->path, handle_interp_path()))
 				fprintf(stderr,
 					"%s: libgotcha warning: %s: unwhitelisted GL() access\n",
 					handle_progname(), h->path);
@@ -777,7 +777,7 @@ enum error handle_got_shadow(struct handle *h) {
 			return ERROR_MALLOC;
 	}
 
-	if(!strcmp(h->path, interp_path())) {
+	if(!strcmp(h->path, handle_interp_path())) {
 		// Do not attempt to operate on the dynamic linker itself, which is subjected to
 		// special mprotect()s not recorded in its program header.  There is really only one
 		// copy of it loaded, so skipping it is safe---provided we trampoline all inbound
@@ -889,7 +889,7 @@ oom:
 
 bool handle_is_get_safe(const struct handle *h) {
 	// Ensure this is not the vdso or the dynamic linker.
-	return !h->vdso && strcmp(h->path, interp_path());
+	return !h->vdso && strcmp(h->path, handle_interp_path());
 }
 
 size_t handle_nodelete_pathlen(void) {
