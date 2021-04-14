@@ -157,6 +157,24 @@ hook_trampoline:
 .cfi_endproc
 .size hook_trampoline, .-hook_trampoline
 
+.type plot_is_trampoline, @function
+plot_is_trampoline:
+.globl plot_is_trampoline
+.cfi_startproc
+	mov   hook_retpoline@gotpcrel(%rip), %rax
+	cmp   %rdi, %rax
+	je    .Lshortcircuit
+
+	mov   hook_trampoline@gotpcrel(%rip), %rax
+	cmp   %rdi, %rax
+
+.Lshortcircuit:
+	sete  %al
+	movzb %al, %eax
+	ret
+.cfi_endproc
+.size plot_is_trampoline, .-plot_is_trampoline
+
 // Ideally, the assembly macro alone would suffice to generate all table entries; unfortunately, GAS
 // uses a hardcoded recursion depth limit, so we have to unroll the loop to support larger tables.
 #define ENTRY(id, count) \
