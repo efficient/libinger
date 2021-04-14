@@ -22,7 +22,7 @@ Lmid_t *namespace_thread(void) {
 	return &namespace;
 }
 
-Lmid_t *namespace_caller(void) {
+const Lmid_t *namespace_caller(void) {
 	static thread_local Lmid_t namespace = LM_ID_BASE;
 	return &namespace;
 }
