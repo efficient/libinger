@@ -56,10 +56,12 @@ void dynamic_init(void) {
 		}
 	}
 
-	void (**dlp)(void) = (void (**)(void)) (ldso->baseaddr + dlo[-1].r_offset);
-	*dlp = libgotcha_dl_open;
+	uintptr_t *dlp = (uintptr_t *) (ldso->baseaddr + dlo[-1].r_offset);
+	*dlp = handle_symbol_plot((uintptr_t) libgotcha_dl_open);
+	assert(*dlp);
 	++dlp;
 	dynamic_close = (void (*)(void *)) *dlp;
-	*dlp = libgotcha_dl_close;
+	*dlp = handle_symbol_plot((uintptr_t) libgotcha_dl_close);
+	assert(*dlp);
 	prot_segment(ldso->baseaddr, ro, 0);
 }

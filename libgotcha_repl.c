@@ -91,6 +91,7 @@ int dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void
 	}
 }
 
+// This symbol must *not* be hidden, and so must not be declared in our header!
 void *libgotcha_dl_open(
 	const char *filename, int flags, uintptr_t caller, Lmid_t lmid,
 	int argc, char **argv, char **env
@@ -98,6 +99,7 @@ void *libgotcha_dl_open(
 	return dynamic_open(filename, flags, caller, lmid, argc, argv, env);
 }
 
+// This symbol must *not* be hidden, and so must not be declared in our header!
 void libgotcha_dl_close(void *handle) {
 	dynamic_close(handle);
 }

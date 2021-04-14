@@ -905,3 +905,7 @@ size_t handle_nodelete_pathlen(void) {
 bool handle_is_nodelete(const struct handle *h) {
 	return !strncmp(h->path, nodelete, handle_nodelete_pathlen() - 1);
 }
+
+uintptr_t handle_symbol_plot(uintptr_t symbol) {
+	return trampolines_get(symbol);
+}
