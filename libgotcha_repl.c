@@ -1,6 +1,7 @@
 #include "config.h"
 #include "dynamic.h"
 #include "globals.h"
+#include "handle.h"
 #include "handles.h"
 #include "namespace.h"
 #include "stack.h"
@@ -82,6 +83,12 @@ static void *findsym_interruptible(
 	if((err->code = _dl_catch_error(&err->module, &err->message, &err->malloced, findsym, &req)))
 		return NULL;
 
+	// No more interruption: we're about to take the PLOT lookup table's read lock!
+	*namespace_thread() = 0;
+
+	void *plot = (void *) handle_symbol_plot((uintptr_t) req.res);
+	if(plot)
+		req.res = plot;
 	err->message = NULL;
 	return req.res;
 }
