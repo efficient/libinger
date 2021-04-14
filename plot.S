@@ -125,7 +125,6 @@ hook_trampoline:
 
 	call namespace_caller        // caller address
 	mov  (%rax), %rcx            // namespace
-	movq $0, (%rax)              // clear caller
 	call namespace_thread        // namespace address
 	mov  %rcx, (%rax)            // restore namespace
 
