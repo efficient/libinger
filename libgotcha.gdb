@@ -3,7 +3,7 @@ comm
 	silent
 
 	f 1
-	b if $rax && *((struct link_map *) $rax)->l_name && strcmp(((struct link_map *) $rax)->l_name, __progname_full)
+	b if $rax && *((struct link_map *) $rax)->l_name && !$_streq(((struct link_map *) $rax)->l_name, __progname_full)
 	set $bp_dl_open = $bpnum
 	comm
 		silent
