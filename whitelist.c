@@ -20,6 +20,11 @@ static bool yes(const char *ign) {
 	return true;
 }
 
+static bool silence(const char *ign) {
+	(void) ign;
+	return false;
+}
+
 static bool libc(const char *sym) {
 	if(config_sharedlibc())
 		return true;
@@ -56,6 +61,9 @@ static const struct patterns WHITELIST[] = {
 	//    each of these as well!
 	// Instead, the 'dynamic' module hooks directly into the linker to handle such cases.
 	{"/ld-linux-x86-64.so.", yes},
+
+	// Don't actually whitelist this library for the above reasons, but silence the warning.
+	{"/libdl.so.", silence},
 
 	// Standard OS/language facilities:
 	// The primary issue here is the dynamic allocator: we can't have multiple versions hanging
