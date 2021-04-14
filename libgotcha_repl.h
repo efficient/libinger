@@ -38,6 +38,10 @@ extern const bool libgotcha_staticlink;
 #ifdef __USE_GNU
 #include <dlfcn.h>
 
+void *libgotcha_dlsym(void *, const char *);
+void *libgotcha_dlvsym(void *, const char *, const char *);
+char *libgotcha_dlerror(void);
+
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
 int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
 #endif

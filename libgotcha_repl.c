@@ -3,6 +3,7 @@
 #include "globals.h"
 #include "handles.h"
 #include "namespace.h"
+#include "stack.h"
 #include "tcb.h"
 
 #include <asm/prctl.h>
@@ -19,6 +20,114 @@
 #pragma GCC visibility push(hidden)
 #include "libgotcha_repl.h"
 #pragma GCC visibility pop
+
+struct findsym_request {
+	void *handle;
+	const char *symbol;
+	const char *version;
+	const void *caller;
+	void *res;
+};
+
+struct findsym_error {
+	int code;
+	const char *module;
+	char *message;
+	bool malloced;
+	bool retrieved;
+};
+
+static thread_local struct findsym_error findsym_error;
+
+static void findsym(struct findsym_request *req) {
+	void *_dl_sym(void *, const char *, const void *);
+	void *_dl_vsym(void *, const char *, const char *, const void *);
+	if(req->version)
+		req->res = _dl_vsym(req->handle, req->symbol, req->version, req->caller);
+	else
+		req->res = _dl_sym(req->handle, req->symbol, req->caller);
+}
+
+static void *findsym_interruptible(
+	void *handle, const char *symbol, const char *version,
+	bool interruptible, const void *caller
+) {
+	int _dl_catch_error(const char **, char **, bool *,
+		void (*)(struct findsym_request *), struct findsym_request *);
+
+	assert(caller);
+
+	struct findsym_error *err = &findsym_error;
+	if(err->malloced) {
+		free(err->message);
+		err->message = NULL;
+	}
+	err->retrieved = false;
+
+	// The only reason that the dlsym() family ever mutates ld.so's state is to add an
+	// inter-library dependency, which only happens if we search between libraries. So as long
+	// as we aren't doing that, we can become interruptible now as far as ld.so is concerned.
+	// Note, however, that we further exclude cases where we were called from shared code,
+	// because it's still not okay to interrupt the *containing* noninterruptible sequence.
+	// This case is impossible to detect using only the caller namespace, so we save(d) a flag.
+	if(interruptible && handle != RTLD_DEFAULT && handle != RTLD_NEXT)
+		*namespace_thread() = *namespace_caller();
+
+	struct findsym_request req = {
+		.handle = handle,
+		.symbol = symbol,
+		.version = version,
+		.caller = caller,
+	};
+	if((err->code = _dl_catch_error(&err->module, &err->message, &err->malloced, findsym, &req)))
+		return NULL;
+
+	err->message = NULL;
+	return req.res;
+}
+
+#pragma weak libgotcha_dlsym = dlsym
+void *dlsym(void *handle, const char *symbol) {
+	return findsym_interruptible(handle, symbol, NULL,
+		stack_called_from_unshared(), stack_ret_addr_non_tramp());
+}
+
+#pragma weak libgotcha_dlvsym = dlvsym
+void *dlvsym(void *handle, const char *symbol, const char *version) {
+	return findsym_interruptible(handle, symbol, version,
+		stack_called_from_unshared(), stack_ret_addr_non_tramp());
+}
+
+#pragma weak libgotcha_dlerror = dlerror
+char *dlerror(void) {
+	struct findsym_error *err = &findsym_error;
+	if(err->message) {
+		if(!err->retrieved) {
+			struct findsym_error *err = &findsym_error;
+			const char *sep = "";
+			if(*err->module)
+				sep = ": ";
+
+			const char *descr = strerror(err->code);
+			char *buf = malloc(
+				strlen(err->module) + strlen(sep) +
+				strlen(err->message) + 2 +
+				strlen(descr) + 1
+			);
+			sprintf(buf, "%s%s%s: %s", err->module, sep, err->message, descr);
+			if(err->malloced)
+				free(err->message);
+			err->message = buf;
+			err->retrieved = true;
+			return err->message;
+		} else {
+			free(err->message);
+			err->message = NULL;
+		}
+	}
+
+	return dlerror();
+}
 
 #pragma weak libgotcha_dlmopen = dlmopen
 void *dlmopen(Lmid_t lmid, const char *filename, int flags) {
@@ -96,11 +205,17 @@ void *libgotcha_dl_open(
 	const char *filename, int flags, uintptr_t caller, Lmid_t lmid,
 	int argc, char **argv, char **env
 ) {
+	if(findsym_error.malloced)
+		free(findsym_error.message);
+	findsym_error.message = NULL;
 	return dynamic_open(filename, flags, caller, lmid, argc, argv, env);
 }
 
 // This symbol must *not* be hidden, and so must not be declared in our header!
 void libgotcha_dl_close(void *handle) {
+	if(findsym_error.malloced)
+		free(findsym_error.message);
+	findsym_error.message = NULL;
 	dynamic_close(handle);
 }
 
