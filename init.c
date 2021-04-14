@@ -68,7 +68,8 @@ static inline enum error init(void) {
 		return fresh;
 
 	// Begin intercepting all calls into the dynamic linker.  Must not precede interpose_init()!
-	dynamic_init();
+	if(!config_nodynamic())
+		dynamic_init();
 
 	// Populate the symbol whitelist, which determines which dynamic calls and accesses result
 	// in a namespace switch.  And setup forced interposition, so that any calls to library

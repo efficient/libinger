@@ -57,6 +57,18 @@ bool config_sharedlibc(void) {
 	return res;
 }
 
+bool config_nodynamic(void) {
+	static bool memo;
+	static bool res;
+	if(!memo) {
+		if((res = getenv("LIBGOTCHA_NODYNAMIC")))
+			fputs("libgotcha notice: Not hooking _dl_open() or _dl_close() calls\n",
+				stderr);
+		memo = true;
+	}
+	return res;
+}
+
 bool config_noglobals(void) {
 	static bool memo;
 	static bool res;
