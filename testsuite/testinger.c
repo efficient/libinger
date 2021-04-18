@@ -1,6 +1,11 @@
+#include "libgotcha.h"
+#include "libgotcha_repl.h"
 #include "libinger.h"
 
+#include <assert.h>
+#include <dlfcn.h>
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -64,4 +69,36 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
 		stat = nanosleep(&next, rem);
 	}
 	return stat;
+}
+
+void _dl_signal_error(int, const char *, const char *, const char *);
+void libtestinger_dl_signal_exception(int error, const char *const *module, const char *message);
+
+extern const char *__progname;
+
+// It seems that glibc has a bug: __libc_dlsym() calls from ancillary namespaces abort the process
+// if they cannot find the target symbol, even if they would ordinarily only return an error code!
+// This happens because _dl_signal_cexception() calls are always redirected back to the base
+// namespace, so we work around it by proxying them and redirecting to the correct namespace.
+#pragma weak libtestinger_dl_signal_exception = _dl_signal_exception
+void _dl_signal_exception(int error, const char *const *module, const char *message) {
+	// If we're still bootstrapping dlsym(), just jump back to libc however we can get there!
+	if(dlsym == libgotcha_dlsym) {
+		if(_dl_signal_exception == libtestinger_dl_signal_exception)
+			_dl_signal_error(error, module[0], message, module[1]);
+		else
+			_dl_signal_exception(error, module, message);
+	}
+
+	// Otherwise, jump to the copy of libc in the namespace we came from.
+	libgotcha_group_t group = libgotcha_group_caller();
+	void (*_dl_signal_exception)(int, const char *const *, const char *) =
+		(void (*)(int, const char *const *, const char *)) (uintptr_t)
+			libgotcha_group_symbol_from(group, "_dl_signal_exception", "libc.so.6");
+	libgotcha_group_thread_set(group);
+	assert(_dl_signal_exception);
+	assert(_dl_signal_exception != libtestinger_dl_signal_exception);
+	if(mainfunc)
+		fprintf(stderr, "./%s: symbol lookup warning: %s: %s (code %d)\n", __progname, *module, message, error);
+	_dl_signal_exception(error, module, message);
 }
