@@ -311,3 +311,14 @@ you are invoking it (via `gdb`, `rr replay`, etc.):
 ```
 -x .../path/to/libinger/external/libgotcha/libgotcha.gdb -ex dir\ .../path/to/glibc/dlfcn:.../path/to/glibc/elf
 ```
+
+When debugging the program directly with GDB rather than from a recorded rr execution capture, the
+debugger and/or program may become overwhelmed by the extremely frequent preemption signals.  If the
+debugger freezes or the program doesn't make progress when single stepping, try recompiling
+_libinger_ with a higher (say, by an order of magnitude or so) `QUANTUM_MICROSECONDS` value.  If you
+still have trouble single stepping or the time spent stopped is causing _libinger_ to preempt the
+task you are trying to debug, you can disable preemption altogether by issuing a variation of the
+following GDB command to cover the preemption signal(s) affecting your task's execution:
+```
+(gdb) handle SIGALRM nopass
+```
