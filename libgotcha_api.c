@@ -38,6 +38,10 @@ libgotcha_group_t (*libgotcha_group_thread_accessor(void))(libgotcha_group_t) {
 	return namespace_accessor;
 }
 
+libgotcha_group_t libgotcha_group_caller(void) {
+	return *namespace_caller();
+}
+
 static bool namespace_lock(libgotcha_group_t lmid) {
 	assert(lmid > 0);
 	assert(lmid <= config_numgroups());

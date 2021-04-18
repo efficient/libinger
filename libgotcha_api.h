@@ -56,6 +56,9 @@ bool libgotcha_group_renew(libgotcha_group_t);
 // configuration, further capped by the LIBGOTCHA_NUMGROUPS environment variable.
 size_t libgotcha_group_limit(void);
 
+// Determine which namespace the call to this control library came from.
+libgotcha_group_t libgotcha_group_caller(void);
+
 // Look up the definition of a named symbol within the specified group.
 void *libgotcha_group_symbol(libgotcha_group_t, const char *);
 
