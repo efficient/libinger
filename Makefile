@@ -71,8 +71,6 @@ globals.o: globals.h config.h error.h goot.h handle.h namespace.h plot.h threads
 goot.o: private CFLAGS += -fpic
 goot.o: private CPPFLAGS += -D_GNU_SOURCE
 goot.o: goot.h handle.h namespace.h plot.h
-gotchapreload.o: private CFLAGS += -fpic
-gotchapreload.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: private CFLAGS += -fpic -Wno-array-bounds
 handle.o: private CPPFLAGS += -D_GNU_SOURCE
 handle.o: handle.h config.h error.h goot.h namespace.h plot.h segprot.h
