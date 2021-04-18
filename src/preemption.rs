@@ -11,6 +11,7 @@ use signal::Sigset;
 use signal::sigaction;
 use std::cell::RefCell;
 use std::io::Result as IoResult;
+use std::os::raw::c_int;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use timer::Timer;
@@ -42,6 +43,13 @@ extern fn resume_preemption() {
 }
 
 pub fn enable_preemption(group: Option<Group>) -> Result<Option<Signal>, ()> {
+	use timetravel::errno::errno;
+
+	// We must access errno_group() even when we won't use it so that the initial
+	// enable_preemption() call bootstraps later resume_preemption() ones!
+	let erryes = errno_group(group);
+	let errno = *errno();
+
 	// We can only call thread_signal() if the preemption signal is already blocked; otherwise,
 	// the signal handler might race on the thread-local SIGNAL variable.  It's fine to do when:
 	//  * We have been passed a group, because in this case preemption was previously disabled.
@@ -66,6 +74,10 @@ pub fn enable_preemption(group: Option<Group>) -> Result<Option<Signal>, ()> {
 		drop(mask(Operation::Unblock, signal));
 	}
 
+	// Propagate any errors encountered during our libc replacements back to the calling libset.
+	if group.is_none() && errno != 0 {
+		*erryes = errno;
+	}
 	Ok(unblock)
 }
 
@@ -117,6 +129,30 @@ pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoR
 	INIT.call_once(|| shared_hook(resume_preemption));
 
 	Ok(())
+}
+
+fn errno_group(group: Option<Group>) -> &'static mut c_int {
+	use gotcha::group_lookup_symbol_fn;
+	use libc::__errno_location;
+	thread_local! {
+		static ERRNO_LOCATION: RefCell<Option<unsafe extern fn() -> *mut c_int>> =
+			RefCell::new(None);
+	}
+
+	// We save the location in a thread-local variable so the next time we need to find its
+	// *location,* we won't clear its *value* in the process!
+	ERRNO_LOCATION.with(|errno_location| {
+		let mut errno_location = errno_location.borrow_mut();
+		if let Some(group) = group {
+			errno_location.replace(unsafe {
+				group_lookup_symbol_fn!(group, __errno_location)
+			}.unwrap());
+		}
+		let __errno_location = errno_location.unwrap();
+		unsafe {
+			&mut *__errno_location()
+		}
+	})
 }
 
 fn mask(un: Operation, no: Signal) -> IoResult<()> {
