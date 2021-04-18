@@ -62,6 +62,9 @@ libgotcha_group_t libgotcha_group_caller(void);
 // Look up the definition of a named symbol within the specified group.
 void *libgotcha_group_symbol(libgotcha_group_t, const char *);
 
+// Like the above, but search starting from the library with the given name.
+void *libgotcha_group_symbol_from(libgotcha_group_t, const char *, const char *);
+
 // Install a function to be invoked each time a call resolving to the shared group is finished.
 // Note that this callback runs in the preceding group, and that any explicit group switches it
 // performs will "stick" with the current thread upon its return.

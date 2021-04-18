@@ -76,14 +76,24 @@ size_t libgotcha_group_limit(void) {
 }
 
 void *libgotcha_group_symbol(libgotcha_group_t which, const char *symbol) {
+	return libgotcha_group_symbol_from(which, symbol, NULL);
+}
+
+void *libgotcha_group_symbol_from(libgotcha_group_t which, const char *symbol, const char *from) {
 	assert(symbol);
 
-	struct link_map *l = dlopen(NULL, RTLD_LAZY);
+	struct link_map *l;
 	if(which) {
-		l = namespace_get(which, handle_progname(), RTLD_LAZY);
-		if(!l)
-			return NULL;
-	}
+		if(!from)
+			from = handle_progname();
+		l = namespace_get(which, from, RTLD_LAZY);
+	} else if(from)
+		l = namespace_get(LM_ID_BASE, from, RTLD_LAZY);
+	else
+		l = dlopen(NULL, RTLD_LAZY);
+
+	if(!l)
+		return NULL;
 	return dlsym(l, symbol);
 }
 
