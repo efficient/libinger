@@ -2,7 +2,6 @@
 
 #include "tcb.h"
 
-#include <asm/prctl.h>
 #include <dlfcn.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -19,20 +18,17 @@ STATIC_REPLACE(void *, __tls_get_addr, struct tls_symbol *symb) //{
 	if(!symb)
 		return NULL;
 
-	uintptr_t restore = 0;
-	if(symb->index >= 0) {
-		uintptr_t parent_tcb = *tcb_parent();
-		if(parent_tcb) {
-			restore = *tcb_custom();
-			arch_prctl(ARCH_SET_FS, parent_tcb);
-		}
-	} else
+	uintptr_t parent = 0;
+	if(symb->index >= 0)
+		parent = *tcb_parent();
+	else
 		symb->index = -symb->index - 1;
 
 	void *res = __tls_get_addr(symb);
-
-	if(restore)
-		arch_prctl(ARCH_SET_FS, restore);
+	if(parent) {
+		uintptr_t offset = *tcb_custom() - (uintptr_t) res;
+		res = (void *) (parent - offset);
+	}
 
 	return res;
 }
