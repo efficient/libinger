@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <dlfcn.h>
 #include <features.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,12 +36,11 @@ extern "C" {
 // libgotcha's functionality will only be accessible to third-party shared libraries.
 extern const bool libgotcha_staticlink;
 
-#ifdef __USE_GNU
-#include <dlfcn.h>
-
 void *libgotcha_dlsym(void *, const char *);
-void *libgotcha_dlvsym(void *, const char *, const char *);
 char *libgotcha_dlerror(void);
+
+#ifdef __USE_GNU
+void *libgotcha_dlvsym(void *, const char *, const char *);
 
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
 int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
