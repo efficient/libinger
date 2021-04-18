@@ -44,6 +44,14 @@ int __libc_start_main(int (*main)(int, char **, char **), int argc, char**argv, 
 	return __libc_start_main(testinger, argc, argv, init, fini, rtld_fini, stack_end);
 }
 
+#pragma weak libtestinger_signal = signal
+void (*signal(int signum, void (*handler)(int)))(int) {
+	if(handler == SIG_DFL)
+		return handler;
+
+	return signal(signum, handler);
+}
+
 static bool intrsleep;
 
 #pragma weak libtestinger_alarm = alarm
