@@ -109,7 +109,7 @@ macro_rules! group_lookup_symbol_mut {
 macro_rules! group_lookup_symbol_fn {
 	( $group:expr, $symbol:ident ) => ({
 		let mut symbol = Some($symbol as _);
-		symbol = crate::std::mem::transmute($group.lookup_symbol(stringify!($symbol), &$symbol));
+		symbol = ::std::mem::transmute($group.lookup_symbol(stringify!($symbol), &$symbol));
 		symbol
 	});
 }
