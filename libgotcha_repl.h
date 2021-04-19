@@ -41,8 +41,9 @@ char *libgotcha_dlerror(void);
 
 #ifdef __USE_GNU
 void *libgotcha_dlvsym(void *, const char *, const char *);
-
 void *libgotcha_dlmopen(Lmid_t, const char *, int);
+
+struct dl_phdr_info;
 int libgotcha_dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *data);
 #endif
 
