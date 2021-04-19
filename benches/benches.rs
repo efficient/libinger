@@ -1,8 +1,5 @@
 #![feature(test)]
-
-extern crate libc;
 extern crate test;
-extern crate timetravel;
 
 #[allow(dead_code)]
 mod lifetimes;

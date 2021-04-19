@@ -1,8 +1,12 @@
-use id::Id;
+use crate::id::Id;
+use crate::stable::StableMutAddr;
+use crate::swap::Swap;
+use crate::uninit::Uninit;
+use crate::void::Void;
+
 use libc::SIGWINCH;
 use libc::sigset_t;
 use libc::ucontext_t;
-use stable::StableMutAddr;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::cell::RefMut;
@@ -11,9 +15,6 @@ use std::io::Result;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::os::raw::c_int;
-use swap::Swap;
-use uninit::Uninit;
-use void::Void;
 
 const SIGSETCONTEXT: c_int = SIGWINCH;
 
@@ -57,9 +58,10 @@ pub struct SignalMask<'a> (RefMut<'a, ucontext_t>);
 ///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `checkpoint`, which is then restarted from the beginning.
 ///! However, the continuation is automatically invalidated once `getcontext()` returns, since its checkpointed stack frame no longer exists.
 pub fn getcontext<T>(scope: impl FnOnce(Context<Void>) -> T, mut checkpoint: impl FnMut() -> T) -> Result<T> {
+	use crate::volatile::VolBool;
+
 	use libc::getcontext;
 	use std::mem::forget;
-	use volatile::VolBool;
 
 	let mut unused = VolBool::new(true);
 	let this = Context::default();
@@ -118,9 +120,10 @@ pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Conte
 
 	getcontext(
 		|successor| -> Result<()> {
+			use crate::platform::Link;
+
 			use libc::getcontext;
 			use libc::makecontext;
-			use platform::Link;
 
 			let mut this = Context::new(stack, successor.id);
 			if unsafe {
@@ -225,8 +228,9 @@ fn validatecontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>, handle
 ///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -> Option<Error> {
-	use errno::errno;
-	use invar::MoveInvariant;
+	use crate::errno::errno;
+	use crate::invar::MoveInvariant;
+
 	use libc::pthread_sigmask;
 	use libc::setcontext;
 	use std::ptr::null;
@@ -262,9 +266,10 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 ///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context<S>) -> Option<Error> {
-	use errno::errno;
+	use crate::errno::errno;
+	use crate::libgotcha::libgotcha_pthread_kill;
+
 	use libc::pthread_self;
-	use libgotcha::libgotcha_pthread_kill;
 	use std::mem::transmute;
 	use std::process::abort;
 	use std::sync::ONCE_INIT;
@@ -308,12 +313,13 @@ thread_local! {
 }
 
 fn sigsetupcontext() -> Option<Error> {
-	use errno::errno;
+	use crate::errno::errno;
+	use crate::zero::Zero;
+
 	use libc::SA_SIGINFO;
 	use libc::sigaction;
 	use libc::siginfo_t;
 	use std::ptr::null_mut;
-	use zero::Zero;
 
 	extern "C" fn handler(_: c_int, _: Option<&siginfo_t>, context: Option<&mut HandlerContext>) {
 		let (checkpoint, erryes) = CHECKPOINT.with(|checkpoint| checkpoint.take()).unwrap();
@@ -453,7 +459,7 @@ mod tests {
 
 	#[test]
 	fn context_moveinvariant() {
-		use invar::MoveInvariant;
+		use crate::invar::MoveInvariant;
 		use super::getcontext;
 
 		let context = getcontext(|context| context, || unreachable!()).unwrap();
@@ -465,9 +471,9 @@ mod tests {
 
 	#[test]
 	fn context_swapinvariant() {
-		use invar::MoveInvariant;
-		use swap::Swap;
-		use ucontext::makecontext;
+		use crate::invar::MoveInvariant;
+		use crate::swap::Swap;
+		use crate::ucontext::makecontext;
 
 		let st: Box<[u8]> = Box::new([0u8; 1_024]);
 		makecontext(st, |mut first| {

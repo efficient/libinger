@@ -1,7 +1,5 @@
 //! A library for safely working with continuations.
 
-extern crate libc;
-
 pub mod errno;
 #[cfg(debug_assertions)]
 #[cfg_attr(debug_assertions, doc(hidden))]

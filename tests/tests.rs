@@ -1,6 +1,3 @@
-extern crate libc;
-extern crate timetravel;
-
 use std::cell::Cell;
 use timetravel::stable::StableMutAddr;
 use timetravel::Context;

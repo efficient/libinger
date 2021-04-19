@@ -1,10 +1,11 @@
-use invar::MoveInvariant;
+use crate::invar::MoveInvariant;
+use crate::swap::Swap;
+use crate::uninit::Uninit;
+use crate::zero::Zero;
+pub use self::imp::*;
+
 use libc::sigset_t;
 use libc::ucontext_t;
-pub use self::imp::*;
-use swap::Swap;
-use uninit::Uninit;
-use zero::Zero;
 
 pub trait Stack {
 	fn stack_ptr(&self) -> usize;

@@ -3,9 +3,6 @@
 //! Doc tests.
 //!
 //! ```compile_fail
-//! extern crate libc;
-//! extern crate timetravel;
-//!
 //! fn restore_expired() {
 //!	use libc::MINSIGSTKSZ;
 //!	use timetravel::makecontext;
