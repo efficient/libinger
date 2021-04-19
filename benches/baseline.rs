@@ -1,8 +1,6 @@
-#[macro_use]
-extern crate bencher;
-extern crate libc;
-
 use bencher::Bencher;
+use bencher::benchmark_group;
+use bencher::benchmark_main;
 use libc::exit;
 use libc::waitpid;
 use std::ffi::c_void;

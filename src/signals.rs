@@ -1,5 +1,6 @@
+use crate::reusable::SyncResult;
+
 use signal::Signal;
-use reusable::SyncResult;
 
 static NOTIFICATION_SIGNALS: [Signal; 16] = [
 	Signal::Alarm,
@@ -23,8 +24,9 @@ static NOTIFICATION_SIGNALS: [Signal; 16] = [
 ];
 
 pub fn assign_signal() -> SyncResult<'static, Signal> {
-	use compile_assert::assert_sync;
-	use reusable::SyncPool;
+	use crate::compile_assert::assert_sync;
+	use crate::reusable::SyncPool;
+
 	use std::convert::TryInto;
 	use std::sync::atomic::AtomicUsize;
 	use std::sync::atomic::Ordering;

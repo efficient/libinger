@@ -1,4 +1,5 @@
-use linger::Linger;
+use crate::linger::Linger;
+
 use std::future::Future;
 use std::io::Result;
 use std::pin::Pin;
@@ -31,8 +32,9 @@ pub fn poll_fns<T: Send, I: FnMut() + Send + Unpin>(
 	mut fun: impl FnMut() -> Poll<T> + Send,
 	us: u64,
 ) -> Result<PreemptiveFuture<T, impl FnMut(*mut Option<ThdResult<T>>) + Send, impl Fn() -> I, I>> {
-	use linger::launch;
-	use linger::pause;
+	use crate::linger::launch;
+	use crate::linger::pause;
+
 	use std::hint::unreachable_unchecked;
 	use std::sync::mpsc::sync_channel;
 
@@ -67,7 +69,7 @@ Future for PreemptiveFuture<T, F, P, I> {
 	type Output = Result<T>;
 
 	fn poll(mut self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
-		use linger::resume;
+		use crate::linger::resume;
 
 		if let Some(mut fun) = self.fun.take() {
 			self.pre.send((self.poll)()).unwrap();

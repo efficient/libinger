@@ -1,9 +1,11 @@
+use crate::reusable::SyncResult;
+
 use gotcha::Group as GotchaGroup;
-use reusable::SyncResult;
 
 pub fn assign_group() -> SyncResult<'static, GotchaGroup> {
-	use compile_assert::assert_sync;
-	use reusable::SyncPool;
+	use crate::compile_assert::assert_sync;
+	use crate::reusable::SyncPool;
+
 	use std::convert::TryInto;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;

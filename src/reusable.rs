@@ -29,7 +29,7 @@ where &'a A: SharedMut<Vec<T>> {
 	fn try_from(pool: &'a Pool<T, B, A>) -> StdResult<Reusable<'a, T, A>, Self::Error> {
 		let builder = &pool.builder;
 		let pool = &pool.allocated;
-		let value = pool.try()?.pop().or_else(builder);
+		let value = pool.try_into_inner()?.pop().or_else(builder);
 		if value.is_some() {
 			Ok(Self {
 				value,
@@ -66,7 +66,7 @@ where &'a A: SharedMut<Vec<T>> {
 		let value = self.value.take().unwrap();
 
 		// Panic instead of losing this value.
-		self.pool.try().unwrap().push(value)
+		self.pool.try_into_inner().unwrap().push(value)
 	}
 }
 
@@ -122,14 +122,14 @@ pub trait SharedMut<T> {
 	type Okay: DerefMut<Target = T>;
 	type Error: Debug;
 
-	fn try(self) -> StdResult<Self::Okay, Self::Error>;
+	fn try_into_inner(self) -> StdResult<Self::Okay, Self::Error>;
 }
 
 impl<'a, T> SharedMut<T> for &'a RefCell<T> {
 	type Okay = RefMut<'a, T>;
 	type Error = BorrowMutError;
 
-	fn try(self) -> StdResult<Self::Okay, Self::Error> {
+	fn try_into_inner(self) -> StdResult<Self::Okay, Self::Error> {
 		self.try_borrow_mut()
 	}
 }
@@ -138,7 +138,7 @@ impl<'a, T> SharedMut<T> for &'a Mutex<T> {
 	type Okay = MutexGuard<'a, T>;
 	type Error = PoisonError<Self::Okay>;
 
-	fn try(self) -> StdResult<Self::Okay, Self::Error> {
+	fn try_into_inner(self) -> StdResult<Self::Okay, Self::Error> {
 		self.lock()
 	}
 }

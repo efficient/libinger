@@ -1,5 +1,6 @@
+use crate::linger::nsnow;
+
 use libc::ucontext_t;
-use linger::nsnow;
 use signal::Set;
 use signal::Signal;
 use signal::Sigset;

@@ -1,17 +1,19 @@
+use crate::reusable::ReusableSync;
+
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use timetravel::stable::StableAddr;
 use timetravel::stable::StableMutAddr;
-use reusable::ReusableSync;
 
 pub fn alloc_stack() -> ReusableSync<'static, Box<[u8]>> {
-	use compile_assert::assert_sync;
+	use crate::compile_assert::assert_sync;
+	use crate::reusable::SyncPool;
+	use super::STACK_SIZE_BYTES;
+
 	use gotcha::Group;
-	use reusable::SyncPool;
 	use std::convert::TryInto;
 	use std::sync::Once;
-	use super::STACK_SIZE_BYTES;
 
 	static mut STACKS: Option<SyncPool<Box<[u8]>>> = None;
 	static INIT: Once = Once::new();

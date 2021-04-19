@@ -1,15 +1,14 @@
 #![cfg_attr(bench, feature(test))]
-
-extern crate inger;
 #[cfg(bench)]
 extern crate test;
 
 mod lock;
 
+use lock::exclusive;
+
 use inger::launch;
 use inger::nsnow;
 use inger::resume;
-use lock::exclusive;
 #[cfg(bench)]
 use test::Bencher;
 

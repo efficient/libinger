@@ -1,8 +1,6 @@
-#[macro_use]
-extern crate bencher;
-extern crate inger;
-
 use bencher::Bencher;
+use bencher::benchmark_group;
+use bencher::benchmark_main;
 use inger::concurrency_limit;
 use inger::nsnow;
 use inger::pause;

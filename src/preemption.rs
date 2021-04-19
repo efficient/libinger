@@ -1,6 +1,8 @@
+use crate::reusable::ReusableSync;
+use crate::timer::Timer;
+
 use gotcha::Group;
 use gotcha::group_thread_set;
-use reusable::ReusableSync;
 use signal::pthread::pthread_kill;
 use signal::pthread::pthread_self;
 use signal::Handler;
@@ -14,7 +16,6 @@ use std::io::Result as IoResult;
 use std::os::raw::c_int;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use timer::Timer;
 
 thread_local! {
 	static SIGNAL: RefCell<Option<RealThreadId>> = RefCell::default();
@@ -167,7 +168,7 @@ pub struct RealThreadId (&'static RefCell<Option<PreemptionSignal>>);
 
 impl RealThreadId {
 	pub fn current() -> Self {
-		use lifetime::unbound;
+		use crate::lifetime::unbound;
 
 		thread_local! {
 			static SIGNALER: RefCell<Option<PreemptionSignal>> = RefCell::default();
@@ -186,17 +187,18 @@ struct PreemptionSignal {
 
 impl PreemptionSignal {
 	fn new(handler: Handler, quantum: u64) -> IoResult<Self> {
+		use crate::signals::assign_signal;
+		use crate::timer::Clock;
+		use crate::timer::Sigevent;
+		use crate::timer::itimerspec;
+		use crate::timer::timer_create;
+		use crate::timer::timer_settime;
+
 		use libc::SA_RESTART;
 		use libc::SA_SIGINFO;
 		use libc::timespec;
 		use signal::Action;
 		use signal::Sigaction;
-		use signals::assign_signal;
-		use timer::Clock;
-		use timer::Sigevent;
-		use timer::itimerspec;
-		use timer::timer_create;
-		use timer::timer_settime;
 
 		let signal = assign_signal().expect("libinger: no available signal for preempting this thread");
 		let sa = Sigaction::new(handler, Sigset::empty(), SA_SIGINFO | SA_RESTART);
@@ -227,7 +229,7 @@ impl PreemptionSignal {
 
 impl Drop for PreemptionSignal {
 	fn drop(&mut self) {
-		use timer::timer_delete;
+		use crate::timer::timer_delete;
 
 		if let Err(or) = timer_delete(self.timer) {
 			eprintln!("libinger: unable to delete POSIX timer: {}", or);
@@ -237,4 +239,3 @@ impl Drop for PreemptionSignal {
 		}
 	}
 }
-

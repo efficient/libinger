@@ -1,5 +1,3 @@
-extern crate libc;
-
 mod libgotcha;
 pub mod pthread;
 
@@ -100,9 +98,9 @@ impl Eq for Signal {}
 pub trait Set {
 	fn empty() -> Self;
 	fn full() -> Self;
-	fn add(&mut self, Signal);
-	fn del(&mut self, Signal);
-	fn has(&self, Signal) -> bool;
+	fn add(&mut self, _: Signal);
+	fn del(&mut self, _: Signal);
+	fn has(&self, _: Signal) -> bool;
 }
 
 fn sigset(fun: fn(&mut Sigset)) -> Sigset {
@@ -149,7 +147,7 @@ impl Set for Sigset {
 }
 
 pub trait Action {
-	fn new(Handler, Sigset, c_int) -> Self;
+	fn new(_: Handler, _: Sigset, _: c_int) -> Self;
 	fn sa_sigaction(&self) -> &Handler;
 	fn sa_sigaction_mut(&mut self) -> &mut Handler;
 }
@@ -234,9 +232,10 @@ pub fn pthread_sigmask(how: Operation, new: &Sigset, old: Option<&mut Sigset>) -
 
 #[cfg(test)]
 mod tests {
+	use super::*;
+
 	use pthread::pthread_kill;
 	use pthread::pthread_self;
-	use super::*;
 
 	#[test]
 	fn sigaction_usr1() {

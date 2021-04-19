@@ -1,4 +1,5 @@
 pub use crate::Signal;
+
 use libc::c_int;
 use libc::pthread_t;
 use std::io::Error;
@@ -7,7 +8,7 @@ use std::io::Result;
 pub struct PThread (pthread_t);
 
 pub fn pthread_kill(thread: PThread, signal: Signal) -> Result<()> {
-	use libgotcha::libgotcha_pthread_kill;
+	use crate::libgotcha::libgotcha_pthread_kill;
 
 	let code = unsafe {
 		libgotcha_pthread_kill(thread.0, signal as c_int)

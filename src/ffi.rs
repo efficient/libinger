@@ -1,4 +1,5 @@
-use linger::Linger as Lingerer;
+use crate::linger::Linger as Lingerer;
+
 use std::ffi::c_void;
 use std::process::abort;
 use std::thread::Result;
@@ -11,8 +12,8 @@ pub struct Linger {
 
 #[no_mangle]
 extern fn launch(fun: unsafe extern fn(*mut c_void), us: u64, args: *mut c_void) -> Linger {
-	use force::AssertSend;
-	use linger::launch;
+	use crate::force::AssertSend;
+	use crate::linger::launch;
 
 	let args = unsafe {
 		AssertSend::new(args)
@@ -32,7 +33,7 @@ extern fn launch(fun: unsafe extern fn(*mut c_void), us: u64, args: *mut c_void)
 
 #[no_mangle]
 extern fn resume(timed: Option<&mut Linger>, us: u64) {
-	use linger::resume;
+	use crate::linger::resume;
 
 	if let Some(timed) = timed {
 		if resume(&mut timed.continuation, us).is_err() {
@@ -58,7 +59,7 @@ extern fn cancel(timed: Option<&mut Linger>) {
 
 #[no_mangle]
 extern fn pause() {
-	use linger::pause;
+	use crate::linger::pause;
 
 	pause();
 }

@@ -1,5 +1,3 @@
-extern crate inger;
-
 use inger::ffi::Linger;
 use std::mem::size_of;
 

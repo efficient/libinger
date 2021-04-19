@@ -1,8 +1,3 @@
-extern crate gotcha;
-extern crate libc;
-extern crate signal;
-extern crate timetravel;
-
 mod compile_assert;
 pub mod ffi;
 pub mod force;
@@ -28,8 +23,9 @@ mod tcb {
 	pub use tcbstub::*;
 }
 
-use gotcha::Group;
 pub use linger::*;
+
+use gotcha::Group;
 
 const QUANTUM_MICROSECS: u64  = 100;
 

@@ -1,21 +1,22 @@
+use crate::preemption::RealThreadId;
+use crate::preemption::defer_preemption;
+use crate::preemption::disable_preemption;
+use crate::preemption::is_preemptible;
+use crate::preemption::thread_signal;
+use crate::reusable::ReusableSync;
+use crate::stacks::DerefAdapter;
+use crate::tcb::ThreadControlBlock;
+
 use gotcha::Group;
-use preemption::RealThreadId;
-use preemption::defer_preemption;
-use preemption::disable_preemption;
-use preemption::is_preemptible;
-use preemption::thread_signal;
-use reusable::ReusableSync;
 use signal::Set;
 use signal::Signal;
 use signal::siginfo_t;
-use stacks::DerefAdapter;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::io::Result;
 use std::os::raw::c_int;
 use std::ptr::NonNull;
 use std::thread::Result as ThdResult;
-use tcb::ThreadControlBlock;
 use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
@@ -130,8 +131,9 @@ struct Task {
 /// it is run to completion.
 pub fn launch<T: Send>(fun: impl FnOnce() -> T + Send, us: u64)
 -> Result<Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Send>> {
-	use localstores::alloc_localstore;
-	use groups::assign_group;
+	use crate::localstores::alloc_localstore;
+	use crate::groups::assign_group;
+
 	use std::panic::AssertUnwindSafe;
 	use std::panic::catch_unwind;
 
@@ -276,7 +278,7 @@ pub fn resume<T>(fun: &mut Linger<T, impl FnMut(*mut Option<ThdResult<T>>) + Sen
 /// Set up preemption for a kernel execution thread.  Call after installing a virtual TCB!
 #[inline(never)]
 fn setup_thread(thread: RealThreadId) -> Result<()> {
-	use preemption::thread_setup;
+	use crate::preemption::thread_setup;
 	use super::QUANTUM_MICROSECS;
 	thread_setup(thread, preempt, QUANTUM_MICROSECS)
 }
@@ -285,7 +287,8 @@ fn setup_thread(thread: RealThreadId) -> Result<()> {
 #[inline(never)]
 fn setup_stack()
 -> Result<Option<Context<DerefAdapter<'static, ReusableSync<'static, Box<[u8]>>>>>> {
-	use stacks::alloc_stack;
+	use crate::stacks::alloc_stack;
+
 	use timetravel::makecontext;
 
 	let mut checkpoint = None;
@@ -301,8 +304,9 @@ fn setup_stack()
 /// Runs on the main execution stack.  Returns whether the function "finished" without a timeout.
 #[inline(never)]
 fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
+	use crate::lifetime::unbound_mut;
+
 	use gotcha::group_thread_set;
-	use lifetime::unbound_mut;
 	use signal::Operation;
 	use signal::Sigset;
 	use signal::pthread_sigmask;
@@ -382,7 +386,7 @@ fn switch_stack(task: &mut Task, group: Group) -> Result<bool> {
 
 /// Enable preemption and call the preemptible function.  Runs on the oneshot execution stack.
 fn schedule() {
-	use preemption::enable_preemption;
+	use crate::preemption::enable_preemption;
 
 	let (mut fun, group) = BOOTSTRAP.with(|bootstrap| bootstrap.take()).unwrap_or_else(||
 		abort("schedule(): called without bootstrapping")
@@ -410,8 +414,9 @@ fn schedule() {
 
 /// Signal handler that pauses the preemptible function on timeout.  Runs on the oneshot stack.
 extern fn preempt(no: Signal, _: Option<&siginfo_t>, uc: Option<&mut HandlerContext>) {
+	use crate::unfurl::Unfurl;
+
 	use timetravel::Swap;
-	use unfurl::Unfurl;
 
 	let erryes = *errno();
 	let uc = unsafe {

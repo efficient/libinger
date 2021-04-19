@@ -56,8 +56,9 @@ impl ThreadControlBlock {
 	}
 
 	unsafe fn install_unguarded(&mut self, group: Option<Group>) -> Result<Option<Self>> {
+		use crate::linger::abort;
+
 		use gotcha::group_lookup_symbol_fn;
-		use linger::abort;
 		use std::slice;
 		extern {
 			fn __ctype_init();

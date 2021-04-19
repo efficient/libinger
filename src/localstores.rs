@@ -1,10 +1,11 @@
-use tcb::ThreadControlBlock;
-use reusable::ReusableSync;
+use crate::reusable::ReusableSync;
+use crate::tcb::ThreadControlBlock;
 
 pub fn alloc_localstore() -> ReusableSync<'static, Option<ThreadControlBlock>> {
-	use compile_assert::assert_sync;
+	use crate::compile_assert::assert_sync;
+	use crate::reusable::SyncPool;
+
 	use gotcha::Group;
-	use reusable::SyncPool;
 	use std::convert::TryInto;
 	use std::sync::ONCE_INIT;
 	use std::sync::Once;
