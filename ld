@@ -1,10 +1,11 @@
 #!/bin/sh
 
+cc="cc"
 interp=""
 for arg in "$@"
 do
-	if [ "$arg" = "-linger" ]
-	then
+	case "$arg" in
+	-linger)
 		symlink="`dirname "$0"`/`basename "$0"`.so"
 		if [ -z "$LIBINGER_LINKER" ] && readlink -e "$symlink" >/dev/null
 		then
@@ -15,9 +16,11 @@ do
 		then
 			interp="-Wl,-I`readlink -f "$LIBINGER_LINKER"`"
 		fi
-
-		break
-	fi
+		;;
+	*/libgotcha-*.rlib)
+		cc="`dirname "$0"`/cc"
+		;;
+	esac
 done
 
-exec cc $interp "$@"
+exec "$cc" $interp "$@"

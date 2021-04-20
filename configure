@@ -86,9 +86,6 @@ else
 	cat >"$dir/.cargo/config" <<-tac
 		`cat "$dir/.cargo/config.toml"`
 		rustc = ".cargo/rustc"
-
-		[target.x86_64-unknown-linux-gnu]
-		linker = ".cargo/cc"
 	tac
 	echo " generated"
 fi
