@@ -1,2 +1,5 @@
+[target.x86_64-unknown-linux-gnu]
+linker = ".cargo/linker"
+
 [build]
 rustflags = ["-L/usr/lib/x86_64-linux-gnu/elfutils", "-Clink-args=-Wl,-R/usr/lib/x86_64-linux-gnu/elfutils -zdefs -zinitfirst -ztext -Wl,-zlazy -lasm -lebl_x86_64", "-Cprefer-dynamic"]

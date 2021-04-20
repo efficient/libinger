@@ -134,7 +134,7 @@ lib%.rlib: %.rs
 	if [ -e lib$*.o ]; then $(AR) rs $@ lib$*.o; fi
 
 lib%.so: %.rs
-	$(RUSTC) -Clink-args="$(LDFLAGS) -zdefs -ztext" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic $< $(LDLIBS)
+	$(RUSTC) -Clink-args="$(LDFLAGS) -zdefs -ztext" $(RUSTFLAGS) --crate-type dylib -Cprefer-dynamic -Clinker=./cc $< $(LDLIBS)
 
 lib%.so: %.o
 	$(CC) $(LDFLAGS) -shared -zdefs -ztext -o $@ $^ $(LDLIBS)

@@ -23,7 +23,7 @@ lib%.so: %.o libgotcha.a
 
 lib%.so: %.rs libgotcha.rlib
 	$(RM) libgotcha.so
-	$(RUSTC) $(RUSTFLAGS) --crate-type dylib -Clink-args="$(LDFLAGS) -zdefs -zinitfirst -ztext -Wl,-zlazy -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -lasm -lebl_x86_64" -Cprefer-dynamic -L. $<
+	$(RUSTC) $(RUSTFLAGS) --crate-type dylib -Clink-args="$(LDFLAGS) -zdefs -zinitfirst -ztext -Wl,-zlazy -L$(ELFUTILS_PATH) -Wl,-R$(ELFUTILS_PATH) -lasm -lebl_x86_64" -Cprefer-dynamic -Clinker=$(LIBGOTCHA_PATH)/cc -L. $<
 
 libgotcha.%: $(LIBGOTCHA_PATH)/libgotcha.%
 	$(CP) $< $@
