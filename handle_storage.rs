@@ -2,19 +2,20 @@ use crate::handle::error;
 use crate::handle::handle;
 use crate::handle::link_map;
 use std::collections::HashMap;
+use std::mem::MaybeUninit;
 use std::sync::ONCE_INIT;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::sync::RwLock;
 use std::sync::RwLockWriteGuard;
 
-fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
+fn handles() -> &'static RwLock<HashMap<HandleId, Box<(MaybeUninit<handle>, Mutex<()>)>>> {
 	unsafe impl Send for HandleId {}
 	unsafe impl Sync for HandleId {}
 	unsafe impl Send for handle {}
 	unsafe impl Sync for handle {}
 
-	static mut HANDLES: Option<RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>>> = None;
+	static mut HANDLES: Option<RwLock<HashMap<HandleId, Box<(MaybeUninit<handle>, Mutex<()>)>>>> = None;
 	static INIT: Once = ONCE_INIT;
 	INIT.call_once(|| unsafe {
 		HANDLES.get_or_insert(RwLock::default());
@@ -59,7 +60,6 @@ extern fn handle_get(
 	setup: Option<unsafe extern fn(*mut handle, *const link_map) -> error>,
 	code: Option<&mut error>,
 ) -> *const handle {
-	use std::mem::uninitialized;
 	use std::ptr::null;
 	use std::sync::atomic::AtomicBool;
 	use std::sync::atomic::Ordering;
@@ -67,7 +67,7 @@ extern fn handle_get(
 	let lock = handles().read().unwrap();
 	if let Some(entry) = lock.get(&HandleId (obj)) {
 		let (handle, init) = &**entry;
-		let handle: *const _ = handle;
+		let handle: *const _ = handle.as_ptr();
 		let init: *const _ = init;
 		drop(lock);
 		if let Ok(init) = unsafe {
@@ -87,9 +87,7 @@ extern fn handle_get(
 				|lock| lock.entry(HandleId (obj)).or_insert_with(|| {
 					new.store(true, Ordering::Relaxed);
 					Box::new((
-						unsafe {
-							uninitialized()
-						},
+						MaybeUninit::uninit(),
 						Mutex::new(()),
 					))
 				}),
@@ -111,8 +109,8 @@ extern fn handle_get(
 }
 
 fn handle_helper<
-	G: for<'a> FnOnce(&'a mut RwLockWriteGuard<HashMap<HandleId, Box<(handle, Mutex<()>)>>>) ->
-		&'a mut (handle, Mutex<()>),
+	G: for<'a> FnOnce(&'a mut RwLockWriteGuard<HashMap<HandleId, Box<(MaybeUninit<handle>, Mutex<()>)>>>) ->
+		&'a mut (MaybeUninit<handle>, Mutex<()>),
 	O: FnOnce(*mut handle),
 >(
 	get: G,
@@ -120,7 +118,7 @@ fn handle_helper<
 ) {
 	let mut lock = handles().write().unwrap();
 	let (handle, init) = get(&mut lock);
-	let handle: *mut _ = handle;
+	let handle: *mut _ = handle.as_mut_ptr();
 	let init: *const _ = init;
 	if let Ok(init) = unsafe {
 		(*init).lock()
