@@ -3,7 +3,6 @@ use crate::handle::handle;
 use crate::handle::link_map;
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
-use std::sync::ONCE_INIT;
 use std::sync::Mutex;
 use std::sync::Once;
 use std::sync::RwLock;
@@ -16,7 +15,7 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(MaybeUninit<handle>, Mute
 	unsafe impl Sync for handle {}
 
 	static mut HANDLES: Option<RwLock<HashMap<HandleId, Box<(MaybeUninit<handle>, Mutex<()>)>>>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| unsafe {
 		HANDLES.get_or_insert(RwLock::default());
 	});
@@ -31,7 +30,7 @@ fn trampolines() -> &'static RwLock<HashMap<usize, usize>> {
 
 fn maybe_trampolines(force: bool) -> Option<&'static RwLock<HashMap<usize, usize>>> {
 	static mut TRAMPOLINES: Option<RwLock<HashMap<usize, usize>>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	if ! force && ! is_completed(&INIT) {
 		None
 	} else {

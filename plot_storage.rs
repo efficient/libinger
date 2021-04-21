@@ -3,11 +3,10 @@ use crate::handle::handle;
 use std::sync::RwLock;
 
 fn tables() -> &'static RwLock<Vec<&'static plot>> {
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	static mut TABLES: Option<RwLock<Vec<&plot>>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| unsafe {
 		TABLES.get_or_insert(RwLock::default());
 	});

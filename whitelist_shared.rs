@@ -7,14 +7,13 @@ use std::os::raw::c_char;
 use std::sync::RwLock;
 
 fn whitelist() -> &'static RwLock<HashMap<&'static CStr, usize>> {
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	extern {
 		fn whitelist_shared_init(_: *mut HashMap<&CStr, usize>);
 	}
 
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	static mut WHITEMAP: Option<RwLock<HashMap<&CStr, usize>>> = None;
 	INIT.call_once(|| {
 		let whitemap = unsafe {
