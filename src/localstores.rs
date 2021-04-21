@@ -7,11 +7,10 @@ pub fn alloc_localstore() -> ReusableSync<'static, Option<ThreadControlBlock>> {
 
 	use gotcha::Group;
 	use std::convert::TryInto;
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	static mut LOCALSTORES: Option<SyncPool<Option<ThreadControlBlock>>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| {
 		let localstores: fn() -> _ = || Some(Some(ThreadControlBlock::new()));
 		let localstores = SyncPool::new(localstores);

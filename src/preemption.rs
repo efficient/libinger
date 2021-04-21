@@ -117,7 +117,6 @@ pub fn defer_preemption(signum: Option<(&mut Sigset, Signal)>) {
 
 pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoResult<()> {
 	use gotcha::shared_hook;
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	let RealThreadId (signal) = thread;
@@ -126,7 +125,7 @@ pub fn thread_setup(thread: RealThreadId, handler: Handler, quantum: u64) -> IoR
 	}
 	SIGNAL.with(|signal| signal.replace(Some(thread)));
 
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| shared_hook(resume_preemption));
 
 	Ok(())

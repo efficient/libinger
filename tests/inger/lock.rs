@@ -7,11 +7,10 @@ pub fn exclusive<T>(fun: fn() -> T) {
 }
 
 fn lock() -> MutexGuard<'static, ()> {
-	use std::sync::ONCE_INIT;
 	use std::sync::Mutex;
 	use std::sync::Once;
 
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	static mut LOCK: Option<Mutex<()>> = None;
 
 	INIT.call_once(|| unsafe {

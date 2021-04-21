@@ -7,11 +7,10 @@ pub fn assign_group() -> SyncResult<'static, GotchaGroup> {
 	use crate::reusable::SyncPool;
 
 	use std::convert::TryInto;
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	static mut GROUPS: Option<SyncPool<GotchaGroup>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| unsafe {
 		GROUPS.replace(SyncPool::new(GotchaGroup::new));
 	});

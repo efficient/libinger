@@ -21,6 +21,7 @@ use timetravel::errno::errno;
 use timetravel::Context;
 use timetravel::HandlerContext;
 
+#[repr(C)]
 pub enum Linger<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> {
 	Completion(T),
 	Continuation(Continuation<F>),

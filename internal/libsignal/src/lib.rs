@@ -34,7 +34,6 @@ use libc::SIGVTALRM;
 use libc::SIGWINCH;
 use libc::SIGXCPU;
 use libc::SIGXFSZ;
-use libc::c_int;
 use libc::ucontext_t;
 use std::io::Error;
 use std::ptr::null_mut;
@@ -42,55 +41,58 @@ pub use libc::sigaction as Sigaction;
 pub use libc::siginfo_t;
 pub use libc::sigset_t as Sigset;
 use std::io::Result;
+use std::os::raw::c_int;
 
 pub type Handler = extern "C" fn(Signal, Option<&siginfo_t>, Option<&mut ucontext_t>);
 
 #[allow(dead_code)]
+#[repr(i32)]
 pub enum Operation {
-	Block = SIG_BLOCK as _,
-	Unblock = SIG_UNBLOCK as _,
-	SetMask = SIG_SETMASK as _,
+	Block = SIG_BLOCK,
+	Unblock = SIG_UNBLOCK,
+	SetMask = SIG_SETMASK,
 }
 
 #[allow(dead_code)]
 #[derive(Clone)]
 #[derive(Copy)]
+#[repr(i32)]
 pub enum Signal {
-	Abort = SIGABRT as _,
-	Alarm = SIGALRM as _,
-	Bus = SIGBUS as _,
-	Breakpoint = SIGTRAP as _,
-	Child = SIGCHLD as _,
-	Continue = SIGCONT as _,
-	Coprocessor = SIGSTKFLT as _,
-	FilesystemLimit = SIGXFSZ as _,
-	FloatingPoint = SIGFPE as _,
-	Hangup = SIGHUP as _,
-	Illegal = SIGILL as _,
-	Interrupt = SIGINT as _,
-	Kill = SIGKILL as _,
-	Pipe = SIGPIPE as _,
-	Pollable = SIGPOLL as _,
-	ProfilingTimer = SIGPROF as _,
-	Quit = SIGQUIT as _,
-	Segfault = SIGSEGV as _,
-	Syscall = SIGSYS as _,
-	TerminalInput = SIGTTIN as _,
-	TerminalOutput = SIGTTOU as _,
-	TerminalStop = SIGTSTP as _,
-	Terminate = SIGTERM as _,
-	PowerFailure = SIGPWR as _,
-	ProcessorLimit = SIGXCPU as _,
-	UrgentSocket = SIGURG as _,
-	User1 = SIGUSR1 as _,
-	User2 = SIGUSR2 as _,
-	VirtualAlarm = SIGVTALRM as _,
-	WindowResize = SIGWINCH as _,
+	Abort = SIGABRT,
+	Alarm = SIGALRM,
+	Bus = SIGBUS,
+	Breakpoint = SIGTRAP,
+	Child = SIGCHLD,
+	Continue = SIGCONT,
+	Coprocessor = SIGSTKFLT,
+	FilesystemLimit = SIGXFSZ,
+	FloatingPoint = SIGFPE,
+	Hangup = SIGHUP,
+	Illegal = SIGILL,
+	Interrupt = SIGINT,
+	Kill = SIGKILL,
+	Pipe = SIGPIPE,
+	Pollable = SIGPOLL,
+	ProfilingTimer = SIGPROF,
+	Quit = SIGQUIT,
+	Segfault = SIGSEGV,
+	Syscall = SIGSYS,
+	TerminalInput = SIGTTIN,
+	TerminalOutput = SIGTTOU,
+	TerminalStop = SIGTSTP,
+	Terminate = SIGTERM,
+	PowerFailure = SIGPWR,
+	ProcessorLimit = SIGXCPU,
+	UrgentSocket = SIGURG,
+	User1 = SIGUSR1,
+	User2 = SIGUSR2,
+	VirtualAlarm = SIGVTALRM,
+	WindowResize = SIGWINCH,
 }
 
 impl PartialEq for Signal {
 	fn eq(&self, other: &Self) -> bool {
-		*self as isize == *other as isize
+		*self as c_int == *other as c_int
 	}
 }
 impl Eq for Signal {}
@@ -127,21 +129,21 @@ impl Set for Sigset {
 	fn add(&mut self, signal: Signal) {
 		use libc::sigaddset;
 		unsafe {
-			sigaddset(self, signal as c_int);
+			sigaddset(self, signal as _);
 		}
 	}
 
 	fn del(&mut self, signal: Signal) {
 		use libc::sigdelset;
 		unsafe {
-			sigdelset(self, signal as c_int);
+			sigdelset(self, signal as _);
 		}
 	}
 
 	fn has(&self, signal: Signal) -> bool {
 		use libc::sigismember;
 		unsafe {
-			sigismember(self, signal as c_int) != 0
+			sigismember(self, signal as _) != 0
 		}
 	}
 }
@@ -154,10 +156,8 @@ pub trait Action {
 
 impl Action for Sigaction {
 	fn new(sigaction: Handler, mask: Sigset, flags: c_int) -> Self {
-		use libc::size_t;
-
 		Self {
-			sa_sigaction: sigaction as size_t,
+			sa_sigaction: sigaction as _,
 			sa_mask: mask,
 			sa_flags: flags,
 			sa_restorer: None,

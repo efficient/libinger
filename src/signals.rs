@@ -30,11 +30,10 @@ pub fn assign_signal() -> SyncResult<'static, Signal> {
 	use std::convert::TryInto;
 	use std::sync::atomic::AtomicUsize;
 	use std::sync::atomic::Ordering;
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
 	static mut SIGNALS: Option<SyncPool<Signal, Box<dyn Fn() -> Option<Signal> + Sync>>> = None;
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 	INIT.call_once(|| unsafe {
 		let free = AtomicUsize::new(0);
 		SIGNALS.replace(SyncPool::new(Box::new(move ||
