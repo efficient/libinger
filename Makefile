@@ -64,7 +64,7 @@ config.o: config.h namespace.h
 ctestfuns.o: ctestfuns.h
 dynamic.o: private CFLAGS += -fpic
 dynamic.o: private CPPFLAGS += -D_GNU_SOURCE
-dynamic.o: handle.h segprot.h
+dynamic.o: handle.h namespace.h segprot.h
 error.o: private CPPFLAGS += -isystem .
 error.o: error.h
 globals.o: private CFLAGS += -fpic
