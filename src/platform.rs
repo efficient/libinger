@@ -36,19 +36,49 @@ mod imp {
 	unsafe impl Uninit for ucontext_t {
 		#[inline]
 		fn uninit() -> Self {
+			use libc::_libc_fpstate;
 			use libc::greg_t;
-			use std::mem::uninitialized;
+			use libc::stack_t;
+			use std::mem::MaybeUninit;
+			use std::mem::transmute;
+			use std::os::raw::c_ulong;
 			use std::ptr::write;
 
 			unsafe impl Zero for [greg_t; NGREG] {}
 
-			let mut this: Self;
-			unsafe {
-				this = uninitialized();
-				write(&mut this.uc_mcontext.gregs, Zero::zero());
+			#[repr(C)]
+			struct UninitUcontextT {
+				uc_flags: MaybeUninit<c_ulong>,
+				uc_link: MaybeUninit<*mut ucontext_t>,
+				uc_stack: MaybeUninit<stack_t>,
+				uc_mcontext: UninitMcontextT,
+				uc_sigmask: MaybeUninit<sigset_t>,
+				_buf: MaybeUninit<[u8; 512]>,
 			}
 
-			this
+			#[repr(C)]
+			struct UninitMcontextT {
+				gregs: MaybeUninit<[greg_t; NGREG]>,
+				fpgregs: MaybeUninit<*mut _libc_fpstate>,
+				_buf: MaybeUninit<[u8; 64]>,
+			}
+
+			let mut this = UninitUcontextT {
+				uc_flags: MaybeUninit::uninit(),
+				uc_link: MaybeUninit::uninit(),
+				uc_stack: MaybeUninit::uninit(),
+				uc_mcontext: UninitMcontextT {
+					gregs: MaybeUninit::uninit(),
+					fpgregs: MaybeUninit::uninit(),
+					_buf: MaybeUninit::uninit(),
+				},
+				uc_sigmask: MaybeUninit::uninit(),
+				_buf: MaybeUninit::uninit(),
+			};
+			unsafe {
+				write(this.uc_mcontext.gregs.as_mut_ptr(), Zero::zero());
+				transmute(this)
+			}
 		}
 	}
 

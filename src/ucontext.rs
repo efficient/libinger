@@ -272,10 +272,9 @@ pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context
 	use libc::pthread_self;
 	use std::mem::transmute;
 	use std::process::abort;
-	use std::sync::ONCE_INIT;
 	use std::sync::Once;
 
-	static INIT: Once = ONCE_INIT;
+	static INIT: Once = Once::new();
 
 	let erryes = *errno();
 	if ! validatecontext(unsafe {

@@ -1,10 +1,10 @@
 pub unsafe trait Uninit: Sized {
 	#[inline]
 	fn uninit() -> Self {
-		use std::mem::uninitialized;
+		use std::mem::MaybeUninit;
 
 		unsafe {
-			uninitialized()
+			MaybeUninit::uninit().assume_init()
 		}
 	}
 }
