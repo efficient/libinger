@@ -25,14 +25,32 @@ fn handles() -> &'static RwLock<HashMap<HandleId, Box<(handle, Mutex<()>)>>> {
 }
 
 fn trampolines() -> &'static RwLock<HashMap<usize, usize>> {
+	maybe_trampolines(true).unwrap()
+}
+
+fn maybe_trampolines(force: bool) -> Option<&'static RwLock<HashMap<usize, usize>>> {
 	static mut TRAMPOLINES: Option<RwLock<HashMap<usize, usize>>> = None;
 	static INIT: Once = ONCE_INIT;
-	INIT.call_once(|| unsafe {
-		TRAMPOLINES.get_or_insert(RwLock::default());
-	});
-	unsafe {
-		TRAMPOLINES.as_ref()
-	}.unwrap()
+	if ! force && ! is_completed(&INIT) {
+		None
+	} else {
+		INIT.call_once(|| unsafe {
+			TRAMPOLINES.get_or_insert(RwLock::default());
+		});
+		Some(unsafe {
+			TRAMPOLINES.as_ref()
+		}.unwrap())
+	}
+}
+
+#[cfg(stable = "once_is_completed")]
+fn is_completed(init: &Once) -> bool {
+	init.is_completed()
+}
+
+#[cfg(not(stable = "once_is_completed"))]
+fn is_completed(_: &Once) -> bool {
+	true
 }
 
 #[no_mangle]
@@ -120,6 +138,11 @@ extern fn handle_update(obj: *const link_map, oper: unsafe extern fn(*mut handle
 		err = oper(handle);
 	});
 	err
+}
+
+#[no_mangle]
+extern fn trampolines_ready() -> bool {
+	maybe_trampolines(false).is_some()
 }
 
 #[no_mangle]

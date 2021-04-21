@@ -22,6 +22,7 @@ typedef struct link_map *(*dlm_t)(Lmid_t, const char *, int);
 
 static char nodelete[] = "/tmp/libgotcha-XXXXXX";
 
+bool trampolines_ready(void);
 bool trampolines_insert(uintptr_t, uintptr_t);
 bool trampolines_contains(uintptr_t);
 uintptr_t trampolines_get(uintptr_t);
@@ -904,6 +905,10 @@ size_t handle_nodelete_pathlen(void) {
 
 bool handle_is_nodelete(const struct handle *h) {
 	return !strncmp(h->path, nodelete, handle_nodelete_pathlen() - 1);
+}
+
+bool handle_is_plot_storage_ready(void) {
+	return trampolines_ready();
 }
 
 uintptr_t handle_symbol_plot(uintptr_t symbol) {

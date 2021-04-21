@@ -29,7 +29,9 @@ libgotcha.mk: gotcha.mk libgotcha.so
 	objdump -p $(@:.mk=.so) | sed -n 's/.*\<NEEDED\>.*lib\(std-.*\)\.so.*/ifndef LIBSTDRUST_SONAME\nLIBSTDRUST_SONAME := \1\nendif\n/p' | cat - $< >$@
 
 libgotcha.o: $(CGLOBALS:.c=.o) ancillary.o config.o dynamic.o error.o globals.o goot.o handle.o handles.o init.o interpose.o namespace.o plot.o repl.o segprot.o shared.o tcb.o whitelist.o
+
 gotcha.o: gotcha.abi goot.rs handle.rs handle_storage.rs plot_storage.rs whitelist_shared.rs
+gotcha.o: private RUSTFLAGS += $(shell $(RUSTC) --version | ./cfg -)
 
 gotcha.abi: $(CGLOBALS:.c=.o)
 	$(NM) -gP --defined-only $^ | grep -ve':$$' -e' \<W\>' | cut -d" " -f1 | sort >$@

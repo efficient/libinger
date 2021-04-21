@@ -94,6 +94,8 @@ static inline size_t handle_got_num_entries(const struct handle *h) {
 	return h->ntramps;
 }
 
+bool handle_is_plot_storage_ready(void);
+
 uintptr_t handle_symbol_plot(uintptr_t);
 
 // Get the name of the executing program.  Returns NULL on error.

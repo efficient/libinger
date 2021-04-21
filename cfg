@@ -1,0 +1,31 @@
+#!/bin/sh
+
+readonly SEMVER="[0-9]\+\.[0-9]\+\.[0-9]\+"
+
+if [ "$#" -ne "1" ] || echo "$1" | grep -ve"^$SEMVER$" -e"^-$" >/dev/null
+then
+	cat <<-tac
+		USAGE: $0 <version|->
+
+		Given a Rust compiler version number, outputs one or more --cfg switches.
+		If the command-line argument is a version, it should be in semvar format, without
+		the suffice (i.e., remove any -beta, -nightly, or -dev).  If '-', the *unsanitized*
+		output of a `rustc --version` is expected on standard input.
+	tac
+	exit 1
+fi
+
+version="$1"
+if [ "$version" = "-" ]
+then
+	read version
+	version="`echo "$version" | sed -n "s/.*rustc \($SEMVER\).*/\1/p"`"
+fi
+major="`echo "$version" | cut -d. -f1`"
+minor="`echo "$version" | cut -d. -f2`"
+revision="`echo "$version" | cut -d. -f3`"
+
+if [ "$major" -gt "1" -o \( "$major" -eq "1" -a "$minor" -ge "43" \) ]
+then
+	printf "%s\n" "--cfg 'stable=\"once_is_completed\"'"
+fi

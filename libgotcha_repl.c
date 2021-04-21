@@ -86,9 +86,11 @@ static void *findsym_interruptible(
 	// No more interruption: we're about to take the PLOT lookup table's read lock!
 	*namespace_thread() = 0;
 
-	void *plot = (void *) handle_symbol_plot((uintptr_t) req.res);
-	if(plot)
-		req.res = plot;
+	if(handle_is_plot_storage_ready()) {
+		void *plot = (void *) handle_symbol_plot((uintptr_t) req.res);
+		if(plot)
+			req.res = plot;
+	}
 	err->message = NULL;
 	return req.res;
 }
