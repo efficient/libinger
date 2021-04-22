@@ -61,7 +61,7 @@ static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
 	return (uintptr_t) page + plot_pagesize() + entry;
 }
 
-static enum error nodelete_clear_flag(struct handle *h) {
+static enum error copy_and_clear_flags(struct handle *h, uint64_t flags, bool ctor) {
 	if(!strcmp(nodelete + sizeof nodelete - 7, "XXXXXX"))
 		mkdtemp(nodelete);
 
@@ -115,18 +115,9 @@ static enum error nodelete_clear_flag(struct handle *h) {
 			break;
 		}
 
-	// Clear the NODELETE flag to *allow* unloading ancillary copies of this object.
-	*flags_1 &= ~DF_1_NODELETE;
+	*flags_1 &= ~flags;
 
-	if(h->ldaccess) {
-		// This object file satisfies all of:
-		//  * Is marked NODELETE, indicating it "cannot" be unloaded
-		//  * Accesses ld.so's internal mutable _rtld_global structure
-		//  * has a legacy constructor, a la _init()
-		// Such objects (e.g., libpthread.so) might monkey patch the dynamic linker by
-		// overwriting its function pointers with their own.  We don't want them to create a
-		// dependency between the dynamic linker and an ancillary namespace, so disable
-		// their legacy constructors.
+	if(ctor) {
 		assert(init);
 
 		uint8_t *ret;
@@ -136,6 +127,26 @@ static enum error nodelete_clear_flag(struct handle *h) {
 
 	munmap(e, st.st_size);
 	return SUCCESS;
+}
+
+static enum error pie_clear_flag(struct handle *h) {
+	// Clear the PIE flag to *allow* loading ancillary copies of this object.
+	return copy_and_clear_flags(h, DF_1_PIE, false);
+}
+
+static enum error nodelete_clear_flag(struct handle *h) {
+	// This object file satisfies all of:
+	//  * Is marked NODELETE, indicating it "cannot" be unloaded
+	//  * Accesses ld.so's internal mutable _rtld_global structure
+	//  * has a legacy constructor, a la _init()
+	// Such objects (e.g., libpthread.so) might monkey patch the dynamic linker by
+	// overwriting its function pointers with their own.  We don't want them to create a
+	// dependency between the dynamic linker and an ancillary namespace, so disable
+	// their legacy constructors.
+	bool copy_and_clear_ctor = h->ldaccess;
+
+	// Clear the NODELETE flag to *allow* unloading ancillary copies of this object.
+	return copy_and_clear_flags(h, DF_1_NODELETE, copy_and_clear_ctor);
 }
 
 const char *handle_progname(void) {
@@ -738,12 +749,17 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 		prot_segment(base, h->jmpslots_seg, 0);
 }
 
-static inline bool handle_got_reshadow(const struct handle *h, Lmid_t n, const struct link_map **m) {
+static inline bool handle_got_reshadow(struct handle *h, Lmid_t n, const struct link_map **m) {
 	if(!handle_is_get_safe(h))
 		return true;
 
 	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
 	const struct link_map *l = open(n, h->path, RTLD_LAZY);
+	if(!l && !strcmp(h->path, handle_progname())) {
+		if(pie_clear_flag(h))
+			return false;
+		l = open(n, h->path, RTLD_LAZY);
+	}
 	if(!l)
 		return false;
 
