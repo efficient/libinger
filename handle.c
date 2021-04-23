@@ -61,7 +61,7 @@ static inline uintptr_t plot_trap(const struct handle *h, size_t index) {
 	return (uintptr_t) page + plot_pagesize() + entry;
 }
 
-static enum error copy_and_clear_flags(struct handle *h, uint64_t flags, bool ctor) {
+static enum error copy_and_clear_flags(char **name, struct handle *h, uint64_t flags, bool ctor) {
 	if(!strcmp(nodelete + sizeof nodelete - 7, "XXXXXX"))
 		mkdtemp(nodelete);
 
@@ -69,18 +69,20 @@ static enum error copy_and_clear_flags(struct handle *h, uint64_t flags, bool ct
 	if(tagged < 0)
 		return ERROR_OPEN;
 
-	const char *basename = strrchr(h->path, '/');
-	h->path = malloc(sizeof nodelete + strlen(basename));
-	if(!h->path) {
-		close(tagged);
-		return ERROR_MALLOC;
+	if(!*name) {
+		const char *basename = strrchr(h->path, '/');
+		*name = malloc(sizeof nodelete + strlen(basename));
+		if(!*name) {
+			close(tagged);
+			return ERROR_MALLOC;
+		}
+		sprintf(*name, "%s%s", nodelete, basename);
 	}
-	sprintf(h->path, "%s%s", nodelete, basename);
 
-	int untagged = open(h->path, O_CREAT | O_EXCL | O_RDWR, 0666);
+	int untagged = open(*name, O_CREAT | O_EXCL | O_RDWR, 0666);
 	if(untagged < 0) {
 		close(tagged);
-		free(h->path);
+		free(*name);
 		return ERROR_OPEN;
 	}
 
@@ -92,7 +94,7 @@ static enum error copy_and_clear_flags(struct handle *h, uint64_t flags, bool ct
 	close(untagged);
 	if(e == MAP_FAILED) {
 		close(tagged);
-		free(h->path);
+		free(*name);
 		return ERROR_MMAP;
 	}
 
@@ -129,9 +131,9 @@ static enum error copy_and_clear_flags(struct handle *h, uint64_t flags, bool ct
 	return SUCCESS;
 }
 
-static enum error pie_clear_flag(struct handle *h) {
+static enum error pie_clear_flag(char **name, struct handle *h) {
 	// Clear the PIE flag to *allow* loading ancillary copies of this object.
-	return copy_and_clear_flags(h, DF_1_PIE, false);
+	return copy_and_clear_flags(name, h, DF_1_PIE, false);
 }
 
 static enum error nodelete_clear_flag(struct handle *h) {
@@ -146,7 +148,12 @@ static enum error nodelete_clear_flag(struct handle *h) {
 	bool copy_and_clear_ctor = h->ldaccess;
 
 	// Clear the NODELETE flag to *allow* unloading ancillary copies of this object.
-	return copy_and_clear_flags(h, DF_1_NODELETE, copy_and_clear_ctor);
+	char *realpath = NULL;
+	enum error code = copy_and_clear_flags(&realpath, h, DF_1_NODELETE, copy_and_clear_ctor);
+	if(code)
+		return code;
+	h->path = realpath;
+	return SUCCESS;
 }
 
 const char *handle_progname(void) {
@@ -754,11 +761,15 @@ static inline bool handle_got_reshadow(struct handle *h, Lmid_t n, const struct 
 		return true;
 
 	dlm_t open = h->owned ? (dlm_t) dlmopen : namespace_get;
-	const struct link_map *l = open(n, h->path, RTLD_LAZY);
+	struct link_map *l = open(n, h->path, RTLD_LAZY);
 	if(!l && !strcmp(h->path, handle_progname())) {
-		if(pie_clear_flag(h))
+		static char *realpath = NULL;
+		if(!realpath && pie_clear_flag(&realpath, h))
 			return false;
-		l = open(n, h->path, RTLD_LAZY);
+		l = open(n, realpath, RTLD_LAZY);
+		l->l_name = h->path;
+		if(n == config_numgroups())
+			free(realpath);
 	}
 	if(!l)
 		return false;
