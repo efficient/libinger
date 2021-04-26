@@ -1,6 +1,9 @@
 #ifndef PLOT_H_
 #define PLOT_H_
 
+// Set this large enough that no intra-symbol displacement offset overshoots the inaccessible area.
+#define INACCESSIBLE_PAGES_PER_PLOT 1
+
 // Set this just small enough that the code doesn't outgrow a page.
 #define PLOT_ENTRIES_PER_PAGE 406
 

@@ -174,9 +174,10 @@ const struct plot *plot_alloc(void) {
 	size_t pagesize = plot_pagesize();
 	assert(plot_size <= pagesize);
 
-	// Each PLOT is followed by an inaccessible page, offsets into which can be used to indicate
-	// GOOT indices (for data) in lieu of PLOT trampolines (for code).
-	struct plot *plot = mmap(NULL, pagesize * 2, PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	// Each PLOT is followed by one or more inaccessible pages, offsets into the first of which
+	// can be used (for data) in lieu of PLOT tramplines (for code) to indicate GOOT indices.
+	struct plot *plot = mmap(NULL, pagesize * (INACCESSIBLE_PAGES_PER_PLOT + 1), PROT_WRITE,
+		MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if(plot == MAP_FAILED) {
 		free(goot);
 		return NULL;
@@ -187,8 +188,9 @@ const struct plot *plot_alloc(void) {
 	plot->resolver = procedure_linkage_override;
 
 	if(mprotect(plot, pagesize, PROT_READ | PROT_EXEC) ||
-		mprotect((void *) ((uintptr_t) plot + pagesize), pagesize, 0)) {
-		munmap(plot, plot_size);
+		mprotect((void *) ((uintptr_t) plot + pagesize),
+			pagesize * INACCESSIBLE_PAGES_PER_PLOT, 0)) {
+		munmap(plot, pagesize * (INACCESSIBLE_PAGES_PER_PLOT + 1));
 		free(goot);
 		return NULL;
 	}
@@ -200,7 +202,7 @@ const struct plot *plot_alloc(void) {
 void plot_free(const struct plot *plot) {
 	assert(plot != &plot_template && "Attempt to free template PLOT");
 	free(plot->goot);
-	munmap((struct plot *) plot, plot_size);
+	munmap((struct plot *) plot, plot_pagesize() * (INACCESSIBLE_PAGES_PER_PLOT + 1));
 }
 
 size_t plot_pagesize(void) {
