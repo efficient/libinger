@@ -17,11 +17,14 @@
 
 void procedure_linkage_override(void);
 
+struct disasm {
+	size_t register_index;
+	bool saw_call_instr;
+};
+
 static DisasmCtx_t *ctx;
 static Ebl ebl;
 static struct sigaction handler;
-
-static thread_local bool saw_call_instr;
 
 static void __attribute__((noinline)) libgotcha_traceglobal(uintptr_t before, uintptr_t after) {
 	FILE *err = config_traceglobals();
@@ -44,7 +47,8 @@ static void unresolvable_global(const char *message) {
 static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 	(void) len;
 
-	size_t *greg = reg;
+	struct disasm *res = reg;
+	size_t *greg = &res->register_index;
 	const char *base = strstr(str, "(%r");
 	*greg = -1;
 	if(base) {
@@ -135,7 +139,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 			}
 		}
 	}
-	saw_call_instr = !strncmp(str, "call", 4);
+	res->saw_call_instr = !strncmp(str, "call", 4);
 
 	// Stop after processing the first instruction.
 	return 1;
@@ -147,9 +151,11 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 //    address calculation, or -1 if no displacement-mode memory address operand was found
 //  * its return value to indicate whether it happened to process a call instruction
 static inline bool disasm_instr(const uint8_t **inst, size_t *base_addr_reg) {
+	struct disasm res;
 	disasm_cb(ctx, inst, *inst + X86_64_MAX_INSTR_LEN, 0, "%m %.1o,%.2o,%.3o",
-		addr_calc_base_gpr, base_addr_reg, NULL);
-	return saw_call_instr;
+		addr_calc_base_gpr, &res, NULL);
+	*base_addr_reg = res.register_index;
+	return res.saw_call_instr;
 }
 
 static void segv(int no, siginfo_t *si, void *co) {
