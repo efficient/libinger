@@ -64,6 +64,10 @@ unsigned int alarm(unsigned int seconds) {
 
 #pragma weak libtestinger_nanosleep = nanosleep
 int nanosleep(const struct timespec *req, struct timespec *rem) {
+	// This should really be preemptible, but that causes the gnulib testsuite to fail some
+	// fragile timing assertions.
+	//libgotcha_group_thread_set(libgotcha_group_caller());
+
 	struct timespec ours;
 	if(!rem)
 		rem = &ours;
@@ -94,6 +98,10 @@ int usleep(useconds_t usec) {
 
 #pragma weak libtestinger_write = write
 ssize_t write(int fd, const void *buf, size_t count) {
+	// This should really be preemptible, but that causes the gnulib testsuite to fail some
+	// fragile timing assertions.
+	//libgotcha_group_thread_set(libgotcha_group_caller());
+
 	int flags = fcntl(fd, F_GETFL);
 	if(flags & O_NONBLOCK)
 		return write(fd, buf, count);
