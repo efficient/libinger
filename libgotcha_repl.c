@@ -1,4 +1,3 @@
-#include "ancillary.h"
 #include "config.h"
 #include "dynamic.h"
 #include "globals.h"

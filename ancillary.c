@@ -4,7 +4,6 @@
 
 #include <sys/auxv.h>
 #include <sys/mman.h>
-#include <assert.h>
 #include <link.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -44,35 +43,6 @@ bool ancillary_namespace(void) {
 	}
 
 	return false;
-}
-
-const struct link_map *ancillary_loader(void) {
-	const ElfW(Dyn) *d = NULL;
-	uintptr_t phdr = getauxval(AT_PHDR);
-	for(const ElfW(Phdr) *p = (ElfW(Phdr) *) phdr, *p_end = NULL; p != p_end; ++p)
-		switch(p->p_type) {
-		case PT_DYNAMIC:
-			d = (ElfW(Dyn) *) ((uintptr_t) d + p->p_vaddr);
-			break;
-		case PT_PHDR: {
-			uintptr_t base = phdr - p->p_vaddr;
-			d = (ElfW(Dyn) *) ((uintptr_t) d + base);
-			p_end = (ElfW(Phdr) *) (phdr + p->p_memsz);
-			break;
-		}
-		}
-	assert(d && (uintptr_t) d > phdr);
-
-	for(; d->d_tag != DT_PLTGOT; ++d)
-		assert(d->d_tag != DT_NULL);
-
-	const struct link_map *l = ((struct link_map **) d->d_un.d_ptr)[1];
-	if(!l)
-		return NULL;
-
-	for(; !strstr(l->l_name, "/libdl.so."); l = l->l_next)
-		assert(l->l_next);
-	return l;
 }
 
 enum error ancillary_disable_ctors_dtors(void) {
