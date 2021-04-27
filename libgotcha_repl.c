@@ -1,3 +1,4 @@
+#include "ancillary.h"
 #include "config.h"
 #include "dynamic.h"
 #include "globals.h"
@@ -97,6 +98,15 @@ static void *findsym_interruptible(
 
 #pragma weak libgotcha_dlsym = dlsym
 void *dlsym(void *handle, const char *symbol) {
+	if(dlsym == libgotcha_dlsym) {
+		assert(!strcmp(symbol, "dlopen"));
+
+		void *__libc_dlsym(const void *, const char *);
+		const struct link_map *ldl = ancillary_loader();
+		assert(ldl && "rr is unsupported for executables built w/ -znow (try -Wl,-zlazy)");
+		return __libc_dlsym(ldl, symbol);
+	}
+
 	return findsym_interruptible(handle, symbol, NULL,
 		stack_called_from_unshared(), stack_ret_addr_non_tramp());
 }

@@ -88,7 +88,7 @@ libgotcha_api.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 libgotcha_api.o: libgotcha_api.h config.h handle.h handles.h namespace.h repl.h shared.h
 libgotcha_repl.o: private CFLAGS += -fno-optimize-sibling-calls -fpic
 libgotcha_repl.o: private CPPFLAGS += -D_GNU_SOURCE -Wno-missing-attributes
-libgotcha_repl.o: libgotcha_repl.h config.h dynamic.h globals.h handle.h handles.h namespace.h stack.h tcb.h threads.h
+libgotcha_repl.o: libgotcha_repl.h ancillary.h config.h dynamic.h globals.h handle.h handles.h namespace.h stack.h tcb.h threads.h
 namespace.o: private CFLAGS += -fpic -ftls-model=initial-exec
 namespace.o: private CPPFLAGS += -isystem . -D_GNU_SOURCE
 namespace.o: namespace.h threads.h
