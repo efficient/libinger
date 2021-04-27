@@ -279,12 +279,12 @@ error like `Unable to load ancillary copies of library`, either rebuild glibc wi
 $ LIBGOTCHA_NUMGROUPS=2 ./yourprogram
 ```
 
-Both `valgrind` (at least Memcheck from version 3.15.0) and `rr` (at least version 5.3.0) are known
-to work, but currently _libgotcha_'s global variable access interception appears to break both.  You
-can work around this by switching it off, at the risk of altering the semantics of your program:
+The `valgrind` suite (at least Memcheck and Callgrind from version 3.16.1) is known to work, but
+currently conflicts with _libgotcha_'s global variable access interception.  You can work around
+this by switching it off, at the risk of altering the semantics of your program:
 ```
 $ LIBGOTCHA_NOGLOBALS= valgrind ./yourprogram #check it for memory errors
-$ LIBGOTCHA_NOGLOBALS= rr ./yourprogram #record execution for reverse debugging
+$ LIBGOTCHA_NOGLOBALS= valgrind --tool=callgrind ./yourprogram #profile it
 ```
 
 Sadly, LLVM's sanitizers rely heavily on dynamic linking tricks that are incompatible with
@@ -301,6 +301,13 @@ step into _libgotcha_'s segfault handler unless you're trying to debug the featu
 instruct `gdb` to ignore segmentation faults like so:
 ```
 $ gdb -ex handle\ SIGSEGV\ noprint ./yourprogram
+```
+
+The `rr` reverse-debugging backend (at least version 5.4.0) also works both with and without global
+variable access interception, but conflicts with _libgotcha_'s interception of certain calls into
+the runtime dynamic loader.  Invoke it like so (omitting `LIBGOTCHA_NOGLOBALS=` if desired):
+```
+$ LIBGOTCHA_NODYNAMIC= LIBGOTCHA_NOGLOBALS= rr ./yourprogram #record execution for reverse debugging
 ```
 
 If you step into code located outside the main libset, GDB will be missing symbol information, and
