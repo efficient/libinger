@@ -766,7 +766,16 @@ static inline bool handle_got_reshadow(struct handle *h, Lmid_t n, const struct 
 		static char *realpath = NULL;
 		if(!realpath && pie_clear_flag(&realpath, h))
 			return false;
+
 		l = open(n, realpath, RTLD_LAZY);
+		if(!l) {
+			fputs("libgotcha error: out of static TLS space\n"
+				" ... export either LIBGOTCHA_NUMGROUPS=<num> to provide fewer libsets\n"
+				" ... or GLIBC_TUNABLES=glibc.rtld.optional_static_tls= for more space\n",
+				stderr);
+			abort();
+		}
+
 		l->l_name = h->path;
 		if(n == config_numgroups())
 			free(realpath);
