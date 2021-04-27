@@ -159,6 +159,20 @@ static inline bool disasm_instr(const uint8_t **inst, size_t *base_addr_reg) {
 }
 
 static void segv(int no, siginfo_t *si, void *co) {
+	ucontext_t *uc = co;
+	mcontext_t *mc = &uc->uc_mcontext;
+
+	static thread_local uintptr_t prodding;
+	if(prodding) {
+		uintptr_t *reg;
+		for(reg = (uintptr_t *) mc->gregs; *reg != (uintptr_t) si->si_addr; ++reg)
+			if(reg == (uintptr_t *) mc->gregs + NGREG - 1)
+				unresolvable_global("libgotcha error: unhandleable inner segfault");
+		*reg = (uintptr_t) &prodding;
+		prodding = false;
+		return;
+	}
+
 	static thread_local size_t last_reg;
 	static thread_local gregset_t last_regs;
 	static thread_local uintptr_t last_next;
@@ -175,8 +189,6 @@ static void segv(int no, siginfo_t *si, void *co) {
 	bool next = true;
 	const char *error = NULL;
 	int erryes = errno;
-	ucontext_t *uc = co;
-	mcontext_t *mc = &uc->uc_mcontext;
 	size_t greg;
 	const uint8_t *inst = (uint8_t *) mc->gregs[REG_RIP];
 	if(inst == si->si_addr) {
@@ -217,7 +229,18 @@ static void segv(int no, siginfo_t *si, void *co) {
 	uintptr_t pagesize = plot_pagesize();
 	size_t index = addr & (pagesize - 1);
 	const struct plot *plot = (struct plot *) (addr - index - pagesize);
-	if(index >= PLOT_ENTRIES_PER_PAGE || plot->resolver != procedure_linkage_override) {
+	bool heuristics = index >= PLOT_ENTRIES_PER_PAGE;
+	if(!heuristics) {
+		sigset_t recurse;
+		sigemptyset(&recurse);
+		sigaddset(&recurse, SIGSEGV);
+		prodding = true;
+		pthread_sigmask(SIG_UNBLOCK, &recurse, NULL);
+		heuristics = !plot->goot;
+		pthread_sigmask(SIG_BLOCK, &recurse, NULL);
+		prodding = false;
+	}
+	if(heuristics || plot->resolver != procedure_linkage_override) {
 		// It looks like the base of the displacement-mode address calculation isn't one we
 		// instrumented.  Maybe the code computed a custom base address using a register
 		// that we've since updated due to a separate (but nearby) dereference?
