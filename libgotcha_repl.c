@@ -106,6 +106,10 @@ void *dlsym(void *handle, const char *symbol) {
 		if(dlopen)
 			return dlopen;
 
+		if(!config_nodynamic())
+			fputs("libgotcha warning: rr is likely to crash w/o LIBGOTCHA_NODYNAMIC=\n",
+				stderr);
+
 		void *__libc_dlopen_mode(const char *, int);
 		void __libc_dlclose(void *);
 		void *__libc_dlsym(void *, const char *);
