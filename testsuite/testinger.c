@@ -2,6 +2,7 @@
 #include "libgotcha_repl.h"
 #include "libinger.h"
 
+#include <sys/types.h>
 #include <assert.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -77,6 +78,17 @@ int nanosleep(const struct timespec *req, struct timespec *rem) {
 		stat = nanosleep(&next, rem);
 	}
 	return stat;
+}
+
+int libtestinger_nanosleep(const struct timespec *, struct timespec *);
+
+#pragma weak libtestinger_usleep = usleep
+int usleep(useconds_t usec) {
+	struct timespec nsec = {
+		.tv_sec = usec / 1000000,
+		.tv_nsec = (usec % 1000000) * 1000,
+	};
+	return libtestinger_nanosleep(&nsec, NULL);
 }
 
 void _dl_signal_error(int, const char *, const char *, const char *);
