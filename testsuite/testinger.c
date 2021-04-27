@@ -96,6 +96,14 @@ int usleep(useconds_t usec) {
 	return libtestinger_nanosleep(&nsec, NULL);
 }
 
+#pragma weak libtestinger_sleep = sleep
+unsigned int sleep(unsigned int seconds) {
+	struct timespec nsec = {
+		.tv_sec = seconds,
+	};
+	return libtestinger_nanosleep(&nsec, NULL);
+}
+
 #pragma weak libtestinger_write = write
 ssize_t write(int fd, const void *buf, size_t count) {
 	// This should really be preemptible, but that causes the gnulib testsuite to fail some
