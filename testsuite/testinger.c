@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -89,6 +90,22 @@ int usleep(useconds_t usec) {
 		.tv_nsec = (usec % 1000000) * 1000,
 	};
 	return libtestinger_nanosleep(&nsec, NULL);
+}
+
+#pragma weak libtestinger_write = write
+ssize_t write(int fd, const void *buf, size_t count) {
+	int flags = fcntl(fd, F_GETFL);
+	if(flags & O_NONBLOCK)
+		return write(fd, buf, count);
+
+	size_t written = 0;
+	while(written != count) {
+		ssize_t update = write(fd, (void *) ((uintptr_t) buf + written), count - written);
+		if(update < 0)
+			return update;
+		written += update;
+	}
+	return written;
 }
 
 void _dl_signal_error(int, const char *, const char *, const char *);
