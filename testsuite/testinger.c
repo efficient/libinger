@@ -51,7 +51,7 @@ void (*signal(int signum, void (*handler)(int)))(int) {
 	if(handler == SIG_DFL)
 		return handler;
 
-	return signal(signum, handler);
+	return libgotcha_signal(signum, handler);
 }
 
 static bool intrsleep;
