@@ -98,13 +98,24 @@ static void *findsym_interruptible(
 
 #pragma weak libgotcha_dlsym = dlsym
 void *dlsym(void *handle, const char *symbol) {
+	// We are careful not to depend on dlsym() until we have initialized dynamic interpositions,
+	// so we ordinarily never run into bootstrapping trouble.  However, rr's preload library
+	// introduces a dlsym() dependency into dlopen() calls.  Preresolve dlopen() in this case.
 	if(dlsym == libgotcha_dlsym) {
+		static void *dlopen;
 		assert(!strcmp(symbol, "dlopen"));
+		if(dlopen)
+			return dlopen;
 
-		void *__libc_dlsym(const void *, const char *);
-		const struct link_map *ldl = ancillary_loader();
-		assert(ldl && "rr is unsupported for executables built w/ -znow (try -Wl,-zlazy)");
-		return __libc_dlsym(ldl, symbol);
+		void *__libc_dlopen_mode(const char *, int);
+		void __libc_dlclose(void *);
+		void *__libc_dlsym(void *, const char *);
+		void *ldl = __libc_dlopen_mode("libdl.so.2", RTLD_LAZY | RTLD_NOLOAD);
+		assert(ldl);
+		__libc_dlclose(ldl);
+		dlopen = __libc_dlsym(ldl, symbol);
+		assert(dlopen);
+		return dlopen;
 	}
 
 	return findsym_interruptible(handle, symbol, NULL,
