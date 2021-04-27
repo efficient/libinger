@@ -19,7 +19,6 @@ void procedure_linkage_override(void);
 
 struct disasm {
 	size_t register_index;
-	ssize_t memory_offset;
 	bool saw_call_instr;
 };
 
@@ -50,10 +49,9 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 
 	struct disasm *res = reg;
 	size_t *greg = &res->register_index;
-	const char *paren = strstr(str, "(%r");
+	const char *base = strstr(str, "(%r");
 	*greg = -1;
-	if(paren) {
-		const char *base = paren;
+	if(base) {
 		switch(*(base += 3)) {
 		case '1':
 			if(base[1] < '0' || base[1] > '5') {
@@ -141,33 +139,6 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 			}
 		}
 	}
-
-	ssize_t *memo = &res->memory_offset;
-	*memo = 0;
-	if(*greg != -1ul) {
-		const char *offset;
-		for(offset = paren - 1; *offset != ' '; --offset)
-			if(offset == str) {
-				fputs_unlocked("libgotcha warning: operand w/o preceding space\n",
-					stderr);
-				break;
-			}
-		++offset;
-		if(*offset == '*')
-			++offset;
-
-		ssize_t sign = 1;
-		if(*offset == '-') {
-			sign = -1;
-			++offset;
-		}
-
-		if(offset != paren && !sscanf(offset, "0x%lx(", (size_t *) memo))
-			fputs_unlocked("libgotcha warning: unparseable displacement-mode offset\n",
-				stderr);
-		*memo *= sign;
-	}
-
 	res->saw_call_instr = !strncmp(str, "call", 4);
 
 	// Stop after processing the first instruction.
@@ -181,7 +152,7 @@ static int addr_calc_base_gpr(char *str, size_t len, void *reg) {
 //  * its return value to indicate whether it happened to process a call instruction
 static inline bool disasm_instr(const uint8_t **inst, size_t *base_addr_reg) {
 	struct disasm res;
-	disasm_cb(ctx, inst, *inst + X86_64_MAX_INSTR_LEN, 0, "%m %.1o, %.2o, %.3o",
+	disasm_cb(ctx, inst, *inst + X86_64_MAX_INSTR_LEN, 0, "%m %.1o,%.2o,%.3o",
 		addr_calc_base_gpr, &res, NULL);
 	*base_addr_reg = res.register_index;
 	return res.saw_call_instr;
