@@ -20,7 +20,7 @@ mod unfurl;
 mod tcbstub;
 #[cfg(feature = "notls")]
 mod tcb {
-	pub use tcbstub::*;
+	pub use crate::tcbstub::*;
 }
 
 pub use linger::*;
