@@ -2,6 +2,7 @@
 #include "libgotcha_repl.h"
 #include "libinger.h"
 
+#include <sys/select.h>
 #include <sys/types.h>
 #include <assert.h>
 #include <dlfcn.h>
@@ -122,6 +123,15 @@ ssize_t write(int fd, const void *buf, size_t count) {
 		written += update;
 	}
 	return written;
+}
+
+#pragma weak libtestinger_select = select
+int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds, struct timeval *timeout) {
+	libgotcha_group_thread_set(libgotcha_group_caller());
+
+	int res = 0;
+	while((res = select(nfds, readfds, writefds, exceptfds, timeout)) < 0 && errno == EINTR);
+	return res;
 }
 
 void _dl_signal_error(int, const char *, const char *, const char *);
