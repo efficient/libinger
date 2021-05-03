@@ -110,7 +110,7 @@ fn renew(lo: &mut Bencher) {
 	let lingers: Vec<_> = (0..concurrency_limit()).map(|_| launch(pause, u64::max_value()).unwrap()).collect();
 	let mut lingers = lingers.into_iter();
 	lo.iter(||
-		drop(lingers.next())
+		drop(lingers.next().expect("LIBSETS tunable set too low!"))
 	);
 }
 
