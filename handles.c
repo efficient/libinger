@@ -191,7 +191,9 @@ void handles_restoretls(Lmid_t namespace) {
 					dlinfo(l, RTLD_DI_TLS_DATA, &tls);
 				}
 				assert(tls);
-				memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_memsz);
+				memcpy(tls, (void *) (l->l_addr + h->tls->p_vaddr), h->tls->p_filesz);
+				memset((void *) ((uintptr_t) tls + h->tls->p_filesz), 0,
+					h->tls->p_memsz - h->tls->p_filesz);
 			} else
 				assert(getenv("LD_PRELOAD"));
 		}
