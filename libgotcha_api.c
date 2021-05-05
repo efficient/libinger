@@ -101,6 +101,10 @@ void libgotcha_shared_hook(void (*hook)(void)) {
 	shared_hook(hook);
 }
 
+void libgotcha_shared_prehook(void (*hook)(void)) {
+	shared_prehook(hook);
+}
+
 // The following definitions permit control libraries to call the wrapper functions associated with
 // our static interpositions, similar to how a statically-linked client library might do with
 // dynamic interpositions via the libgotcha_repl.h interface.  Their signatures are a platform ABI

@@ -7,4 +7,8 @@
 // provided function must not perform any floating-point calculations!
 void shared_hook(void (*)(void));
 
+// The provided callback is invoked once whenever switching from private code to the shared copy.
+// It must not call any non-async-signal-safe functions!
+void shared_prehook(void (*)(void));
+
 #endif

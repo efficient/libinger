@@ -71,6 +71,11 @@ void *libgotcha_group_symbol_from(libgotcha_group_t, const char *, const char *)
 // perform any floating-point calculations!
 void libgotcha_shared_hook(void (*)(void));
 
+// Install a function to be invoked each time a call resolving to the shared group is dispatched.
+// Note that this callback runs in the shared group.  The provided function must not call any
+// non-async-signal-safe functions!
+void libgotcha_shared_prehook(void (*)(void));
+
 #ifdef __cplusplus
 }
 #endif

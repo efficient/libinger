@@ -72,6 +72,11 @@ procedure_linkage_override:
 	mov  16(%rsp), %rdx          // saved %rax
 	mov  %rdx,    (%rsp)         // save %rax
 	sub  $16, %rsp
+	mov  shared_pretrampoline@gotpcrel(%rip), %rax
+	mov  (%rax), %al
+	test %al, %al
+	jz   .Lfound_symbol
+	int3                         // induce SIGTRAP
 .Lfound_symbol:
 
 	mov  %rcx, 32(%rsp)          // return address
