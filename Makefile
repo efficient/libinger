@@ -22,7 +22,7 @@ libgotcha.a: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 libgotcha.rlib: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 
 libgotcha.so: private LDFLAGS += -L$(ELFUTILS) -Wl,-R$(ELFUTILS) -zinitfirst -Wl,-zlazy
-libgotcha.so: private LDFLAGS += libgotcha.o -ldl -lpthread -lc -lasm -lebl_x86_64 -lunwind
+libgotcha.so: private LDFLAGS += libgotcha.o -ldl -lpthread -lgcc_s -lc -lasm -lebl_x86_64
 libgotcha.so: libgotcha.o libgotcha_api.rs namespace.rs prctl.rs
 
 libgotcha.mk: gotcha.mk libgotcha.so
