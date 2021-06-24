@@ -34,6 +34,7 @@ cd "$LIBINGER"
 set -ve
 ./configure || true
 mkdir -p "target/$buildtype"
+cargo build $cargoflags
 cargo run $cargoflags >"target/$buildtype/libinger.h"
 cp external/libgotcha/libgotcha_api.h "target/$buildtype/libgotcha.h"
 cp external/libgotcha/libgotcha_repl.h "target/$buildtype"
