@@ -57,7 +57,9 @@ impl<T, F: FnMut(*mut Option<ThdResult<T>>) + Send + ?Sized> Linger<T, F> {
 }
 
 impl<'a, T, F: FnMut(*mut Option<ThdResult<T>>) + Send + 'a> Linger<T, F> {
-	#[doc(hidden)]
+	/// Erase the type of the contained closure, thereby allowing insertion of the instance into
+	/// a polymorphic data structure containing other instances.  After this operation, the
+	/// instance behaves as before: only its type is changed.
 	pub fn erase(self) -> Linger<T, dyn FnMut(*mut Option<ThdResult<T>>) + Send + 'a> {
 		use std::mem::MaybeUninit;
 
