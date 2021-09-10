@@ -158,6 +158,11 @@ linker will know where to search (by absolute path) for the other libraries; as 
 applications that depend on `libinger.so` need only define a custom interpreter path pointing to the
 `ld-linux-x86-64.so.2` file in your build directory.
 
+Note that glibc 2.32 eliminated the below `TLS_STATIC_SURPLUS` compile-time constant and replaced it
+with a runtime tunable read from the environment.  Debian backported this change to their glibc 2.31
+distribution.  If you are on an affected version, disregard the related steps below; instead, export
+something like `GLIBC_TUNABLES=glibc.rtld.optional_static_tls=0x10000` when running your program.
+
 Follow these steps to build your own glibc, where all paths are relative to the root of this
 repository:
  1. Clone the glibc source code: `$ git clone git://sourceware.org/git/glibc`.  I'll assume you put
