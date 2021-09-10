@@ -34,7 +34,7 @@ System requirements
 -------------------
 Presently, x86-64 GNU/Linux is the only supported platform.  The build requirements are as follows:
  * `rustc` ≥1.36.0 (versions starting with 1.37.0 include a breaking change to dylib symbol exports—
-   https://github.com/rust-lang/rust/issues/64340—but the build system now implements a workaround)
+   https://github.com/rust-lang/rust/issues/64340 —but the build system now implements a workaround)
  * `cargo` ≤1.39.0/"0.40.0" or ≥1.55.0/"0.56.0" (a version between these introduced a breaking
    but since fixed regression in path resolution: https://github.com/rust-lang/cargo/issues/8202)
  * `bindgen` ≤0.52 (or a newer version with a wrapper script that passes the `--size_t-is-usize`
@@ -43,7 +43,7 @@ Presently, x86-64 GNU/Linux is the only supported platform.  The build requireme
  * GNU `make`
  * GNU binutils (tested with 2.34)
  * GNU libc ≤2.33 (versions starting with 2.30 include a breaking change to `dlopen()` behavior on
-   executables—https://sourceware.org/bugzilla/show_bug.cgi?id=24323—but libgotcha now implements a
+   executables—https://sourceware.org/bugzilla/show_bug.cgi?id=24323 —but libgotcha now implements a
    workaround; versions starting with 2.34 combine libpthread into libc, which is unlikely to work
    out of the box)
  * `libebl` from elfutils 0.176 (newer versions eliminate the libebl shared library, which we
