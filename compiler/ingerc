@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Skip the following LLVM optimization passes, which cause problems for us.
+readonly BADPASSES="function-attrs inline prune-eh"
+
+# These -Ccodegen-units=1 switches prevent unreadable output due to interleaving.
+allpasses="`rustc "$@" -Cllvm-args=-debug-pass=Arguments -Ccodegen-units=1 2>&1`"
+autopasses="`rustc "$@" -Cllvm-args=-debug-pass=Arguments -Cno-prepopulate-passes -Ccodegen-units=1 2>&1`"
+
+# Each line is a grep-compatible command-line switch.
+autoswitches="`echo "$autopasses" | sed -e's/^/-e"/' -e's/: \+/: \\\\+/g' -e's/$/"/'`"
+
+manualpasses="`echo "$allpasses" | eval grep -vx $autoswitches`"
+
+# Each line is a pass name, without the leading hyphen.
+manualnames="`echo "$manualpasses" | sed -e's/[^-]\+-//' -e's/ -/\n/g'`"
+badnames="`echo "$BADPASSES" | tr " " "\n"`"
+
+# Each line is a one-word grep-compatible command-line switch.
+manualswitches="`echo "$badnames" | sed -e's/^/-e/'`"
+
+passnames="`echo "$manualnames" | grep -vxF $manualswitches`"
+
+# This -Ccodegen-units=1 switch avoids a segfault due to some race condition related to -Cpasses.
+exec rustc "$@" -Cno-prepopulate-passes -Cpasses="$passnames" -Ccodegen-units=1
