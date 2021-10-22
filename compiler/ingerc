@@ -3,9 +3,12 @@
 # Skip the following LLVM optimization passes, which cause problems for us.
 readonly BADPASSES="function-attrs inline prune-eh"
 
+# Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
+args="`printf "'%s' " "$@" | sed "s/'-\?-emit' '[^']\+'//"`"
+
 # These -Ccodegen-units=1 switches prevent unreadable output due to interleaving.
-allpasses="`rustc "$@" -Cllvm-args=-debug-pass=Arguments -Ccodegen-units=1 2>&1`"
-autopasses="`rustc "$@" -Cllvm-args=-debug-pass=Arguments -Cno-prepopulate-passes -Ccodegen-units=1 2>&1`"
+allpasses="`eval rustc $args -Cllvm-args=-debug-pass=Arguments -Ccodegen-units=1 2>&1`"
+autopasses="`eval rustc $args -Cllvm-args=-debug-pass=Arguments -Cno-prepopulate-passes -Ccodegen-units=1 2>&1`"
 
 # Each line is a grep-compatible command-line switch.
 autoswitches="`echo "$autopasses" | sed -e's/^/-e"/' -e's/: \+/: \\\\+/g' -e's/$/"/'`"
