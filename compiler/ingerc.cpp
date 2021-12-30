@@ -6,6 +6,7 @@
 #include <dlfcn.h>
 
 using llvm::legacy::PassManager;
+using llvm::FunctionType;
 using llvm::GlobalValue;
 using llvm::MachineFunction;
 using llvm::MachineFunctionPass;
@@ -41,26 +42,68 @@ struct IngerCancel: public MachineFunctionPass {
 				})
 			);
 			if(dropCall != cleanupBlock.end()) {
-				outs() << "dropCall: " << *dropCall << '\n';
+				auto &dropFun = *dropCall->getOperand(0).getGlobal();
+				outs() << "dropFun: " << dropFun.getName() << '\n';
 
-				auto endInst = findInst(mf, [&endLabel](auto &each) {
-					return std::any_of(
-						each.operands_begin(),
-						each.operands_end(),
-						[&endLabel](auto &each) {
-							return each.isMCSymbol()
-								&& each.getMCSymbol() == &endLabel;
-						}
-					);
-				});
+				auto &dropType = *getFunctionType(*dropCall).params().front();
+				outs() << "paramType: " << dropType << '\n';
+
+				auto labelFinder = [](auto &label) {
+					return [&label](auto &each) {
+						return std::any_of(
+							each.operands_begin(),
+							each.operands_end(),
+							[&label](auto &each) {
+								return each.isMCSymbol()
+									&& each.getMCSymbol() == &label;
+							}
+						);
+					};
+				};
+
+				auto beginInst = findInst(mf, labelFinder(beginLabel));
+				assert(beginInst);
+				outs() << "beginInst: " << **beginInst << '\n';
+
+				auto endInst = findInst(mf, labelFinder(endLabel));
 				assert(endInst);
 				outs() << "endInst: " << **endInst << '\n';
+
+				auto laterInst = nextInst(*beginInst);
+				while(
+					laterInst
+					&& !(*laterInst)->isCall()
+					&& *laterInst != endInst
+				)
+					laterInst = nextInst(*laterInst);
+				if(laterInst && (*laterInst)->isCall()) {
+					auto &type = getFunctionType(**laterInst);
+					if(
+						type.getReturnType() == &dropType
+						|| std::any_of(
+							type.param_begin(),
+							type.param_end(),
+							[&dropType](auto &each) {
+								return each == &dropType;
+							}
+						)
+					) {
+						outs() << "laterInst: " << **laterInst << '\n';
+
+						auto *movedInst = (*beginInst)->removeFromParent();
+						(*laterInst)->getParent()->insertAfter(
+							*laterInst,
+							movedInst
+						);
+						changed = true;
+					}
+				}
 
 				auto nextInst = this->nextInst(*endInst);
 				while(
 					nextInst
-					&& !isCallTo(**nextInst, [&dropCall](auto &fun) {
-						return &fun == dropCall->getOperand(0).getGlobal();
+					&& !isCallTo(**nextInst, [&dropFun](auto &fun) {
+						return &fun == &dropFun;
 					})
 					&& !(*nextInst)->isCFIInstruction()
 					&& !(*nextInst)->isReturn()
@@ -95,6 +138,16 @@ private:
 				return std::optional(inst);
 		}
 		return {};
+	}
+
+	static const FunctionType &getFunctionType(const MachineInstr &call) {
+		assert(call.isCall());
+
+		auto &fun = *call.getOperand(0).getGlobal();
+		auto &funType = *fun.getType()->getElementType();
+		assert(funType.isFunctionTy());
+
+		return static_cast<FunctionType &>(funType);
 	}
 
 	static bool isCallTo(
