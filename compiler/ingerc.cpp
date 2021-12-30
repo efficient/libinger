@@ -15,6 +15,7 @@ using llvm::MachineInstrBundleIterator;
 using llvm::Pass;
 using llvm::PassInfo;
 using llvm::PassRegistry;
+using llvm::Type;
 using llvm::callDefaultCtor;
 using llvm::outs;
 
@@ -69,30 +70,22 @@ struct IngerCancel: public MachineFunctionPass {
 				assert(endInst);
 				outs() << "endInst: " << **endInst << '\n';
 
-				auto laterInst = nextInst(*beginInst);
-				while(
-					laterInst
-					&& !(*laterInst)->isCall()
-					&& *laterInst != endInst
-				)
-					laterInst = nextInst(*laterInst);
-				if(laterInst && (*laterInst)->isCall()) {
-					auto &type = getFunctionType(**laterInst);
-					if(
-						type.getReturnType() == &dropType
-						|| std::any_of(
-							type.param_begin(),
-							type.param_end(),
-							[&dropType](auto &each) {
-								return each == &dropType;
-							}
-						)
-					) {
-						outs() << "laterInst: " << **laterInst << '\n';
+				auto prevInst = (*beginInst)->getPrevNode();
+				assert(prevInst);
+				if(!isCallUsing(*prevInst, dropType)) {
+					auto nextInst = this->nextInst(*beginInst);
+					while(
+						nextInst
+						&& !(*nextInst)->isCall()
+						&& *nextInst != endInst
+					)
+						nextInst = this->nextInst(*nextInst);
+					if(nextInst && isCallUsing(**nextInst, dropType)) {
+						outs() << "nextInst: " << **nextInst << '\n';
 
 						auto *movedInst = (*beginInst)->removeFromParent();
-						(*laterInst)->getParent()->insertAfter(
-							*laterInst,
+						(*nextInst)->getParent()->insertAfter(
+							*nextInst,
 							movedInst
 						);
 						changed = true;
@@ -155,6 +148,21 @@ private:
 		std::function<bool(const GlobalValue &)> name
 	) {
 		return inst.isCall() && name(*inst.getOperand(0).getGlobal());
+	}
+
+	static bool isCallUsing(const MachineInstr &inst, const Type &type) {
+		if(!inst.isCall())
+			return false;
+
+		auto &funType = getFunctionType(inst);
+		return funType.getReturnType() == &type
+			|| std::any_of(
+				funType.param_begin(),
+				funType.param_end(),
+				[&type](auto &each) {
+					return each == &type;
+				}
+			);
 	}
 
 	static std::optional<MachineInstrBundleIterator<MachineInstr>> nextInst(
