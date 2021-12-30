@@ -38,8 +38,8 @@ struct IngerCancel: public MachineFunctionPass {
 			auto dropCall = std::find_if(
 				cleanupBlock.begin(),
 				cleanupBlock.end(),
-				std::bind(isCallTo, std::placeholders::_1, [](auto &fun) {
-					return fun.getName().contains("drop_in_place");
+				std::bind(isCallTo, std::placeholders::_1, [](auto *fun) {
+					return fun && fun->getName().contains("drop_in_place");
 				})
 			);
 			if(dropCall != cleanupBlock.end()) {
@@ -95,8 +95,8 @@ struct IngerCancel: public MachineFunctionPass {
 				auto nextInst = this->nextInst(*endInst);
 				while(
 					nextInst
-					&& !isCallTo(**nextInst, [&dropFun](auto &fun) {
-						return &fun == &dropFun;
+					&& !isCallTo(**nextInst, [&dropFun](auto *fun) {
+						return fun == &dropFun;
 					})
 					&& !(*nextInst)->isCFIInstruction()
 					&& !(*nextInst)->isReturn()
@@ -145,9 +145,14 @@ private:
 
 	static bool isCallTo(
 		const MachineInstr &inst,
-		std::function<bool(const GlobalValue &)> name
+		std::function<bool(const GlobalValue *)> name
 	) {
-		return inst.isCall() && name(*inst.getOperand(0).getGlobal());
+		auto &operand = inst.getOperand(0);
+		const GlobalValue *fun = nullptr;
+		if(operand.isGlobal())
+			fun = operand.getGlobal();
+		// else it's an indirect call so we cannot know the function statically
+		return inst.isCall() && name(fun);
 	}
 
 	static bool isCallUsing(const MachineInstr &inst, const Type &type) {
