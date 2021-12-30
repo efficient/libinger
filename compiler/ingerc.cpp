@@ -59,12 +59,20 @@ struct IngerCancel: public MachineFunctionPass {
 				outs() << "endInst: " << **endInst << '\n';
 
 				auto nextInst = this->nextInst(*endInst);
-				while(nextInst && !isCallTo(**nextInst, [&dropCall](auto &fun) {
-					return &fun == dropCall->getOperand(0).getGlobal();
-				}))
+				while(
+					nextInst
+					&& !isCallTo(**nextInst, [&dropCall](auto &fun) {
+						return &fun == dropCall->getOperand(0).getGlobal();
+					})
+					&& !(*nextInst)->isCFIInstruction()
+					&& !(*nextInst)->isReturn()
+				)
 					nextInst = this->nextInst(*nextInst);
 				assert(nextInst);
 				outs() << "nextInst: " << **nextInst << '\n';
+
+				if((*nextInst)->isCFIInstruction())
+					--*nextInst;
 
 				auto *movedInst = (*endInst)->removeFromParent();
 				(*nextInst)->getParent()->insert(*nextInst, movedInst);
