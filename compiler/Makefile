@@ -1,7 +1,7 @@
 CXX := c++
 LD := $(CXX)
 
-override CXXFLAGS := -std=c++14 -O2 -fpic -fno-rtti -Wall -Wextra -Wpedantic $(CXXFLAGS)
+override CXXFLAGS := -std=c++17 -O2 -fpic -fno-rtti -Wall -Wextra -Wpedantic $(CXXFLAGS)
 override LDLIBS := -lLLVM-13 -ldl $(LDLIBS)
 
 libingerc.so:
