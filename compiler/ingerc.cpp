@@ -36,11 +36,9 @@ struct IngerCancel: public MachineFunctionPass {
 			auto dropCall = std::find_if(
 				cleanupBlock.begin(),
 				cleanupBlock.end(),
-				[](auto &each) {
-					return isCallTo(each, [](auto &fun) {
-						return fun.getName().contains("drop_in_place");
-					});
-				}
+				std::bind(isCallTo, std::placeholders::_1, [](auto &fun) {
+					return fun.getName().contains("drop_in_place");
+				})
 			);
 			if(dropCall != cleanupBlock.end()) {
 				outs() << "dropCall: " << *dropCall << '\n';
