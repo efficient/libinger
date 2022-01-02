@@ -1,20 +1,33 @@
+#include "X86RegisterInfo.h"
+
 #include "llvm/ADT/BitVector.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
+#include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/MC/MCContext.h"
 
 #include <dlfcn.h>
 
 using llvm::legacy::PassManager;
+using llvm::DebugLoc;
+using llvm::Function;
 using llvm::FunctionType;
 using llvm::GlobalValue;
+using llvm::MachineBasicBlock;
 using llvm::MachineFunction;
 using llvm::MachineFunctionPass;
 using llvm::MachineInstr;
+using llvm::MachineInstrBuilder;
 using llvm::MachineInstrBundleIterator;
+using llvm::MCContext;
+using llvm::MCSymbol;
 using llvm::Pass;
 using llvm::PassInfo;
 using llvm::PassRegistry;
+using llvm::PointerType;
+using llvm::SmallVector;
 using llvm::Type;
 using llvm::callDefaultCtor;
 using llvm::outs;
@@ -28,12 +41,8 @@ struct IngerCancel: public MachineFunctionPass {
 
 		auto changed = false;
 		for(auto &pad : mf.getLandingPads()) {
-			auto &beginLabel = *pad.BeginLabels.front();
-			auto &endLabel = *pad.EndLabels.front();
-			outs() << "landing pad: " << beginLabel << ' ' << endLabel << '\n';
-
 			auto &cleanupBlock = *pad.LandingPadBlock;
-			outs() << cleanupBlock << '\n';
+			outs() << "landing pad: " << *pad.LandingPadLabel << '\n';
 
 			auto dropCall = std::find_if(
 				cleanupBlock.begin(),
@@ -42,7 +51,109 @@ struct IngerCancel: public MachineFunctionPass {
 					return fun && fun->getName().contains("drop_in_place");
 				})
 			);
+
+			auto *beginBlock = &mf.front();
+			auto beginLoc = beginBlock->begin();
+
+			auto endIt = mf.end();
+			--endIt;
+			if(&*endIt == &cleanupBlock)
+				--endIt;
+
+			auto *endBlock = &*endIt;
+			auto endLoc = endBlock->end();
+
+			if(dropCall == cleanupBlock.end()) {
+				auto *sRetType = getFunctionSRetType(mf.getFunction());
+				const Function *dtor = nullptr;
+				if(sRetType)
+					dtor = findDtor(*sRetType, mf);
+				if(dtor) {
+					auto argIndex = -1ul;
+					auto ctor = findInst(mf, [&sRetType, &argIndex](auto &each) {
+						auto *fun = getFunction(each);
+						if(!fun)
+							return false;
+						return getFunctionSRetType(*fun, &argIndex) == sRetType;
+					});
+					assert(ctor);
+					beginBlock = endBlock = (*ctor)->getParent();
+					++*ctor;
+					beginLoc = endLoc = *ctor;
+
+					// Examine the mov or lea before the constructor call.
+					--*ctor;
+					--*ctor;
+					assert(argIndex == 0);
+					assert((*ctor)->getOperand(0).getReg() == llvm::X86::RDI);
+
+					auto move = cleanupBlock.begin();
+					while(move != cleanupBlock.end() && !move->isMoveReg())
+						++move;
+					assert(move != cleanupBlock.end());
+
+					// mov %rax, %rbp ; Save _Unwind_Context pointer.
+					move->getOperand(0).setReg(llvm::X86::RBP);
+
+					auto unwind = move;
+					while(unwind != cleanupBlock.end() && !unwind->isCall())
+						++unwind;
+					assert(unwind != cleanupBlock.end());
+
+					// (mov|lea) ???, %rdi ; Pass victim to destructor.
+					addInst(
+						cleanupBlock,
+						unwind,
+						(*ctor)->getOpcode(),
+						[&ctor](auto &inst, auto &) {
+							inst.addReg(llvm::X86::RDI);
+
+							auto &src = (*ctor)->getOperand(1);
+							if(src.isReg())
+								inst.addReg(src.getReg());
+							else
+								inst.cloneMemRefs(**ctor);
+						}
+					);
+
+					dropCall = addInst(
+						cleanupBlock,
+						unwind,
+						unwind->getOpcode(),
+						[&dtor](auto &inst, auto &) {
+							inst.addGlobalAddress(dtor);
+						}
+					);
+
+					// mov %rbp, %rdi ; Pass _Unwind_Context pointer.
+					addInst(
+						cleanupBlock,
+						unwind,
+						move->getOpcode(),
+						[](auto &inst, auto &) {
+							inst.addReg(llvm::X86::RDI);
+							inst.addReg(llvm::X86::RBP);
+						}
+					);
+				}
+			}
+
 			if(dropCall != cleanupBlock.end()) {
+				auto &beginLabel = getOrCreateLabel(
+					mf.getOrCreateLandingPadInfo(&cleanupBlock).BeginLabels,
+					*beginBlock,
+					beginLoc,
+					changed
+				);
+
+				auto &endLabel = getOrCreateLabel(
+					mf.getOrCreateLandingPadInfo(&cleanupBlock).EndLabels,
+					*endBlock,
+					endLoc,
+					changed
+				);
+				outs() << "bounding labels: " << beginLabel << ' ' << endLabel << '\n';
+
 				auto &dropFun = *dropCall->getOperand(0).getGlobal();
 				outs() << "dropFun: " << dropFun.getName() << '\n';
 
@@ -121,6 +232,36 @@ struct IngerCancel: public MachineFunctionPass {
 	IngerCancel(): MachineFunctionPass(ID) {}
 
 private:
+	static MachineInstr &addInst(
+		MachineBasicBlock &block,
+		MachineInstrBundleIterator<MachineInstr> pos,
+		unsigned opcode,
+		std::function<void(const MachineInstrBuilder &, MCContext &)> operands
+	) {
+		auto &mf = *block.getParent();
+		auto &info = mf.getSubtarget().getInstrInfo()->get(opcode);
+		auto &inst = *mf.CreateMachineInstr(info, DebugLoc());
+		MachineInstrBuilder build(mf, inst);
+		operands(build, mf.getContext());
+		block.insert(pos, &inst);
+		return inst;
+	}
+
+	static const Function *findDtor(const Type &type, const MachineFunction &fun) {
+		for(auto &defn : *fun.getFunction().getParent()) {
+			if(defn.getName().contains("drop_in_place")) {
+				const auto &params = defn.getFunctionType()->params();
+				if(
+					params.size()
+					&& params.front()->isPointerTy()
+					&& static_cast<PointerType *>(params.front())->getElementType() == &type
+				)
+					return &defn;
+			}
+		}
+		return nullptr;
+	}
+
 	static std::optional<MachineInstrBundleIterator<MachineInstr>> findInst(
 		MachineFunction &mf,
 		std::function<bool(const MachineInstr &)> pred
@@ -133,6 +274,26 @@ private:
 		return {};
 	}
 
+	static const Function *getFunction(const MachineInstr &call) {
+		if(!call.isCall())
+			return nullptr;
+
+		return static_cast<const Function *>(call.getOperand(0).getGlobal());
+	}
+
+	static const Type *getFunctionSRetType(const Function &fun, size_t *param = nullptr) {
+		auto params = fun.getFunctionType()->params();
+		for(auto index = 0u; index != params.size(); ++index) {
+			auto *type = fun.getParamStructRetType(index);
+			if(type) {
+				if(param)
+					*param = index;
+				return type;
+			}
+		}
+		return nullptr;
+	}
+
 	static const FunctionType &getFunctionType(const MachineInstr &call) {
 		assert(call.isCall());
 
@@ -141,6 +302,29 @@ private:
 		assert(funType.isFunctionTy());
 
 		return static_cast<FunctionType &>(funType);
+	}
+
+	static MCSymbol &getOrCreateLabel(
+		SmallVector<MCSymbol *, 1> &labels,
+		MachineBasicBlock &block,
+		MachineInstrBundleIterator<MachineInstr> pos,
+		bool &changed
+	) {
+		if(labels.size())
+			return *labels.front();
+
+		auto &inst = addInst(
+			block,
+			pos,
+			llvm::TargetOpcode::EH_LABEL,
+			[](auto &inst, auto &syms) {
+				inst.addSym(syms.createTempSymbol());
+			}
+		);
+		auto &label = *inst.getOperand(0).getMCSymbol();
+		labels.push_back(&label);
+		changed = true;
+		return label;
 	}
 
 	static bool isCallTo(
