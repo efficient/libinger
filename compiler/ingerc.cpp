@@ -1,9 +1,6 @@
 #include "X86RegisterInfo.h"
 
-#include "llvm/ADT/BitVector.h"
-#include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
-#include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCContext.h"
