@@ -24,7 +24,7 @@ function processDefine(fun: string[]): string[] {
 				line,
 				0,
 				'  invoke void @"'
-					+ EPILOGUE
+					+ epilogue
 					+ '"() to label %'
 					+ label
 					+ ' unwind label %cleanup',
@@ -46,19 +46,26 @@ function processDefine(fun: string[]): string[] {
 	return fun;
 }
 
-if(Deno.args.length != 1) {
+let epilogue = EPILOGUE;
+const args = Deno.args.slice();
+if(args.length == 2)
+	epilogue = args.pop()!;
+
+if(args.length != 1) {
 	console.log(
-		'USAGE: ' + import.meta.url.replace(/.*\//, '') + ' <LLVM IR file>\n'
+		'USAGE: ' + import.meta.url.replace(/.*\//, '') + ' <LLVM IR file> [epilogue function]\n'
 		+ '\n'
 		+ 'Modify <LLVM IR file> to force llc to generate an LSDA for each function, even\n'
 		+ 'those that statically cannot raise exceptions.'
+		+ 'With [epilogue function], notify the runtime of epilogue entry by invoking the\n'
+		+ 'named function.'
 	);
 	Deno.exit(1);
 }
 
-const filename = Deno.args[0];
+const filename = args[0];
 let ll = new TextDecoder().decode(Deno.readFileSync(filename));
-let define = '\ndeclare void @"' + EPILOGUE + '"()';
+let define = '\ndeclare void @"' + epilogue + '"()';
 if(ll.includes(define)) {
 	console.log('We\'ve already processed this file!  Leaving it unchanged.');
 	Deno.exit(2);
