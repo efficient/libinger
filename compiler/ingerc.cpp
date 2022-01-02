@@ -1,3 +1,4 @@
+#include "X86InstrInfo.h"
 #include "X86RegisterInfo.h"
 
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -5,6 +6,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/MC/MCContext.h"
 
+#include <cstdlib>
 #include <dlfcn.h>
 
 using llvm::legacy::PassManager;
@@ -139,6 +141,22 @@ struct IngerCancel: public MachineFunctionPass {
 			}
 
 			if(dropCall != cleanupBlock.end()) {
+				if(getEpilogueFunction()) {
+					auto epilogue = findInst(mf, [](auto &inst) {
+						return inst.isCall()
+							&& getFunction(inst)->getName() == getEpilogueFunction();
+					});
+					if(epilogue) {
+						++*epilogue;
+						addInst(
+							*(*epilogue)->getParent(),
+							*epilogue,
+							llvm::X86::NOOP,
+							[](auto &, auto &) {}
+						);
+					}
+				}
+
 				auto &beginLabel = getOrCreateLabel(
 					mf.getOrCreateLandingPadInfo(&cleanupBlock).BeginLabels,
 					*beginBlock,
@@ -272,6 +290,16 @@ private:
 				return std::optional(inst);
 		}
 		return {};
+	}
+
+	static const char *getEpilogueFunction() {
+		static const char *epilogue = nullptr;
+		static bool memo = false;
+		if(!memo) {
+			epilogue = getenv("INGERC_EPILOGUE");
+			memo = true;
+		}
+		return epilogue;
 	}
 
 	static const Function *getFunction(const MachineInstr &call) {
