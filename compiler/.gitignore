@@ -1,3 +1,4 @@
+/X86InstrInfo.h
 /X86RegisterInfo.h
 
 *.o
