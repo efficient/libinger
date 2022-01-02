@@ -359,12 +359,15 @@ private:
 		const MachineInstr &inst,
 		std::function<bool(const GlobalValue *)> name
 	) {
+		if(!inst.isCall())
+			return false;
+
 		auto &operand = inst.getOperand(0);
 		const GlobalValue *fun = nullptr;
 		if(operand.isGlobal())
 			fun = operand.getGlobal();
 		// else it's an indirect call so we cannot know the function statically
-		return inst.isCall() && name(fun);
+		return name(fun);
 	}
 
 	static bool isCallUsing(const MachineInstr &inst, const Type &type) {
