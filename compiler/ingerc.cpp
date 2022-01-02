@@ -78,11 +78,14 @@ struct IngerCancel: public MachineFunctionPass {
 					++*ctor;
 					beginLoc = endLoc = *ctor;
 
-					// Examine the mov or lea before the constructor call.
-					--*ctor;
-					--*ctor;
+					// Find the mov or lea before the constructor call.
 					assert(argIndex == 0);
-					assert((*ctor)->getOperand(0).getReg() == llvm::X86::RDI);
+					--*ctor;
+					--*ctor;
+					while((*ctor)->getOperand(0).getReg() != llvm::X86::RDI) {
+						assert(*ctor != (*ctor)->getParent()->begin());
+						--*ctor;
+					}
 
 					auto move = cleanupBlock.begin();
 					while(move != cleanupBlock.end() && !move->isMoveReg())
