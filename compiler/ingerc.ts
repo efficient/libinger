@@ -30,7 +30,7 @@ function processDefine(fun: string[]): string[] {
 					+ ' unwind label %cleanup',
 				label + ':',
 			);
-			line += 3;
+			line += 2;
 		} else if(fun[line].match(/^cleanup:/))
 			cleanup = true;
 
