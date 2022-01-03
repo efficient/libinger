@@ -3,9 +3,13 @@
 # Skip the following LLVM optimization passes, which cause problems for us.
 readonly BADPASSES="function-attrs inline prune-eh"
 
-set -e
+crate="`rustc "$@" --print crate-name 2>/dev/null`"
+if [ "$?" -ne "0" ]
+then
+	exec rustc --help
+fi
 
-crate="`rustc "$@" --print crate-name`"
+set -e
 
 # Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
 args="`printf "'%s' " "$@" | sed "s/'-\?-emit' '[^']\+'//"`"
