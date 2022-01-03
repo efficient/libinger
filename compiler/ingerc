@@ -3,6 +3,15 @@
 # Skip the following LLVM optimization passes, which cause problems for us.
 readonly BADPASSES="function-attrs inline prune-eh"
 
+epiloguefun=""
+epiloguevar=""
+if [ "$1" = "-e" -a "$#" -ge "2" ]
+then
+	epiloguefun="$2"
+	epiloguevar="INGERC_EPILOGUE=$epiloguefun"
+	shift 2
+fi
+
 # Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
 args="`printf "'%s' " "$@" | sed "s/'-\?-emit\(' '\|=\)[^']\+'//"`"
 
@@ -10,6 +19,12 @@ finalstage="`echo "$*" | sed -n 's/.*-\?-emit[ =]\(\S\+\).*/\1/p'`"
 crate="`eval rustc $args --print crate-name 2>/dev/null`"
 if [ "$?" -ne "0" ]
 then
+	echo "USAGE: $0 [-e <epilogue notification function name>] [args]... <filename>"
+	echo
+	echo "If the -e switch is provided, it must come first.  These other switches are supported:"
+	echo "\t--emit <llvm-ir|ir|asm>"
+	echo "\trustc's usual options..."
+	echo
 	exec rustc --help
 fi
 
@@ -42,13 +57,13 @@ then
 	exit 0
 fi
 
-"$dir/ingerc.ts" "$crate.ll"
+"$dir/ingerc.ts" "$crate.ll" $epiloguefun
 if [ "$finalstage" = "ir" ]
 then
 	exit 0
 fi
 
-LD_PRELOAD="$dir/libingerc.so" llc "$crate.ll" >/dev/null
+eval LD_PRELOAD="'$dir/libingerc.so'" "$epiloguevar" llc "'$crate.ll'" >/dev/null
 if [ "$finalstage" = "asm" ]
 then
 	exit 0
