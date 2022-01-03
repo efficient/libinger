@@ -49,3 +49,10 @@ then
 fi
 
 LD_PRELOAD="$dir/libingerc.so" llc "$crate.ll" >/dev/null
+if [ "$finalstage" = "asm" ]
+then
+	exit 0
+fi
+
+linkargs="`printf "'%s' " "$@" | sed -e"s/\('-C\)' '\(link-arg=\)/\1\2/g" -e"s/' '/'\n'/g" | sed -n "s/^'-Clink-arg=\(.\+\)'$/\1/p"`"
+eval cc -no-pie -o "'$crate'" "'$crate.s'" $linkargs "'-l$std'"
