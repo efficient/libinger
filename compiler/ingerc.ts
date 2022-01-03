@@ -6,7 +6,7 @@ function processDefine(fun: string[]): string[] {
 	let personality = Boolean(fun[0].match(/\bpersonality\b/));
 	if(!personality)
 		fun[0] = fun[0].replace(
-			/{$/,
+			/(!dbg .+)?{$/,
 			'personality i32 ('
 				+ 'i32, '
 				+ 'i32, '

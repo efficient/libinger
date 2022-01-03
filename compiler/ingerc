@@ -70,4 +70,4 @@ then
 fi
 
 linkargs="`printf "'%s' " "$@" | sed -e"s/\('-C\)' '\(link-arg=\)/\1\2/g" -e"s/' '/'\n'/g" | sed -n "s/^'-Clink-arg=\(.\+\)'$/\1/p"`"
-eval cc -no-pie -o "'$crate'" "'$crate.s'" $linkargs "'-l$std'"
+eval cc -no-pie -Wa,-gdwarf-5 -o "'$crate'" "'$crate.s'" $linkargs "'-l$std'"
