@@ -12,7 +12,7 @@ fi
 set -e
 
 # Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
-args="`printf "'%s' " "$@" | sed "s/'-\?-emit' '[^']\+'//"`"
+args="`printf "'%s' " "$@" | sed "s/'-\?-emit\(' '\|=\)[^']\+'//"`"
 
 # These -Ccodegen-units=1 switches prevent unreadable output due to interleaving.
 allpasses="`eval rustc $args -Cllvm-args=-debug-pass=Arguments -Ccodegen-units=1 2>&1`"
