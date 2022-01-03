@@ -3,6 +3,10 @@
 # Skip the following LLVM optimization passes, which cause problems for us.
 readonly BADPASSES="function-attrs inline prune-eh"
 
+set -e
+
+crate="`rustc "$@" --print crate-name`"
+
 # Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
 args="`printf "'%s' " "$@" | sed "s/'-\?-emit' '[^']\+'//"`"
 
@@ -24,5 +28,8 @@ manualswitches="`echo "$badnames" | sed -e's/^/-e/'`"
 
 passnames="`echo "$manualnames" | grep -vxF $manualswitches`"
 
-# This -Ccodegen-units=1 switch avoids a segfault due to some race condition related to -Cpasses.
-exec rustc "$@" -Cno-prepopulate-passes -Cpasses="$passnames" -Ccodegen-units=1
+dir="`dirname "$0"`"
+std="`LD_TRACE_LOADED_OBJECTS= rustc | grep -o 'std-[^.]\+' | uniq`"
+rustc "$@" --emit llvm-ir -Cno-prepopulate-passes -Cpasses="$passnames"
+"$dir/ingerc.ts" "$crate.ll"
+LD_PRELOAD="$dir/libingerc.so" llc "$crate.ll" >/dev/null
