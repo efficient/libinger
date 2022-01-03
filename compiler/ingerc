@@ -3,7 +3,11 @@
 # Skip the following LLVM optimization passes, which cause problems for us.
 readonly BADPASSES="function-attrs inline prune-eh"
 
-crate="`rustc "$@" --print crate-name 2>/dev/null`"
+# Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
+args="`printf "'%s' " "$@" | sed "s/'-\?-emit\(' '\|=\)[^']\+'//"`"
+
+finalstage="`echo "$*" | sed -n 's/.*-\?-emit[ =]\(\S\+\).*/\1/p'`"
+crate="`eval rustc $args --print crate-name 2>/dev/null`"
 if [ "$?" -ne "0" ]
 then
 	exec rustc --help
@@ -11,12 +15,10 @@ fi
 
 set -e
 
-# Temporarily drop any --emit or -emit because it would prevent us from getting LLVM debug output.
-args="`printf "'%s' " "$@" | sed "s/'-\?-emit\(' '\|=\)[^']\+'//"`"
-
 # These -Ccodegen-units=1 switches prevent unreadable output due to interleaving.
 allpasses="`eval rustc $args -Cllvm-args=-debug-pass=Arguments -Ccodegen-units=1 2>&1`"
 autopasses="`eval rustc $args -Cllvm-args=-debug-pass=Arguments -Cno-prepopulate-passes -Ccodegen-units=1 2>&1`"
+rm -f "$crate"
 
 # Each line is a grep-compatible command-line switch.
 autoswitches="`echo "$autopasses" | sed -e's/^/-e"/' -e's/: \+/: \\\\+/g' -e's/$/"/'`"
@@ -34,6 +36,16 @@ passnames="`echo "$manualnames" | grep -vxF $manualswitches`"
 
 dir="`dirname "$0"`"
 std="`LD_TRACE_LOADED_OBJECTS= rustc | grep -o 'std-[^.]\+' | uniq`"
-rustc "$@" --emit llvm-ir -Cno-prepopulate-passes -Cpasses="$passnames"
+eval rustc $args --emit llvm-ir -Cno-prepopulate-passes -Cpasses="'$passnames'"
+if [ "$finalstage" = "llvm-ir" ]
+then
+	exit 0
+fi
+
 "$dir/ingerc.ts" "$crate.ll"
+if [ "$finalstage" = "ir" ]
+then
+	exit 0
+fi
+
 LD_PRELOAD="$dir/libingerc.so" llc "$crate.ll" >/dev/null
