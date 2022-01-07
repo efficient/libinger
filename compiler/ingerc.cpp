@@ -39,10 +39,12 @@ struct IngerCancel: public MachineFunctionPass {
 		auto changed = false;
 		auto &pads = mf.getLandingPads();
 		if(getEpilogueFunction()) {
-			auto epilogue = findInst(mf, [](auto &inst) {
-				return inst.isCall()
-					&& getFunction(inst)->getName() == getEpilogueFunction();
-			});
+			auto epilogue = findInst(
+				mf,
+				std::bind(isCallTo, std::placeholders::_1, [](auto *fun) {
+					return fun && fun->getName() == getEpilogueFunction();
+				})
+			);
 			if(epilogue) {
 				auto *cfi = findFirstPad(mf);
 				if(!cfi) {
