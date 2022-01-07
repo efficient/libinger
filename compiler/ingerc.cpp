@@ -34,12 +34,55 @@ using llvm::outs;
 namespace {
 struct IngerCancel: public MachineFunctionPass {
 	virtual bool runOnMachineFunction(MachineFunction &mf) override {
-		if(mf.getName().contains("drop_in_place"))
-			return false;
 		outs() << "FUNCTION: " << mf.getName() << '\n';
 
 		auto changed = false;
-		for(auto &pad : mf.getLandingPads()) {
+		auto &pads = mf.getLandingPads();
+		if(getEpilogueFunction()) {
+			auto epilogue = findInst(mf, [](auto &inst) {
+				return inst.isCall()
+					&& getFunction(inst)->getName() == getEpilogueFunction();
+			});
+			if(epilogue) {
+				auto *cfi = findFirstPad(mf);
+				if(!cfi) {
+					cfi = pads.front().LandingPadBlock->getPrevNode();
+					while(!cfi->front().isCFIInstruction())
+						cfi = cfi->getPrevNode();
+				}
+
+				auto index = cfi->front().getOperand(0).getCFIIndex();
+				auto off = mf.getFrameInstructions()[index].getOffset();
+				addInst(
+					*(*epilogue)->getParent(),
+					*epilogue,
+					llvm::X86::LEA64r,
+					[&off](auto &inst, auto &) {
+						inst.addReg(llvm::X86::RDI);
+
+						// off(%rsp), see X86InstrBuilder.h:addRegOffset()
+						inst.addReg(llvm::X86::RSP);
+						inst.addImm(1);
+						inst.addReg(0);
+						inst.addImm(off);
+						inst.addReg(0);
+					}
+				);
+				++*epilogue;
+				addInst(
+					*(*epilogue)->getParent(),
+					*epilogue,
+					llvm::X86::NOOP,
+					[](auto &, auto &) {}
+				);
+				changed = true;
+			}
+		}
+
+		if(mf.getName().contains("drop_in_place"))
+			return changed;
+
+		for(auto &pad : pads) {
 			auto &cleanupBlock = *pad.LandingPadBlock;
 			outs() << "landing pad: " << *pad.LandingPadLabel << '\n';
 
@@ -141,46 +184,6 @@ struct IngerCancel: public MachineFunctionPass {
 			}
 
 			if(dropCall != cleanupBlock.end()) {
-				if(getEpilogueFunction()) {
-					auto epilogue = findInst(mf, [](auto &inst) {
-						return inst.isCall()
-							&& getFunction(inst)->getName() == getEpilogueFunction();
-					});
-					if(epilogue) {
-						auto *cfi = findFirstPad(mf);
-						if(!cfi) {
-							cfi = pad.LandingPadBlock->getPrevNode();
-							while(!cfi->front().isCFIInstruction())
-								cfi = cfi->getPrevNode();
-						}
-
-						auto index = cfi->front().getOperand(0).getCFIIndex();
-						auto off = mf.getFrameInstructions()[index].getOffset();
-						addInst(
-							*(*epilogue)->getParent(),
-							*epilogue,
-							llvm::X86::LEA64r,
-							[&off](auto &inst, auto &) {
-								inst.addReg(llvm::X86::RDI);
-
-								// off(%rsp), see X86InstrBuilder.h:addRegOffset()
-								inst.addReg(llvm::X86::RSP);
-								inst.addImm(1);
-								inst.addReg(0);
-								inst.addImm(off);
-								inst.addReg(0);
-							}
-						);
-						++*epilogue;
-						addInst(
-							*(*epilogue)->getParent(),
-							*epilogue,
-							llvm::X86::NOOP,
-							[](auto &, auto &) {}
-						);
-					}
-				}
-
 				auto &beginLabel = getOrCreateLabel(
 					mf.getOrCreateLandingPadInfo(&cleanupBlock).BeginLabels,
 					*beginBlock,
