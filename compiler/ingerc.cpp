@@ -147,6 +147,30 @@ struct IngerCancel: public MachineFunctionPass {
 							&& getFunction(inst)->getName() == getEpilogueFunction();
 					});
 					if(epilogue) {
+						auto *cfi = findFirstPad(mf);
+						if(!cfi) {
+							cfi = pad.LandingPadBlock->getPrevNode();
+							while(!cfi->front().isCFIInstruction())
+								cfi = cfi->getPrevNode();
+						}
+
+						auto index = cfi->front().getOperand(0).getCFIIndex();
+						auto off = mf.getFrameInstructions()[index].getOffset();
+						addInst(
+							*(*epilogue)->getParent(),
+							*epilogue,
+							llvm::X86::LEA64r,
+							[&off](auto &inst, auto &) {
+								inst.addReg(llvm::X86::RDI);
+
+								// off(%rsp), see X86InstrBuilder.h:addRegOffset()
+								inst.addReg(llvm::X86::RSP);
+								inst.addImm(1);
+								inst.addReg(0);
+								inst.addImm(off);
+								inst.addReg(0);
+							}
+						);
 						++*epilogue;
 						addInst(
 							*(*epilogue)->getParent(),
@@ -276,6 +300,15 @@ private:
 				)
 					return &defn;
 			}
+		}
+		return nullptr;
+	}
+
+	static MachineBasicBlock *findFirstPad(MachineFunction &fun) {
+		for(auto &pad : fun.getLandingPads()) {
+			auto &block = *pad.LandingPadBlock;
+			if(block.front().isCFIInstruction())
+				return &block;
 		}
 		return nullptr;
 	}
