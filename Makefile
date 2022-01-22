@@ -100,7 +100,8 @@ shared.o: private CFLAGS += -fpic
 shared.o: private CPPFLAGS += -D_GNU_SOURCE
 shared.o: shared.h namespace.h
 tcb.o: private CFLAGS += -fpic -ftls-model=initial-exec
-tcb.o: tcb.h threads.h
+tcb.o: private CPPFLAGS += -D_GNU_SOURCE
+tcb.o: tcb.h namespace.h threads.h
 whitelist.o: private CPPFLAGS += -D_GNU_SOURCE
 whitelist.o: whitelist.h config.h handle.h namespace.h
 

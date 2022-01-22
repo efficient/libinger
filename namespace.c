@@ -6,11 +6,15 @@
 #include <threads.h>
 
 // NB: Unlike other modules, the thread_local variables defined herein do not persist across TCB
-//     switches.  The backing stores for namespace_{thread,caller}() are "exceptions": since we can
-//     only run our own code in the shared namespace and all manual TCB switches occur within our
-//     code, the PLOT trampoline always restores an accurate accounting of the namespace to the
-//     *current* TCB on the way back out of any call into us from a non-shared namespace.  Another
-//     weird case is the namespace_trampolining() backing store: although declared as a global, it
+//     switches.  The backing stores for namespace_{caller,thread}() are "exceptions", for two
+//     different reasons:
+//      * The tcb module manually copies over the caller namespace whenever a new TCB is installed.
+//      * Since we only run our own code in the shared namespace and all manual TCB switches occur
+//        within our code, the PLOT trampoline will always restore the *installed* TCB's current
+//        namespace from its caller namespace on its way back out of any call into us from a
+//        non-shared namespace.
+//
+//     One weird case is the namespace_trampolining() backing store: though declared as a global, it
 //     is actually an emulated TCB-agnostic thread-local variable, which is necessary because we
 //     cannot affort __tls_get_addr() calls from the injected procedure_linkage_override() code.
 //     (If we ever want to support pthread_create() or clone() calls from a non-shared namespace,
@@ -22,7 +26,7 @@ Lmid_t *namespace_thread(void) {
 	return &namespace;
 }
 
-const Lmid_t *namespace_caller(void) {
+Lmid_t *namespace_caller(void) {
 	static thread_local Lmid_t namespace = LM_ID_BASE;
 	return &namespace;
 }
