@@ -35,7 +35,6 @@ int tcb_prctl(int code, uintptr_t addr) {
 		uintptr_t *parent_tcb = tcb_parent();
 		assert(parent_tcb != before);
 		*namespace_caller() = caller;
-		assert(caller);
 		*tcb_custom() = addr;
 		if(prev)
 			*parent_tcb = prev;
