@@ -211,8 +211,20 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 	if((!h->path || !*h->path) && !(h->path = (char *) handle_progname()))
 		return ERROR_FNAME_PATH;
 
-	h->baseaddr = l->l_addr;
-	h->vdso = h->baseaddr == getauxval(AT_SYSINFO_EHDR);
+	if(l->l_addr) {
+		h->baseaddr = l->l_addr;
+		h->vdso = h->baseaddr == getauxval(AT_SYSINFO_EHDR);
+	} else {
+		// Workaround for an rr 5.5.0 regression where proxying the vdso through
+		// librrpage.so violates a dynamic linker assumption and causes its setup_vdso()
+		// function to set l->l_addr to NULL.  Get the base address from the auxiliary
+		// vector instead.  Because we're not looking at the real vdso, disable the ordinary
+		// quirks for handling its limitations.
+		assert(!strncmp(l->l_name, "linux-vdso.so", strlen("linux-vdso.so")));
+		h->baseaddr = getauxval(AT_SYSINFO_EHDR);
+		h->vdso = false;
+	}
+
 	if(owner == l) {
 		h->owned = true;
 		if(owner == dlopen(NULL, RTLD_LAZY))
