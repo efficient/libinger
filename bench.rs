@@ -90,6 +90,22 @@ fn hook(lo: &mut impl Bencher) {
 }
 
 #[bench]
+fn prehook(lo: &mut impl Bencher) {
+	extern {
+		fn libgotcha_shared_prehook(_: Option<extern fn()>);
+	}
+
+	extern fn callback() {}
+	unsafe {
+		libgotcha_shared_prehook(Some(callback));
+	}
+	whitelist(lo);
+	unsafe {
+		libgotcha_shared_prehook(None);
+	}
+}
+
+#[bench]
 fn global(lo: &mut impl Bencher) {
 	use std::ptr::read_volatile;
 	use test::black_box;

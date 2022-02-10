@@ -144,3 +144,4 @@ size_t plot_pagesize(void) {
 void libgotcha_group_new(void) {}
 void (*libgotcha_group_thread_accessor(void))(void) { return nop; }
 void libgotcha_shared_hook(void) {}
+void libgotcha_shared_prehook(void) {}
