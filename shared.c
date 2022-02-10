@@ -17,5 +17,5 @@ void shared_prehook(void (*hook)(void)) {
 		.sa_handler = (void (*)(int)) hook,
 	};
 	sigaction(SIGTRAP, &sa, NULL);
-	shared_pretrampoline = true;
+	shared_pretrampoline = hook != NULL;
 }
