@@ -42,7 +42,7 @@ bench: private RUSTFLAGS += --test -L. --extern test=libtest.rlib
 bench: libbenchmark.so libtest.rlib
 
 libbenchmark.so: private LDLIBS += -ldl
-libtest.rlib: private RUSTC := RUSTC_BOOTSTRAP= $(RUSTC)
+libtest.rlib: private RUSTC := RUSTC_BOOTSTRAP=1 $(RUSTC)
 
 goot.rs: private BINDFLAGS += --raw-line "\#![allow(non_camel_case_types, non_upper_case_globals)]"
 goot.rs: plot.h

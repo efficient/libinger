@@ -1,3 +1,5 @@
+#![allow(soft_unstable)]
+
 extern crate test;
 
 use std::os::raw::c_int;
