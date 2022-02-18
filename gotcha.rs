@@ -131,3 +131,10 @@ pub fn shared_hook(callback: extern fn()) {
 		libgotcha_shared_hook(Some(callback));
 	}
 }
+
+pub fn shared_prehook(callback: extern fn()) {
+	use libgotcha_api::libgotcha_shared_prehook;
+	unsafe {
+		libgotcha_shared_prehook(Some(callback));
+	}
+}
