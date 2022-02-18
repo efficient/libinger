@@ -18,26 +18,26 @@ use std::os::raw::c_int;
 
 const SIGSETCONTEXT: c_int = SIGWINCH;
 
-///! A continuation representing a "snapshot" of this thread's execution at a particular point in time.
-///!
-///! There are two types of continuations: a _normal_ continuation or a _call gate_ continuation.
-///! The difference is that the former execute on the same execution stack, whereas the latter execute on a dedicated owned stack.
-///! Passing the wrong type of continuation to a function results in a runtime error indicated by a sentinel return value, usually `None`.
-///!
-///! Each continuation has some dynamic lifetime during which its stack frame persists and is safe to execute code on.
-///! These are tracked at runtime, and an attempt to perform a continuation action on an expired `Context` results in an error.
-///! Even though they have their own execution stacks, call gate continuations have a finite lifetime because they return to the original stack upon completion.
-///! Some call gates have a `StableMutAddr` type parameter rather than a mere `DerefMut`;
-///! since their stacks outlive the creation stack frame such continuations may be transplanted onto a new successor stack frame to extend their lifetime.
+/// A continuation representing a "snapshot" of this thread's execution at a particular point in time.
+///
+/// There are two types of continuations: a _normal_ continuation or a _call gate_ continuation.
+/// The difference is that the former execute on the same execution stack, whereas the latter execute on a dedicated owned stack.
+/// Passing the wrong type of continuation to a function results in a runtime error indicated by a sentinel return value, usually `None`.
+///
+/// Each continuation has some dynamic lifetime during which its stack frame persists and is safe to execute code on.
+/// These are tracked at runtime, and an attempt to perform a continuation action on an expired `Context` results in an error.
+/// Even though they have their own execution stacks, call gate continuations have a finite lifetime because they return to the original stack upon completion.
+/// Some call gates have a `StableMutAddr` type parameter rather than a mere `DerefMut`;
+/// since their stacks outlive the creation stack frame such continuations may be transplanted onto a new successor stack frame to extend their lifetime.
 pub struct Context<S: DerefMut<Target = [u8]> = Void> {
 	id: Id,
 	context: RefCell<ucontext_t>,
 	persistent: Option<Persistent<S>>,
 }
 
-///! The context received by a signal handler as its third argument.
-///!
-///! See the `Context` struct's `swap()` method.
+/// The context received by a signal handler as its third argument.
+///
+/// See the `Context` struct's `swap()` method.
 pub type HandlerContext = ucontext_t;
 
 struct Persistent<S: DerefMut<Target = [u8]>> {
@@ -47,16 +47,16 @@ struct Persistent<S: DerefMut<Target = [u8]>> {
 	handler: bool,
 }
 
-///! The signal mask that will be restored along with a continuation.
+/// The signal mask that will be restored along with a continuation.
 pub struct SignalMask<'a> (RefMut<'a, ucontext_t>);
 
-///! Checkpoint the execution state of the thread.
-///!
-///! Calling this function results in a call to the `scope` closure, which may optionally call `setcontext()` on its continuation argument.
-///! If and only if it does so, the `checkpoint` closure is called.
-///!
-///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `checkpoint`, which is then restarted from the beginning.
-///! However, the continuation is automatically invalidated once `getcontext()` returns, since its checkpointed stack frame no longer exists.
+/// Checkpoint the execution state of the thread.
+///
+/// Calling this function results in a call to the `scope` closure, which may optionally call `setcontext()` on its continuation argument.
+/// If and only if it does so, the `checkpoint` closure is called.
+///
+/// Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `checkpoint`, which is then restarted from the beginning.
+/// However, the continuation is automatically invalidated once `getcontext()` returns, since its checkpointed stack frame no longer exists.
 pub fn getcontext<T>(scope: impl FnOnce(Context<Void>) -> T, mut checkpoint: impl FnMut() -> T) -> Result<T> {
 	use crate::volatile::VolBool;
 
@@ -88,14 +88,14 @@ pub fn getcontext<T>(scope: impl FnOnce(Context<Void>) -> T, mut checkpoint: imp
 	Ok(res)
 }
 
-///! Run code on a separate execution stack.
-///!
-///! Call this function with an allocated region to use as a stack.
-///! The `gate` function will be called immediately on the original stack, and may optionally `setcontext()` on its continuation argument.
-///! If and only if it does so, the `call` closure is called on the dedicated stack.
-///!
-///! Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `call`, which is then restarted from the beginning.
-///! However, once `call` returns, control returns to the `makecontext()` call site and the continuation is automatically invalidated.
+/// Run code on a separate execution stack.
+///
+/// Call this function with an allocated region to use as a stack.
+/// The `gate` function will be called immediately on the original stack, and may optionally `setcontext()` on its continuation argument.
+/// If and only if it does so, the `call` closure is called on the dedicated stack.
+///
+/// Note that by storing the continuation, it is possible to invoke `setcontext()` again from within `call`, which is then restarted from the beginning.
+/// However, once `call` returns, control returns to the `makecontext()` call site and the continuation is automatically invalidated.
 pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Context<S>), call: fn()) -> Result<()> {
 	use libc::pthread_sigmask;
 	use std::mem::transmute;
@@ -171,15 +171,15 @@ pub fn makecontext<S: DerefMut<Target = [u8]>>(stack: S, gate: impl FnOnce(Conte
 	Ok(())
 }
 
-///! Graft a continuation with an owned stack onto the current stack frame, restoring its validity.
-///!
-///! Normally, it is not possible to call a continuation after the stack frame where it was created no longer exists.
-///! However, if the continuation is a call gate that owns its stack, client code may patch it by calling this function on it.
-///! (This constraint is checked at compile time: note the tighter type bound.)
-///!
-///! Upon calling this function, the `scope` closure is invoked, which may then choose to invoke `setcontext()` or `sigsetcontext()` on the updated continuation, as appropriate.
-///! Even if the continuation had previously been invalidated, a valid such call will now succeed, and control will return to the call site of `restorecontext()` upon completion.
-///! However, once `restorecontext()` returns, the continuation is automatically invalidated once again.
+/// Graft a continuation with an owned stack onto the current stack frame, restoring its validity.
+///
+/// Normally, it is not possible to call a continuation after the stack frame where it was created no longer exists.
+/// However, if the continuation is a call gate that owns its stack, client code may patch it by calling this function on it.
+/// (This constraint is checked at compile time: note the tighter type bound.)
+///
+/// Upon calling this function, the `scope` closure is invoked, which may then choose to invoke `setcontext()` or `sigsetcontext()` on the updated continuation, as appropriate.
+/// Even if the continuation had previously been invalidated, a valid such call will now succeed, and control will return to the call site of `restorecontext()` upon completion.
+/// However, once `restorecontext()` returns, the continuation is automatically invalidated once again.
 pub fn restorecontext<S: StableMutAddr<Target = [u8]>>(mut persistent: Context<S>, scope: impl FnOnce(Context<S>)) -> Result<()> {
 	getcontext(
 		|successor| {
@@ -217,15 +217,15 @@ fn validatecontext<S: DerefMut<Target = [u8]>>(continuation: &Context<S>, handle
 	handler == handler_desired
 }
 
-///! Call a continuation produced by `getcontext()` or `makecontext()`.
-///!
-///! Upon success, this function never returns.
-///! If it does return, the error value may be either of:
-///! * `None`, to indicate that `continuation` was invalid (expired or obtained from a signal handler)
-///! * `Some(Error)`, to indicate a platform error
-///!
-///! **Note that this function's atypical control flow makes it easy to leak memory.
-///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
+/// Call a continuation produced by `getcontext()` or `makecontext()`.
+///
+/// Upon success, this function never returns.
+/// If it does return, the error value may be either of:
+/// * `None`, to indicate that `continuation` was invalid (expired or obtained from a signal handler)
+/// * `Some(Error)`, to indicate a platform error
+///
+/// **Note that this function's atypical control flow makes it easy to leak memory.
+/// To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -> Option<Error> {
 	use crate::errno::errno;
@@ -257,13 +257,13 @@ pub fn setcontext<S: DerefMut<Target = [u8]>>(continuation: *const Context<S>) -
 	Some(Error::last_os_error())
 }
 
-///! Restore a checkpoint that was saved from a signal handler using `Context::swap()`.
-///!
-///! Upon success, this function never returns.
-///! If it does return, the error value has the same meaning as that of `setcontext()`.
-///!
-///! **Note that this function's atypical control flow makes it easy to leak memory.
-///! To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
+/// Restore a checkpoint that was saved from a signal handler using `Context::swap()`.
+///
+/// Upon success, this function never returns.
+/// If it does return, the error value has the same meaning as that of `setcontext()`.
+///
+/// **Note that this function's atypical control flow makes it easy to leak memory.
+/// To avoid this pitfall, be sure to `drop()` local variables _before_ calling it.**
 #[must_use]
 pub fn sigsetcontext<S: StableMutAddr<Target = [u8]>>(continuation: *mut Context<S>) -> Option<Error> {
 	use crate::errno::errno;
@@ -372,7 +372,7 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 		}
 	}
 
-	///! Obtain write access to this continuation's signal mask.
+	/// Obtain write access to this continuation's signal mask.
 	pub fn mask(&mut self) -> SignalMask {
 		SignalMask (self.context.borrow_mut())
 	}
@@ -381,13 +381,13 @@ impl<S: DerefMut<Target = [u8]>> Context<S> {
 impl<S: StableMutAddr<Target = [u8]>> Swap for Context<S> {
 	type Other = HandlerContext;
 
-	///! Call from a signal handler to exchange that handler's context with this call gate.
-	///!
-	///! The continuation on which this is called must have been obtained from a call to `makecontext()`;
-	///! otherwise, this method simply returns `false`.
-	///! The immediate effect of a successful call is that, upon returning from the signal handler, control is transferred to this continuation's _successor_.
-	///! Meanwhile, the handler's original context is saved in this continuation.
-	///! Client code may later restore the checkpoint using the `sigsetcontext()` function.
+	/// Call from a signal handler to exchange that handler's context with this call gate.
+	///
+	/// The continuation on which this is called must have been obtained from a call to `makecontext()`;
+	/// otherwise, this method simply returns `false`.
+	/// The immediate effect of a successful call is that, upon returning from the signal handler, control is transferred to this continuation's _successor_.
+	/// Meanwhile, the handler's original context is saved in this continuation.
+	/// Client code may later restore the checkpoint using the `sigsetcontext()` function.
 	#[must_use]
 	fn swap(&mut self, other: &mut Self::Other) -> bool {
 		let persistent = self.persistent.as_mut().unwrap();
