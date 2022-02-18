@@ -35,6 +35,7 @@ struct handle {
 	uintptr_t baseaddr;
 	bool vdso;
 	bool owned;
+	bool dependent;
 	bool eager;
 	bool sonamed;
 	void (*ldaccess)(void);

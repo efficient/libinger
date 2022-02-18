@@ -286,7 +286,13 @@ enum error handle_init(struct handle *h, const struct link_map *l, struct link_m
 		h->symtab = (ElfW(Sym) *) (h->baseaddr + (uintptr_t) h->symtab);
 		symhash = (struct sym_hash *) (h->baseaddr + (uintptr_t) symhash);
 		h->strtab = (char *) (h->baseaddr + (uintptr_t) h->strtab);
-	}
+	} else if(config_exitanalysis()) {
+		const char *self = strrchr(namespace_self()->l_name, '/') + 1;
+		for(const ElfW(Dyn) *d = l->l_ld; d->d_tag != DT_NULL; ++d)
+			if(d->d_tag == DT_NEEDED && !strcmp(h->strtab + d->d_un.d_val, self))
+				h->dependent = true;
+	} else
+		h->dependent = true;
 
 	// Use the symbol hash table to determine the size of the symbol table, if the former is
 	// present.  Otherwise, employ the same heuristic used by GNU ld.so's dl-addr.c
@@ -644,6 +650,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 	assert(n <= config_numgroups());
 
 	bool self = myself(h);
+	bool noexits = !h->dependent && !n;
 	bool partial = whitelist_so_partial(h->path);
 
 	// First, update ancillary namespaces' shadow GOT entries for symbols defined in this same
@@ -707,7 +714,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 						tramp = h->globdats[r - h->miscrels];
 					}
 
-					if(tramp && (!redirected || n))
+					if(tramp && (!redirected || n) && !noexits)
 						// ...and install it over the GOT entry.
 						*got = tramp;
 				}
@@ -752,7 +759,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 
 			// Skip updating the GOT for *this* library, because we don't want to force
 			// any automatic namespace switches once our own code is already running.
-			if(!self) {
+			if(!self && !noexits) {
 				// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
 				// their reality and substitute the one from *this* library if it's an
 				// interposed symbol.  But never do the latter for a partially-whitelisted

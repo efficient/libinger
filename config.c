@@ -12,6 +12,12 @@ bool config_staticlink(void) {
 	return &libgotcha_staticlink && libgotcha_staticlink;
 }
 
+bool config_exitanalysis(void) {
+	#pragma weak libgotcha_exitanalysis
+	extern const bool libgotcha_exitanalysis;
+	return &libgotcha_exitanalysis && libgotcha_exitanalysis;
+}
+
 bool config_skip(const char *progname) {
 	static bool memo;
 	static const char *list;
