@@ -41,7 +41,7 @@ cp external/libgotcha/libgotcha_repl.h "target/$buildtype"
 objcopy -Wsignal --globalize-symbol libgotcha_dlsym --globalize-symbol libgotcha_signal "target/$buildtype/deps/libgotcha-"*.rlib 2>/dev/null
 rm "target/$buildtype/deps/libinger.so"
 cd -
-c99 $cflags -Wall -Wextra -Wpedantic -Werror "$@" -c -fpic -fno-optimize-sibling-calls -D_DEFAULT_SOURCE -D_XOPEN_SOURCE -Wno-missing-attributes -I"$OLDPWD/target/$buildtype" testinger.c
+c99 $cflags -Wall -Wextra -Wpedantic -Werror "$@" -c -fpic -fno-optimize-sibling-calls -D_GNU_SOURCE -Wno-missing-attributes -I"$OLDPWD/target/$buildtype" testinger.c
 cd -
 cargo rustc $cargoflags --lib -- -Clink-arg="$OLDPWD/testinger.o"
 cd -

@@ -5,9 +5,9 @@
 #include <sys/select.h>
 #include <sys/types.h>
 #include <assert.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <link.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,12 +38,18 @@ static int testinger(int argc, char **argv, char **envp) {
 }
 
 #pragma weak libtestinger_libc_start_main = __libc_start_main
-int __libc_start_main(int (*main)(int, char **, char **), int argc, char**argv, int (*init)(int, char **, char **), void (*fini)(void), void (*rtld_fini)(void), void *stack_end) {
+int __libc_start_main(int (*main)(int, char **, char **), int argc, char **argv, int (*init)(int, char **, char **), void (*fini)(void), void (*rtld_fini)(void), void *stack_end) {
 	const char *skiplist = getenv("LIBGOTCHA_SKIP");
 	if(skiplist && strstr(skiplist, *argv))
 		return __libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end);
 
-	mainfunc = main;
+	struct link_map *lm = dlmopen(1, *argv, RTLD_LAZY);
+	dlclose(lm);
+
+	const struct link_map *l = dlopen(NULL, RTLD_LAZY);
+	uintptr_t offset = (uintptr_t) main - l->l_addr;
+	mainfunc = (int (*)(int, char **, char **)) (lm->l_addr + offset);
+
 	return __libc_start_main(testinger, argc, argv, init, fini, rtld_fini, stack_end);
 }
 
