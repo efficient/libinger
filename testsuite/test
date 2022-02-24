@@ -11,7 +11,7 @@ set -ve
 [ ! -e gnulib/configure ] && "$GNULIB/gnulib-tool" --create-testdir --dir gnulib --single-configure `"$GNULIB/posix-modules"`
 [ ! -e Makefile ] && gnulib/configure CFLAGS="-fpic -g3"
 make -j"`getconf _NPROCESSORS_ONLN`"
-[ ! -e gltests/test-suite.log ] && make check
+[ ! -e gltests/test-suite.log ] && make check || true
 make check LD_PRELOAD="$PWD/libtestinger.so" LIBGOTCHA_NUMGROUPS="1" LIBGOTCHA_SKIP="`cat <<-tac
 	/bin/bash
 	/usr/bin/cat
