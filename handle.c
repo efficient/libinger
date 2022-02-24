@@ -752,14 +752,14 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 			// definition or a PLT trampoline).
 			*sgot = sgot_entry(sym, n, *got);
 
-			if(!h->eager)
-				// Instruct the dynamic linker to update the *shadow* GOT entry if
-				// the PLT trampoline is later invoked.
-				((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
-
 			// Skip updating the GOT for *this* library, because we don't want to force
 			// any automatic namespace switches once our own code is already running.
 			if(!self && !noexits) {
+				if(!h->eager)
+					// Instruct the dynamic linker to update the *shadow* GOT entry if
+					// the PLT trampoline is later invoked.
+					((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
+
 				// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
 				// their reality and substitute the one from *this* library if it's an
 				// interposed symbol.  But never do the latter for a partially-whitelisted
