@@ -694,6 +694,7 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 				assert(ELF64_ST_TYPE(st->st_info) != STT_GNU_IFUNC);
 
 				bool redirected = false;
+				bool forced = false;
 				if(*got && (*got != base + st->st_value || (redirected = partial))) {
 					// This is not an undefined weak symbol, and the reference didn't
 					// resolve back to our own object file.  Let's look up the address
@@ -708,13 +709,14 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 						uintptr_t uninterposed = trampolines_get(*got);
 						tramp = redirected ? uninterposed :
 							got_trampoline(h->strtab + st->st_name, uninterposed);
+						forced = tramp != uninterposed;
 
 						h->globdats[r - h->miscrels] = tramp;
 					} else {
 						tramp = h->globdats[r - h->miscrels];
 					}
 
-					if(tramp && (!redirected || n) && !noexits)
+					if(tramp && (!redirected || n) && (!noexits || forced))
 						// ...and install it over the GOT entry.
 						*got = tramp;
 				}
@@ -752,21 +754,30 @@ static inline void handle_got_shadow_init(const struct handle *h, Lmid_t n, uint
 			// definition or a PLT trampoline).
 			*sgot = sgot_entry(sym, n, *got);
 
-			// Skip updating the GOT for *this* library, because we don't want to force
-			// any automatic namespace switches once our own code is already running.
-			if(!self && !noexits) {
+			// Find the PLOT trampoline from the library defining the symbol.  Or reject
+			// their reality and substitute the one from *this* library if it's an
+			// interposed symbol.  But never do the latter for a partially-whitelisted
+			// library's relocation unless we would have processed it were the library
+			// fully whitelisted.
+			uintptr_t uninterposed = plot_trampoline(h, tramp);
+			uintptr_t tramp = redirected ? uninterposed : got_trampoline(sym, uninterposed);
+			bool forced = tramp != uninterposed;
+
+			// Time to update the GOT entry.  But skip and do nothing in these cases:
+			//  * For *this* library, because we don't want to force any automatic
+			//    namespace switches once our own code is already running.
+			//  * If the control library enabled the exit analysis optimization *and*
+			//    the currently library does not depend on us *and* we're in the base
+			//    namespace *and* we do not force interposition of this symbol.  Because
+			//    the control library has promised us there's no reason we need to
+			//    intercept calls from this library.
+			if(!self && (!noexits || forced)) {
 				if(!h->eager)
 					// Instruct the dynamic linker to update the *shadow* GOT entry if
 					// the PLT trampoline is later invoked.
 					((ElfW(Rela) *) r)->r_offset = (uintptr_t) sgot - base;
 
-				// Install our corresponding PLOT trampoline over the GOT entry.  Or reject
-				// their reality and substitute the one from *this* library if it's an
-				// interposed symbol.  But never do the latter for a partially-whitelisted
-				// library's relocation unless we would have processed it were the library
-				// fully whitelisted.
-				uintptr_t uninterposed = plot_trampoline(h, tramp);
-				*got = redirected ? uninterposed : got_trampoline(sym, uninterposed);
+				*got = tramp;
 			}
 		}
 	}
