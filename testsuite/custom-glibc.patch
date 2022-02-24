@@ -1,0 +1,98 @@
+diff --git i/testsuite/build w/testsuite/build
+index cf760c0..fe575b8 100755
+--- i/testsuite/build
++++ w/testsuite/build
+@@ -11,6 +11,7 @@ cargoflags="$1"
+ shift
+ buildtype="debug"
+ cflags="-g3 -Og"
++rustflags=""
+ case "$cargoflags" in
+ -*-release*)
+ 	buildtype="release"
+@@ -27,6 +28,10 @@ if [ "$buildtype" = "release" ]
+ then
+ 	cflags="-O2"
+ fi
++if [ -e lib ]
++then
++	rustflags="-Clink-arg=-L$PWD/lib"
++fi
+ 
+ cd "`dirname "$0"`"
+ cd "$LIBINGER"
+@@ -34,8 +39,11 @@ cd "$LIBINGER"
+ set -ve
+ ./configure || true
+ mkdir -p "target/$buildtype"
+-cargo build $cargoflags
+ cargo run $cargoflags >"target/$buildtype/libinger.h"
++
++export RUSTFLAGS="-Cprefer-dynamic=no"
++cargo build $cargoflags --lib
++cargo build $cargoflags --lib
+ cp external/libgotcha/libgotcha_api.h "target/$buildtype/libgotcha.h"
+ cp external/libgotcha/libgotcha_repl.h "target/$buildtype"
+ objcopy -Wsignal --globalize-symbol libgotcha_dlsym --globalize-symbol libgotcha_signal "target/$buildtype/deps/libgotcha-"*.rlib 2>/dev/null
+@@ -43,7 +51,7 @@ rm "target/$buildtype/deps/libinger.so"
+ cd -
+ c99 $cflags -Wall -Wextra -Wpedantic -Werror "$@" -c -fpic -fno-optimize-sibling-calls -D_GNU_SOURCE -Wno-missing-attributes -I"$OLDPWD/target/$buildtype" testinger.c
+ cd -
+-cargo rustc $cargoflags --lib -- -Clink-arg="$OLDPWD/testinger.o"
++eval cargo rustc "$cargoflags" --lib -- -Clink-arg="$OLDPWD/testinger.o" "$rustflags" "`sed -n -e's/",/"/g' -e's/^rustflags = \[\(.\+\)\]$/\1/p' .cargo/config`"
+ cd -
+ mv "$OLDPWD/target/$buildtype/libinger.so" libtestinger.so
+ rm "$OLDPWD/target/$buildtype/deps/libinger.so"
+diff --git i/testsuite/test w/testsuite/test
+index cfef791..0c83013 100755
+--- i/testsuite/test
++++ w/testsuite/test
+@@ -1,5 +1,7 @@
+ #!/bin/sh
+ 
++readonly VERSION="2.29"
++
+ GNULIB="$*"
+ if [ -z "$GNULIB" ]
+ then
+@@ -7,9 +9,38 @@ then
+ fi
+ 
+ set -ve
+-[ ! -e libtestinger.so ] && ./build release
+ [ ! -e gnulib/configure ] && "$GNULIB/gnulib-tool" --create-testdir --dir gnulib --single-configure `"$GNULIB/posix-modules"`
+-[ ! -e Makefile ] && gnulib/configure CFLAGS="-fpic -g3"
++if [ ! -e Makefile ]
++then
++	cflags=""
++	ldflags=""
++	version="`ldd --version | head -n1 | rev | cut -d" " -f1 | rev`"
++	if [ "$version" != "$VERSION" ]
++	then
++		echo >&2
++		echo "!!! It looks like your system uses glibc $version." >&2
++		echo "!!! We recommend running this suite on version $VERSION!" >&2
++		echo >&2
++		printf %s "Path to an alternative ld-linux.so (enter to use system's)? "
++		read interp
++		if [ -n "$interp" ]
++		then
++			interp="`realpath "$interp"`"
++			ldflags="-Wl,-I$interp"
++
++			lib="`dirname "$interp"`"
++			ldflags="-L$lib $ldflags"
++			ln -s "$lib" .
++			rm -f libtestinger.so
++
++			cflags="-I."
++			mkdir sys
++			echo "#error" >sys/single_threaded.h
++		fi
++	fi
++	gnulib/configure CFLAGS="-fpic -g3 $cflags" LDFLAGS="$ldflags"
++fi
++[ ! -e libtestinger.so ] && ./build release
+ make -j"`getconf _NPROCESSORS_ONLN`"
+ [ ! -e gltests/test-suite.log ] && make check || true
+ make check LD_PRELOAD="$PWD/libtestinger.so" LIBGOTCHA_NUMGROUPS="1" LIBGOTCHA_SKIP="`cat <<-tac

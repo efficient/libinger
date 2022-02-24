@@ -2,5 +2,6 @@
 
 !/.gitignore
 !/build
+!/custom-glibc.patch
 !/test
 !/testinger.c
